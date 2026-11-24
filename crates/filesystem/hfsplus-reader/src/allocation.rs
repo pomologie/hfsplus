@@ -10,7 +10,7 @@ use hfsplus_format::volume::{
 
 use crate::{
 	Error, SpecialFile, Volume,
-	overflow::{OverflowError, OverflowLimits},
+	overflow::{OverflowError, OverflowLimits, ResolvedFork},
 };
 
 const BITMAP_CHUNK_BYTES: usize = 4096;
@@ -67,7 +67,7 @@ pub struct AllocationReport {
 /// A failure to check allocation accounting.
 #[derive(Debug)]
 #[non_exhaustive]
-pub enum AllocationError<E> {
+pub enum AllocationError<E, O = MetadataOwner> {
 	BitmapLimit {
 		required: u64,
 		limit: u64,
@@ -84,16 +84,16 @@ pub enum AllocationError<E> {
 		actual: u64,
 	},
 	ExtentBounds {
-		owner: MetadataOwner,
+		owner: O,
 	},
 	Overlap {
 		block: AllocationBlock,
-		first: MetadataOwner,
-		second: MetadataOwner,
+		first: O,
+		second: O,
 	},
 	MarkedFree {
 		block: AllocationBlock,
-		owner: MetadataOwner,
+		owner: O,
 	},
 	FreeBlocks {
 		declared: u32,
@@ -101,14 +101,14 @@ pub enum AllocationError<E> {
 	},
 }
 
-impl<E: fmt::Display> fmt::Display for AllocationError<E> {
+impl<E: fmt::Display, O: fmt::Debug> fmt::Display for AllocationError<E, O> {
 	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
 			Self::BitmapLimit { required, limit } => write!(
 				f,
 				"allocation bitmap requires {required} bytes with a limit of {limit}"
 			),
-			Self::RangeLimit => f.write_str("metadata allocation range limit exceeded"),
+			Self::RangeLimit => f.write_str("allocation range limit exceeded"),
 			Self::Memory(error) => write!(f, "cannot reserve allocation ranges: {error}"),
 			Self::Fork { file, error } => write!(f, "cannot admit {file:?} fork: {error}"),
 			Self::Read(error) => error.fmt(f),
@@ -141,7 +141,7 @@ impl<E: fmt::Display> fmt::Display for AllocationError<E> {
 	}
 }
 
-impl<E: core::error::Error + 'static> core::error::Error for AllocationError<E> {
+impl<E: core::error::Error + 'static, O: fmt::Debug> core::error::Error for AllocationError<E, O> {
 	fn source(&self) -> Option<&(dyn core::error::Error + 'static)> {
 		match self {
 			Self::Memory(error) => Some(error),
@@ -153,9 +153,96 @@ impl<E: core::error::Error + 'static> core::error::Error for AllocationError<E> 
 }
 
 #[derive(Debug)]
-struct Claim {
+struct Claim<O> {
 	blocks: Range<u32>,
-	owner: MetadataOwner,
+	owner: O,
+}
+
+pub(crate) struct Claims<O> {
+	ranges: Vec<Claim<O>>,
+	total: u32,
+	limit: usize,
+}
+
+impl<O: Copy> Claims<O> {
+	pub(crate) fn push<E>(
+		&mut self,
+		start: u32,
+		length: u32,
+		owner: O,
+	) -> Result<(), AllocationError<E, O>> {
+		let end = start
+			.checked_add(length)
+			.filter(|&end| end <= self.total && end > start)
+			.ok_or(AllocationError::ExtentBounds { owner })?;
+		if self.ranges.len() >= self.limit {
+			return Err(AllocationError::RangeLimit);
+		}
+		self.ranges
+			.try_reserve(1)
+			.map_err(AllocationError::Memory)?;
+		self.ranges.push(Claim {
+			blocks: start..end,
+			owner,
+		});
+		Ok(())
+	}
+
+	fn verify_disjoint<E>(&mut self) -> Result<(), AllocationError<E, O>> {
+		self.ranges.sort_unstable_by_key(|claim| claim.blocks.start);
+		for pair in self.ranges.windows(2) {
+			if pair[1].blocks.start < pair[0].blocks.end {
+				return Err(AllocationError::Overlap {
+					block: AllocationBlock(pair[1].blocks.start),
+					first: pair[0].owner,
+					second: pair[1].owner,
+				});
+			}
+		}
+		Ok(())
+	}
+}
+
+pub(crate) struct VerifiedClaims<'claims, O> {
+	pub(crate) free_blocks: u32,
+	ranges: &'claims [Claim<O>],
+}
+
+impl<O: Copy> VerifiedClaims<'_, O> {
+	// Disjoint in-domain ranges sum to at most the volume's block count.
+	pub(crate) fn count(&self, include: impl Fn(O) -> bool) -> u32 {
+		self.ranges
+			.iter()
+			.filter(|claim| include(claim.owner))
+			.map(|claim| claim.blocks.end - claim.blocks.start)
+			.sum()
+	}
+}
+
+pub(crate) struct PreparedAllocation<'volume, S, O> {
+	fork: ResolvedFork<'volume, S>,
+	bytes: u64,
+	total: u32,
+	declared_free: u32,
+	pub(crate) claims: Claims<O>,
+}
+
+impl<S: ReadAt, O: Copy> PreparedAllocation<'_, S, O> {
+	pub(crate) fn verify(&mut self) -> Result<VerifiedClaims<'_, O>, AllocationError<S::Error, O>> {
+		self.claims.verify_disjoint()?;
+		let allocated = scan_bitmap(&self.fork, self.bytes, self.total, &self.claims.ranges)?;
+		let free_blocks = self.total - allocated;
+		if free_blocks != self.declared_free {
+			return Err(AllocationError::FreeBlocks {
+				declared: self.declared_free,
+				counted: free_blocks,
+			});
+		}
+		Ok(VerifiedClaims {
+			free_blocks,
+			ranges: &self.claims.ranges,
+		})
+	}
 }
 
 impl<S: ReadAt> Volume<S> {
@@ -171,6 +258,23 @@ impl<S: ReadAt> Volume<S> {
 		&self,
 		limits: AllocationLimits,
 	) -> Result<AllocationReport, AllocationError<S::Error>> {
+		let mut allocation = self.metadata_claims(limits)?;
+		let total = allocation.total;
+		let verified = allocation.verify()?;
+		let free_blocks = verified.free_blocks;
+		let metadata_blocks = verified.count(|_| true);
+		Ok(AllocationReport {
+			total_blocks: total,
+			free_blocks,
+			metadata_blocks,
+			other_allocated_blocks: total - free_blocks - metadata_blocks,
+		})
+	}
+
+	pub(crate) fn metadata_claims<O: Copy + From<MetadataOwner>>(
+		&self,
+		limits: AllocationLimits,
+	) -> Result<PreparedAllocation<'_, S, O>, AllocationError<S::Error, O>> {
 		let header = self.header();
 		let geometry = header.geometry;
 		let total = geometry.total_blocks();
@@ -195,109 +299,41 @@ impl<S: ReadAt> Volume<S> {
 		let block_bytes = u64::from(geometry.block_size());
 		let head = (PRIMARY_HEADER_OFFSET + HEADER_BYTES as u64).div_ceil(block_bytes) as u32;
 		let tail = ALTERNATE_HEADER_FROM_END.div_ceil(block_bytes) as u32;
-		let mut claims = Vec::new();
-		push_claim(
-			&mut claims,
-			0,
-			head,
+		let mut claims = Claims {
+			ranges: Vec::new(),
 			total,
-			MetadataOwner::PrimaryRegion,
-			limits.max_ranges,
-		)?;
-		push_claim(
-			&mut claims,
-			total - tail,
-			tail,
-			total,
-			MetadataOwner::AlternateRegion,
-			limits.max_ranges,
-		)?;
+			limit: limits.max_ranges,
+		};
+		claims.push(0, head, MetadataOwner::PrimaryRegion.into())?;
+		claims.push(total - tail, tail, MetadataOwner::AlternateRegion.into())?;
 		for file in SPECIAL_FILES {
-			let owner = MetadataOwner::SpecialFile(file);
+			let owner = MetadataOwner::SpecialFile(file).into();
 			if file == SpecialFile::Allocation {
 				for extent in bitmap.extents() {
-					push_claim(
-						&mut claims,
-						extent.start.0,
-						extent.blocks,
-						total,
-						owner,
-						limits.max_ranges,
-					)?;
+					claims.push(extent.start.0, extent.blocks, owner)?;
 				}
 			} else {
 				for extent in open(file)?.extents() {
-					push_claim(
-						&mut claims,
-						extent.start.0,
-						extent.blocks,
-						total,
-						owner,
-						limits.max_ranges,
-					)?;
+					claims.push(extent.start.0, extent.blocks, owner)?;
 				}
 			}
 		}
-		claims.sort_unstable_by_key(|claim| claim.blocks.start);
-		for pair in claims.windows(2) {
-			if pair[1].blocks.start < pair[0].blocks.end {
-				return Err(AllocationError::Overlap {
-					block: AllocationBlock(pair[1].blocks.start),
-					first: pair[0].owner,
-					second: pair[1].owner,
-				});
-			}
-		}
-		let metadata_blocks = claims
-			.iter()
-			.map(|claim| claim.blocks.end - claim.blocks.start)
-			.sum();
-		let allocated = scan_bitmap(&bitmap, bitmap_bytes, total, &claims)?;
-		let free_blocks = total - allocated;
-		if free_blocks != header.free_blocks {
-			return Err(AllocationError::FreeBlocks {
-				declared: header.free_blocks,
-				counted: free_blocks,
-			});
-		}
-		Ok(AllocationReport {
-			total_blocks: total,
-			free_blocks,
-			metadata_blocks,
-			other_allocated_blocks: allocated - metadata_blocks,
+		Ok(PreparedAllocation {
+			fork: bitmap,
+			bytes: bitmap_bytes,
+			total,
+			declared_free: header.free_blocks,
+			claims,
 		})
 	}
 }
 
-fn push_claim<E>(
-	claims: &mut Vec<Claim>,
-	start: u32,
-	length: u32,
-	total: u32,
-	owner: MetadataOwner,
-	limit: usize,
-) -> Result<(), AllocationError<E>> {
-	let end = start
-		.checked_add(length)
-		.filter(|&end| end <= total)
-		.ok_or(AllocationError::ExtentBounds { owner })?;
-	if claims.len() >= limit {
-		return Err(AllocationError::RangeLimit);
-	}
-	claims.try_reserve(1).map_err(AllocationError::Memory)?;
-	claims.push(Claim {
-		blocks: start..end,
-		owner,
-	});
-	Ok(())
-}
-
-fn scan_bitmap<E>(
+fn scan_bitmap<E, O: Copy>(
 	bitmap: &impl ReadAt<Error = Error<E>>,
 	bitmap_bytes: u64,
 	total: u32,
-	mut claims: &[Claim],
-) -> Result<u32, AllocationError<E>> {
+	mut claims: &[Claim<O>],
+) -> Result<u32, AllocationError<E, O>> {
 	let mut buffer = [0; BITMAP_CHUNK_BYTES];
 	let mut offset = 0;
 	let mut allocated = 0;

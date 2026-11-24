@@ -17,6 +17,8 @@ use hfsplus_format::{
 use super::{CatalogError, CatalogLimits, Corruption, Limit, format, invalid};
 use crate::Error;
 
+mod audit;
+
 pub(super) const HEADER_ID: NodeId = NodeId(0);
 const HEADER_PREFIX_BYTES: usize = 34;
 const CATALOG_MIN_NODE_BYTES: u16 = 4096;
@@ -35,6 +37,7 @@ pub(super) struct Tree<R> {
 	fork: R,
 	header: TreeHeader,
 	map: Vec<u8>,
+	map_nodes: u32,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -176,6 +179,8 @@ where
 			append_map(&mut map, record, map_len);
 			next = map_node.forward();
 		}
+		// Map continuations were checked as distinct nonzero node IDs.
+		let map_nodes = continuations.len() as u32 + 1;
 		if map.len() != map_len
 			|| !allocated(&map, HEADER_ID)
 			|| continuations.into_iter().any(|id| !allocated(&map, id))
@@ -187,7 +192,16 @@ where
 		{
 			return Err(invalid(HEADER_ID, Corruption::AllocationMap));
 		}
-		Ok(Self { fork, header, map })
+		Ok(Self {
+			fork,
+			header,
+			map,
+			map_nodes,
+		})
+	}
+
+	pub(super) const fn header(&self) -> &TreeHeader {
+		&self.header
 	}
 
 	pub(super) fn node_bytes(&self) -> usize {

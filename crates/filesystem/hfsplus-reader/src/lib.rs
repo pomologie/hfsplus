@@ -17,6 +17,7 @@ use hfsplus_format::{
 pub mod allocation;
 pub mod attributes;
 pub mod catalog;
+pub mod check;
 mod fork;
 pub mod overflow;
 mod profile;

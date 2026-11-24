@@ -238,6 +238,75 @@ fn configured_chain_budget_never_upgrades_chain_free_counts() {
 	assert_eq!(link.profile, HardLinkProfile::ChainFree);
 }
 
+#[test]
+fn checks_shared_storage_once_and_reports_unqualified_attribute_layout() {
+	use hfsplus_reader::check::{AttributeCoverage, CheckLimits};
+
+	let volume = Volume::open(ownership_fixture(NATIVE)).unwrap();
+	let report = volume.check_structure(CheckLimits::default()).unwrap();
+	assert_eq!(report.hard_link_groups, 2);
+	assert_eq!(report.reachable_fork_blocks, 3);
+	assert_eq!(report.metadata_blocks, 99);
+	assert_eq!(report.free_blocks, 3994);
+	assert_eq!(report.unclaimed_allocated_blocks, 0);
+	assert_eq!(report.attributes, AttributeCoverage::UnsupportedTree);
+}
+
+#[test]
+fn structural_check_rejects_a_chain_free_count_that_disagrees_with_all_visible_aliases() {
+	use hfsplus_reader::check::{CatalogProblem, CheckError, CheckLimits};
+
+	const INODE_LINK_COUNT_OFFSET: u64 = 44;
+	let mut fixture = ownership_fixture(CHAIN_FREE);
+	let inode = value_offset(&fixture, FIRST_INODE);
+	fixture.replace(inode + INODE_LINK_COUNT_OFFSET, 2u32.to_be_bytes());
+	let volume = Volume::open(fixture).unwrap();
+	assert!(matches!(
+		volume.check_structure(CheckLimits::default()),
+		Err(CheckError::Structure(CatalogProblem::LinkCount {
+			declared: 2,
+			actual: 3,
+			..
+		}))
+	));
+}
+
+fn ownership_fixture(raw: &[u8]) -> Fixture {
+	const BITMAP: &[u8] = include_bytes!("fixtures/native-hardlink-allocation.bin");
+	const UNQUALIFIED_NODE_BYTES: u16 = 4096;
+	const TREE_PREFIX_BYTES: usize = 34;
+	const TREE_NODE_KIND_OFFSET: usize = 8;
+	const TREE_NODE_SIZE_OFFSET: usize = TREE_PREFIX_BYTES - size_of::<u16>();
+
+	let mut fixture = Fixture::decode(raw);
+	let header = *Volume::open(&fixture).unwrap().header();
+	// Both native payloads are shorter than a volume header. Omitting them
+	// proves the structural check does not read or authenticate file bytes.
+	fixture
+		.slices
+		.retain(|(_, bytes)| bytes.len() >= hfsplus_format::volume::HEADER_BYTES);
+	let start = |fork: &hfsplus_format::volume::Fork| {
+		let extent = fork.extents().next().unwrap();
+		header
+			.geometry
+			.block_range(extent.start, extent.blocks)
+			.unwrap()
+			.start
+	};
+	fixture
+		.slices
+		.push((start(&header.forks.allocation), BITMAP.to_vec()));
+	let mut unsupported_attributes = [0; TREE_PREFIX_BYTES];
+	unsupported_attributes[TREE_NODE_KIND_OFFSET] = Kind::Header as u8;
+	unsupported_attributes[TREE_NODE_SIZE_OFFSET..]
+		.copy_from_slice(&UNQUALIFIED_NODE_BYTES.to_be_bytes());
+	fixture.slices.push((
+		start(&header.forks.attributes),
+		unsupported_attributes.to_vec(),
+	));
+	fixture
+}
+
 fn named<S: ReadAt>(catalog: &Catalog<'_, S>, parent: CatalogId, name: &str) -> CatalogId
 where
 	S::Error: std::fmt::Debug,

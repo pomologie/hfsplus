@@ -180,5 +180,14 @@
         }
       ]
     }
+  },
+  "ownership_check_witness": {
+    "file": "native-hardlink-allocation.bin",
+    "raw_offset": 4096,
+    "length": 512,
+    "source_raw_sha256": "d17d38025e8fa43ec6951859676af1c89d6f9ed8691f104704d5489fdc000f6a",
+    "sha256": "1849c6034d0d2e573d8ac4d2e4a5c984dc31f54b291bb54ebf72d28426a24d85",
+    "note": "Paired with the chained catalog and data witness for ownership accounting. The test supplies an intentionally unsupported attribute-tree prefix, so it checks file allocation without exposing unrelated host attributes or claiming attribute-tree coverage.",
+    "same_bitmap_in_chain_free_source_sha256": "65faf0d70d86f9dfc5e501a0d2fd3f94503078c02d694a364e0703babf5a2b69"
   }
 }

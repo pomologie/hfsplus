@@ -15,6 +15,7 @@ use hfsplus_format::{
 
 use crate::{ForkReader, SpecialFile, Volume};
 
+mod audit;
 mod directory;
 mod error;
 mod hard_links;

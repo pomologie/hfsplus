@@ -150,11 +150,7 @@ impl<'volume, S: ReadAt> Catalog<'volume, S> {
 		let Some(entry) = self.resolve_public(id, &mut query)? else {
 			return Ok(None);
 		};
-		if entry
-			.metadata
-			.finder_info
-			.starts_with(DIRECTORY_LINK_FINDER_CODE)
-		{
+		if is_directory_link(&entry) {
 			return Err(HardLinkError::DirectoryLink(id));
 		}
 		let EntryKind::File { data, resource } = entry.kind else {
@@ -187,7 +183,7 @@ impl<'volume, S: ReadAt> Catalog<'volume, S> {
 		}))
 	}
 
-	fn resolve_inode(
+	pub(super) fn resolve_inode(
 		&self,
 		entry: &Entry,
 		stub: Stub,
@@ -307,6 +303,13 @@ impl<'volume, S: ReadAt> Catalog<'volume, S> {
 		}
 		Ok(())
 	}
+}
+
+pub(super) fn is_directory_link(entry: &Entry) -> bool {
+	entry
+		.metadata
+		.finder_info
+		.starts_with(DIRECTORY_LINK_FINDER_CODE)
 }
 
 const fn corrupt<E>(id: CatalogId, reason: LinkCorruption) -> HardLinkError<E> {
