@@ -6,6 +6,7 @@ use crate::SealedPlan;
 use super::{
 	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, MAX_SYMLINK_TARGET_BYTES,
 	ManifestEntry, SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError, VolumeOptions,
+	attributes::Attributes,
 	catalog_path::{NameProfile, NormalizedPath, compare_paths},
 	emit,
 };
@@ -35,6 +36,7 @@ pub struct VolumeDraft<'a, S> {
 	pub(super) folder_count: u32,
 	pub(super) file_count: u32,
 	pub(super) next_id: CatalogId,
+	pub(super) attributes: Attributes,
 }
 
 /// An admitted manifest returned by the printable-ASCII planning entry point.
@@ -90,11 +92,32 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 		Ok(())
 	}
 
+	/// Adds an inline attribute to a previously admitted catalog owner. The empty
+	/// path denotes the root folder. Attribute names preserve their supplied UTF-16
+	/// spelling and do not use catalog normalization or collation.
+	///
+	/// # Errors
+	/// Rejects unknown owners, invalid names, special attributes, values requiring
+	/// fork storage, and exhausted metadata budgets. Sealing rejects duplicate
+	/// names on the same owner.
+	pub fn add_inline_attribute(
+		&mut self,
+		path: &str,
+		name: &str,
+		value: &[u8],
+	) -> Result<(), VolumeError> {
+		let owner = self
+			.try_catalog_id(path)?
+			.ok_or(VolumeError::MissingAttributeOwner)?;
+		let limit = usize::try_from(self.options.limits.max_metadata_bytes.0).unwrap_or(usize::MAX);
+		self.attributes.add(owner, name, value, limit)
+	}
+
 	/// Allocates the forks and returns a sealed raw HFS+ image.
 	///
 	/// # Errors
 	/// Rejects unbound generated data, invalid geometry, insufficient space,
-	/// and metadata outside the admitted bounds.
+	/// duplicate attribute names, and metadata outside the admitted bounds.
 	pub fn seal(self) -> Result<SealedPlan<S>, VolumeError> {
 		emit::seal(self)
 	}
@@ -212,6 +235,7 @@ fn prepare<'a, S: ReadAt>(
 		folder_count,
 		file_count: count - folder_count,
 		next_id,
+		attributes: Attributes::default(),
 	})
 }
 

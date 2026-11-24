@@ -1,27 +1,24 @@
 use hfsplus_core::{ByteLen, ByteOffset, ReadAt};
 use hfsplus_format::{
+	attributes::NATIVE_NODE_BYTES as ATTRIBUTE_NODE_BYTES,
 	btree::{
 		BIG_KEYS_MASK, CASE_FOLDING_COMPARE, HFS_BTREE_TYPE, TreeMetadata, VARIABLE_INDEX_KEYS_MASK,
 	},
-	catalog::{
-		EncodeValue, FLAG_THREAD_EXISTS, Key, MAX_KEY_LENGTH, Metadata, Permissions,
-		Record as CatalogRecord, ThreadKind,
-	},
-	volume::{
-		CatalogId, Extent, Fork, Geometry, HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET,
-		SpecialFiles,
-	},
+	catalog::{MAX_KEY_LENGTH, ThreadKind},
+	volume::{Extent, Fork, Geometry, HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET, SpecialFiles},
 };
 
 use crate::{
 	Limits, PlanBuilder, PlanError, SealedPlan,
 	allocation::Allocation,
-	tree::{PackedTree, Record as TreeRecord, TreeOptions},
+	tree::{PackedTree, TreeOptions},
 };
 
 use super::{
-	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource,
-	SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError,
+	EntryKind, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, SYMLINK_FINDER_TYPE_AND_CREATOR,
+	VolumeError,
+	attributes::Attributes,
+	catalog::{Catalog, DEFAULT_ENCODING_HINT, file, folder},
 	manifest::{ROOT_ID, ROOT_PARENT_ID, VolumeDraft},
 };
 
@@ -30,14 +27,9 @@ const EXTENTS_MAX_KEY_BYTES: u16 = 10;
 const EXTENTS_KEY_COMPARE: u8 = 0;
 const ALT_HEADER_FROM_END: u64 = 1024;
 const FILE_TYPE: u16 = 0o100000;
-const FOLDER_TYPE: u16 = 0o040000;
 const SYMLINK_TYPE: u16 = 0o120000;
-// Catalog names are Unicode and carry no source Mac encoding. Keep the
-// legacy Pascal-string encoding hint and corresponding bitmap at their defaults.
-const DEFAULT_ENCODING_HINT: u32 = 0;
 const DEFAULT_ENCODING_PRESENT: u64 = 1 << DEFAULT_ENCODING_HINT;
 const RESERVED_CATALOG_FORK_WORD: u32 = 0;
-const RECORDS_PER_ENTRY: usize = 2;
 
 pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>, VolumeError> {
 	let VolumeDraft {
@@ -48,6 +40,7 @@ pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>
 		folder_count,
 		file_count,
 		next_id,
+		mut attributes,
 		..
 	} = draft;
 	let geometry = options.geometry;
@@ -56,19 +49,26 @@ pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>
 	let mut records = Catalog::new(geometry, entries.len(), metadata_limit)?;
 	let mut payloads = Vec::new();
 	let mut remaining_metadata = metadata_limit;
+	attributes.sort()?;
 
 	records.add_entry(
 		ROOT_PARENT_ID,
 		ROOT_ID,
 		label.as_units(),
-		folder(ROOT_ID, options.root, root_valence),
+		folder(
+			ROOT_ID,
+			options.root,
+			root_valence,
+			attributes.owner_flags(ROOT_ID),
+		),
 		ThreadKind::Folder,
 	)?;
 	for entry in entries {
 		let name = entry.path.name();
+		let flags = attributes.owner_flags(entry.id);
 		let (value, kind) = match entry.input.kind {
 			EntryKind::Folder => (
-				folder(entry.id, entry.input.metadata, entry.valence),
+				folder(entry.id, entry.input.metadata, entry.valence, flags),
 				ThreadKind::Folder,
 			),
 			EntryKind::File { data, resource } => {
@@ -88,7 +88,14 @@ pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>
 					None => Fork::empty(),
 				};
 				(
-					file(entry.id, entry.input.metadata, FILE_TYPE, data, resource),
+					file(
+						entry.id,
+						entry.input.metadata,
+						FILE_TYPE,
+						data,
+						resource,
+						flags,
+					),
 					ThreadKind::File,
 				)
 			}
@@ -106,7 +113,7 @@ pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>
 				input.finder_info[..FINDER_TYPE_AND_CREATOR_BYTES]
 					.copy_from_slice(&SYMLINK_FINDER_TYPE_AND_CREATOR);
 				(
-					file(entry.id, input, SYMLINK_TYPE, data, Fork::empty()),
+					file(entry.id, input, SYMLINK_TYPE, data, Fork::empty(), flags),
 					ThreadKind::File,
 				)
 			}
@@ -123,26 +130,32 @@ pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>
 		.checked_sub(bitmap_bytes)
 		.and_then(|bytes| bytes.checked_sub(HEADER_BYTES * 2))
 		.ok_or(VolumeError::Limit)?;
-	let extents = PackedTree::build(
-		&[],
-		tree_options(
-			options.max_tree_nodes,
-			tree_budget,
-			geometry,
-			TreeKind::Extents,
-		),
-	)?;
-	let tree_budget = tree_budget
-		.checked_sub(extents.as_bytes().len())
-		.ok_or(VolumeError::Limit)?;
-	let catalog = records.pack(tree_options(
+	let MetadataTrees {
+		catalog,
+		extents,
+		attributes: attribute_tree,
+	} = pack_trees(
+		records,
+		&attributes,
 		options.max_tree_nodes,
 		tree_budget,
 		geometry,
-		TreeKind::Catalog,
-	))?;
+	)?;
+	drop(attributes);
 	let catalog_extent = allocate_tree(&mut allocation, &catalog)?;
 	let extents_extent = allocate_tree(&mut allocation, &extents)?;
+	let attributes = attribute_tree
+		.map(|tree| allocate_tree(&mut allocation, &tree).map(|extent| (tree, extent)))
+		.transpose()?;
+	let attributes_fork = match &attributes {
+		Some((tree, extent)) => allocated_fork(
+			geometry,
+			tree.as_bytes().len() as u64,
+			*extent,
+			attributes_clump_bytes(geometry),
+		)?,
+		None => Fork::empty(),
+	};
 	let mut header = Header::new_clean(
 		geometry,
 		SpecialFiles {
@@ -164,7 +177,7 @@ pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>
 				catalog_extent,
 				geometry.block_size(),
 			)?,
-			attributes: Fork::empty(),
+			attributes: attributes_fork,
 			startup: Fork::empty(),
 		},
 	)?;
@@ -189,6 +202,9 @@ pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>
 	}
 	image.extent_metadata(catalog_extent, catalog.into_bytes())?;
 	image.extent_metadata(extents_extent, extents.into_bytes())?;
+	if let Some((tree, extent)) = attributes {
+		image.extent_metadata(extent, tree.into_bytes())?;
+	}
 	image.metadata(
 		ByteOffset(geometry.alternate_header_offset()),
 		Box::from(header),
@@ -196,44 +212,45 @@ pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>
 	image.finish()
 }
 
-fn folder(id: CatalogId, input: EntryMetadata, valence: u32) -> EncodeValue<'static> {
-	EncodeValue::Folder {
-		metadata: metadata(id, input, FOLDER_TYPE, 0),
-		valence,
-		tail_word: 0,
-	}
+pub(super) struct MetadataTrees {
+	pub(super) catalog: PackedTree,
+	pub(super) extents: PackedTree,
+	pub(super) attributes: Option<PackedTree>,
 }
 
-fn file(
-	id: CatalogId,
-	input: EntryMetadata,
-	kind: u16,
-	data: Fork,
-	resource: Fork,
-) -> EncodeValue<'static> {
-	EncodeValue::File {
-		metadata: metadata(id, input, kind, FLAG_THREAD_EXISTS),
-		data,
-		resource,
-	}
+pub(super) fn pack_trees(
+	records: Catalog,
+	attributes: &Attributes,
+	max_nodes: u32,
+	byte_budget: usize,
+	geometry: Geometry,
+) -> Result<MetadataTrees, VolumeError> {
+	let extents = PackedTree::build(
+		&[],
+		tree_options(max_nodes, byte_budget, geometry, TreeKind::Extents),
+	)?;
+	let after_extents = byte_budget
+		.checked_sub(extents.as_bytes().len())
+		.ok_or(VolumeError::Limit)?;
+	let catalog = records.pack(tree_options(
+		max_nodes,
+		after_extents,
+		geometry,
+		TreeKind::Catalog,
+	))?;
+	let after_catalog = after_extents
+		.checked_sub(catalog.as_bytes().len())
+		.ok_or(VolumeError::Limit)?;
+	let attributes = attributes.pack(max_nodes, after_catalog, attributes_clump_bytes(geometry))?;
+	Ok(MetadataTrees {
+		catalog,
+		extents,
+		attributes,
+	})
 }
 
-fn metadata(id: CatalogId, input: EntryMetadata, kind: u16, flags: u16) -> Metadata {
-	Metadata {
-		id,
-		flags,
-		dates: input.dates,
-		permissions: Permissions {
-			uid: input.uid,
-			gid: input.gid,
-			admin_flags: 0,
-			owner_flags: 0,
-			mode: kind | input.mode,
-			special: 0,
-		},
-		finder_info: input.finder_info,
-		encoding: DEFAULT_ENCODING_HINT,
-	}
+fn attributes_clump_bytes(geometry: Geometry) -> u32 {
+	geometry.block_size().max(u32::from(ATTRIBUTE_NODE_BYTES))
 }
 
 struct AllocatedPayload<S> {
@@ -310,87 +327,6 @@ fn tree_options(
 			key_compare_type,
 			attributes,
 		},
-	}
-}
-
-struct Catalog {
-	geometry: Geometry,
-	records: Vec<EncodedRecord>,
-	remaining_record_bytes: usize,
-}
-
-struct EncodedRecord {
-	parent_or_thread: CatalogId,
-	child: Option<CatalogId>,
-	key_width: usize,
-	bytes: Box<[u8]>,
-}
-
-impl Catalog {
-	fn new(geometry: Geometry, entries: usize, metadata_limit: usize) -> Result<Self, VolumeError> {
-		let record_count = entries
-			.checked_add(1)
-			.and_then(|including_root| including_root.checked_mul(RECORDS_PER_ENTRY))
-			.ok_or(VolumeError::Limit)?;
-		let mut records = Vec::new();
-		records.try_reserve_exact(record_count)?;
-		Ok(Self {
-			geometry,
-			records,
-			remaining_record_bytes: metadata_limit,
-		})
-	}
-
-	fn add_entry(
-		&mut self,
-		parent: CatalogId,
-		id: CatalogId,
-		name: &[u16],
-		value: EncodeValue<'_>,
-		kind: ThreadKind,
-	) -> Result<(), VolumeError> {
-		self.push(parent, Some(id), name, value)?;
-		self.push(id, None, &[], EncodeValue::Thread { kind, parent, name })
-	}
-
-	fn push(
-		&mut self,
-		parent_or_thread: CatalogId,
-		child: Option<CatalogId>,
-		name: &[u16],
-		value: EncodeValue<'_>,
-	) -> Result<(), VolumeError> {
-		let size = CatalogRecord::encoded_len(name, value)?;
-		self.remaining_record_bytes = self
-			.remaining_record_bytes
-			.checked_sub(size)
-			.ok_or(VolumeError::Limit)?;
-		let mut bytes = Vec::new();
-		bytes.try_reserve_exact(size)?;
-		bytes.resize(size, 0);
-		CatalogRecord::encode(parent_or_thread, name, value, self.geometry, &mut bytes)?;
-		self.records.push(EncodedRecord {
-			parent_or_thread,
-			child,
-			key_width: Key::encoded_len(name)?,
-			bytes: bytes.into_boxed_slice(),
-		});
-		Ok(())
-	}
-
-	fn pack(mut self, options: TreeOptions) -> Result<PackedTree, VolumeError> {
-		// Sibling IDs were assigned in HFS+ collation order. A thread has the
-		// empty key, which sorts before all admitted child names.
-		self.records
-			.sort_unstable_by_key(|record| (record.parent_or_thread, record.child));
-		let mut records = Vec::new();
-		records.try_reserve_exact(self.records.len())?;
-		records.extend(
-			self.records
-				.iter()
-				.map(|entry| TreeRecord::new(&entry.bytes, entry.key_width)),
-		);
-		Ok(PackedTree::build(&records, options)?)
 	}
 }
 

@@ -1,8 +1,8 @@
 //! Write-once, clean nonjournaled HFS+ images from a logical manifest.
 //!
 //! This profile admits Unicode catalog names, ordinary files and folders,
-//! and symbolic links. It preserves data and resource forks and exact link
-//! target bytes.
+//! and symbolic links. It preserves data and resource forks, inline extended
+//! attributes, and exact link target bytes.
 
 use std::{error::Error, fmt};
 
@@ -11,10 +11,13 @@ use hfsplus_format::volume::{CatalogId, Geometry};
 
 use crate::{Limits, PlanError, allocation::AllocationError, tree::TreeError};
 
+mod attributes;
+mod catalog;
 mod catalog_path;
 mod emit;
 mod manifest;
 
+pub use attributes::validate_inline_attribute;
 pub use manifest::{AsciiVolumeDraft, VolumeDraft, plan, plan_ascii};
 
 const FINDER_INFO_BYTES: usize = 32;
@@ -194,6 +197,14 @@ pub enum VolumeError {
 	MissingGeneratedData(CatalogId),
 	/// The requested path is absent or does not identify an unbound generated file.
 	NotAwaitingGeneratedData,
+	/// The attribute's relative path does not identify an admitted owner.
+	MissingAttributeOwner,
+	/// An attribute name contains NUL or exceeds its representable length.
+	InvalidAttributeName,
+	/// The name denotes metadata stored in a dedicated field or unsupported profile.
+	SpecialAttribute,
+	/// A catalog owner has multiple attributes with the same exact name.
+	DuplicateAttribute(CatalogId),
 	/// An entry, catalog ID, or metadata bound was exceeded.
 	Limit,
 	/// Memory could not be reserved within the admitted metadata limits.
@@ -245,6 +256,19 @@ impl fmt::Display for VolumeError {
 			),
 			Self::NotAwaitingGeneratedData => {
 				formatter.write_str("path does not identify an unbound generated file")
+			}
+			Self::MissingAttributeOwner => {
+				formatter.write_str("path does not identify an HFS+ attribute owner")
+			}
+			Self::InvalidAttributeName => formatter.write_str("invalid HFS+ attribute name"),
+			Self::SpecialAttribute => formatter
+				.write_str("HFS+ attribute needs dedicated metadata or an unsupported profile"),
+			Self::DuplicateAttribute(id) => {
+				write!(
+					formatter,
+					"duplicate HFS+ attribute name on catalog ID {}",
+					id.0
+				)
 			}
 			Self::Limit => formatter.write_str("HFS+ volume exceeds a manifest or metadata limit"),
 			Self::Memory(error) => {
