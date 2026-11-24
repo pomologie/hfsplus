@@ -10,7 +10,7 @@ Read ARCHITECTURE.md, ROADMAP.md, TECH_STACK.md, TESTING.md, VERIFICATION.md and
 - Maintain source provenance. Do not copy proprietary code/assets or translate restrictively licensed implementation code into a different license. Use approved source material and synthetic redistributable fixtures. Never include secrets or personal data.
 - Make small reviewable changes, run fmt/clippy/tests, report failures and unresolved compatibility questions. Do not destructively change user files, run physical-disk operations, or elevate privileges during development tests.
 
-- Follow EVS-1 and the local verification/obligations.json registry. Preserve proof bounds, assumptions and oracle evidence. Do not weaken safety tests, accept new snapshots, or mark unrun tools as passing. Enforce the 500-line source convention with explicit reviewed exceptions; verify production code, not replacement stubs.
+- Follow EVS-1 and the repository-wide `verification/obligations.json` index. Place implemented proof artifacts in the owning crate’s `verification/` directory. Preserve proof bounds, assumptions and oracle evidence. Do not weaken safety tests, accept new snapshots, or mark unrun tools as passing. Enforce the 500-line source convention with explicit reviewed exceptions; verify production code, not replacement stubs.
 
 ## Mandatory ecosystem-wide operating scope
 

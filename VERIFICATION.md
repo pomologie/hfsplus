@@ -2,7 +2,7 @@
 
 Treat the standalone immutable constructor and later mutable filesystem as different assurance profiles. A formatter can ship without journal mutation. The first release proves/checks geometry, packing and allocation bounds, verifies a real Apple-compatible raw image, and supports dmgez streaming. The future Charles profile needs real kernel and persistence qualification, not just no_std.
 
-Read the shared ecosystem verification standard EVS-1 (`docs/architecture/ECOSYSTEM_VERIFICATION.md` after handoff). The following is the owning obligation registry summary. Full properties, assumptions, bounds, negative witnesses and conjunctive evidence methods are in `verification/obligations.json`. All obligations are planned. Gate applies only to the activated supported profile; required proofs/tests must pass before that capability ships. Nonblocking advanced capabilities remain disabled if not qualified.
+Read the shared ecosystem verification standard EVS-1 (`docs/architecture/ECOSYSTEM_VERIFICATION.md` after handoff). The following summarizes the repository-wide planning index at `verification/obligations.json`, which defines properties, assumptions, bounds, negative witnesses and required evidence methods. Implemented proof artifacts live in the owning crate’s `verification/` directory. All obligations are planned. Gate applies only to the activated supported profile; required proofs/tests must pass before that capability ships. Nonblocking advanced capabilities remain disabled if not qualified.
 
 | ID | Activation | Scope | Required evidence |
 |---|---|---|---|

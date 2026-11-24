@@ -36,7 +36,7 @@ Tooling versions are pinned and checks run in isolated development/CI jobs, neve
 
 ## 3. Requirements, invariants, proof obligations and evidence
 
-Each repository has `docs/reference/requirements.json`, `test-catalog.json` and `verification/obligations.json`. Requirement IDs are stable. A proof obligation names the invariant, requirement IDs, scope, proposed target, assumptions, a concrete property, evidence methods, finite bounds where appropriate, gate milestone and negative witness. Each obligation is planned until implementation exists and evidence is produced. A gate may require multiple evidence methods, not whichever is easiest. The obligation activation release can be later than the requirement's first test-qualified release. Scope a gate by capability/profile, not global version comparison. All mandatory tests and activated mandatory obligations must pass for that profile. Other open obligations appear in the public limitations and cannot be advertised as proven. Do not defer a known corruption or security failure as merely an unproved theorem.
+Each repository has `docs/reference/requirements.json`, `docs/reference/test-catalog.json` and a repository-wide planning index at `verification/obligations.json`. Requirement and obligation IDs are stable. The index defines the release gates across crates. Crate-local manifests record the implemented checks and reference these IDs. A proof obligation names the invariant, requirement IDs, scope, proposed target, assumptions, a concrete property, evidence methods, finite bounds where appropriate, gate milestone and negative witness. Each obligation is planned until implementation exists and evidence is produced. A gate may require multiple evidence methods, not whichever is easiest. The obligation activation release can be later than the requirement's first test-qualified release. Scope a gate by capability/profile, not global version comparison. All mandatory tests and activated mandatory obligations must pass for that profile. Other open obligations appear in the public limitations and cannot be advertised as proven. Do not defer a known corruption or security failure as merely an unproved theorem.
 
 Evidence record per actual invocation: repository commit + dirty flag, selected target/function and source hash, feature set, profile/fixture manifest digest, Rust/compiler/tool version/runner OS and hardware model where relevant, proof extraction inputs and hashes, exact command/arguments and tool config, assumptions/bounds, seed/schedule, result, duration, exit code, diagnostic/artifact digest. Use `verification/evidence.schema.json` (shared template) as initial contract. No secrets/absolute private paths in public logs. Store full logs and minimized inputs by hash; link to CI artifact and immutable release report. Pin external oracles and codec versions; refresh expected fixture facts independently when upstream changes. Distinguish `planned`, `not_run`, `pass`, `fail`, `timeout`, `unsupported`, `unavailable`, `inconclusive`. Only `pass` for the exact required scope satisfies a gate. A valid proof of a mathematical statement is different evidence from proof of production Rust equivalence; a bounded pass is not unbounded proof. If code, enabled feature set, assumptions, proof, oracle, or dependency changes, invalidate affected evidence and regenerate. No copying old passing badges across commits without dependency-impact justification and reproducible provenance.
 
@@ -44,25 +44,30 @@ Evidence record per actual invocation: repository commit + dirty flag, selected 
 
 Lean specifications use mathematical natural/integer arithmetic (then prove conversion to machine arithmetic), explicit interval/sequence/map abstractions, separate physical and logical address namespaces, allocation conservation, sortedness, nonoverlap and total coverage, monotonic commit state, snapshot reachability, exact read semantics. State all preconditions and prove they are checked at the call boundary; never assume the very property intended to prove. A separate handwritten Lean model is a useful spec, not a claim about shipped Rust. Preferred production bridge: hax 0.4.x or a later qualified pinned version orchestrates Charon extraction to LLBC and Aeneas translation to Lean. The current hax `lean` backend uses Charon/Aeneas (not its legacy extraction engine); pin compatible Rust, hax/hax-lib, Charon, Aeneas and Lean toolchain, Mathlib and generated external models. Verify the exact CLI for the pinned release; `cargo hax into lean` is the current entry point. See sources V01-V03. Keep functions small, safe, sequential and deterministic; treat external codecs, OS, FFI, I/O and concurrency as explicit contracts not magically verified. External models are part of the trusted computing base, reviewed and tested; no invented axioms about correctness of parser, hardware or codec.
 
-Suggested repository layout (create when corresponding gate is implemented):
+Place implemented verification artifacts in `verification/` next to the owning crate's `Cargo.toml`, at its existing path in the workspace. The crate owns its proof sources, extraction configuration, model and harness files, check commands and assumptions. Repository-level verification holds the planning index and evidence schema for all crates. If a protocol spans several crates, put its model in the crate that implements the coordinating state machine and reference that location from the repository index.
 
 ```text
-verification/
-  obligations.json            # canonical scope, method, gate and requirement links
-  assumptions.md              # per-model and theorem assumptions, trust register
-  evidence.schema.json        # results metadata contract
-  kani/                       # harness inventory; actual harnesses adjacent to Rust or dedicated test target
-  models/                     # TLA+ specs, TLC cfg, bounded reference transition models
-  proofs/lean/
+crates/<domain>/<owning-crate>/
+  Cargo.toml
+  src/
+  verification/
+    README.md                   # obligation IDs, assumptions and reproduction commands
+    <scope>-obligations.toml    # implemented theorem and target mapping, where applicable
+    check.sh                   # crate-owned check entry point, where applicable
     lean-toolchain
     lakefile.toml
     lake-manifest.json
-    Specifications/           # independent mathematical model
-    Extraction/               # generated from actual shipped Rust, never hand-edited
-    Verification/             # refinement/equivalence and property theorems
-    Assumptions/              # explicit external contracts with tests
-  corpus/                     # minimized counterexamples and regressions (license reviewed)
+    Generated/                # pinned extraction of production Rust, never hand-edited
+    Proofs/                   # handwritten specifications, refinement and property theorems
+    kani/                     # harnesses exercising this crate's production code
+    models/                   # TLA+ specs and TLC configs owned by this crate
+
+verification/                 # repository-wide planning and evidence contracts
+  obligations.json
+  evidence.schema.json
 ```
+
+Create the directories and tool configuration when the corresponding verification method is implemented. Keep generated Lean code in `Generated/` and handwritten Lean code in the separate, case-sensitive `Proofs/` directory, both directly under the crate's `verification/` directory. Load crate-owned Kani harnesses through `#[cfg(kani)]`-gated module wiring so normal builds do not compile them.
 
 Proof job: regenerate extraction from the pinned source/target/features, diff/hash generated artifacts, compile with Lean `lake build`, make warnings/placeholders in the required theorem dependency closure fatal, audit `#print axioms` or equivalent theorem axiom inspection. No `sorry`, `admit`, hidden `sorryAx`, unreviewed axioms, or replacement stubs in required closure. Standard Lean foundations and reviewed external assumptions recorded; unsupported extractions remain unsupported. CI verifies theorem identifiers and trace to exact function/feature hash. Pin/lock proof dependencies and reject hand edits to extraction. Counterexamples from model/proof become tests. Pilot checked region containment and canonical packing first, then expand. Kani: actual functions called by harness; nondeterministic bounded inputs, constrained by only documented preconditions, assertions on result/error and postconditions. Verify loop unwinding adequacy (unwinding assertions), no suppression of overflow/panic checks, reachability/cover for success and failure paths and non-vacuity. Record max input length, count, widths and unwind bound per harness; use full machine-width scalar inputs where possible. Mutation of critical predicates must be detected by at least one test/proof; a proof that also accepts a known bad mutation is rejected.
 
