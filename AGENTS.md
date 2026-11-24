@@ -1,0 +1,20 @@
+# Development guidance for hfsplus
+
+Read ARCHITECTURE.md, ROADMAP.md, TECH_STACK.md, TESTING.md, VERIFICATION.md and the owning feature specification before changing code. Treat the documentation as a design target, not an assertion of existing implementation. Check the actual workspace and current tests; preserve working behavior unless explicitly changing it. Feature-specific rules belong in the owning spec, not this file.
+
+- Use tabs for Rust indentation, name protocol and policy literals, and keep commits small and focused using Conventional Commits.
+- Use Rust, clear domain boundaries, fully prefixed crate names grouped under crates/<domain>/, and executables under apps/. Create crates only for real boundaries. Keep dependencies acyclic and foundational code free from application concerns.
+- Prefer typed APIs, checked arithmetic, bounded I/O and explicit errors. Avoid unnecessary unsafe code; document and audit any unsafe/FFI. Never silently claim support for unknown binary variants or incomplete operations.
+- Add or update requirement/test traceability for new features. Test independently against native fixtures and reference implementations where applicable. Document actual evidence and limitations; never mark an unrun test as passed.
+- Keep default compilation focused; gate optional capabilities at dependency/module boundaries. Run relevant no-default/default/optional builds. Don't introduce unrelated dependencies or unreviewed licenses.
+- Maintain source provenance. Do not copy proprietary code/assets or translate restrictively licensed implementation code into a different license. Use approved source material and synthetic redistributable fixtures. Never include secrets or personal data.
+- Make small reviewable changes, run fmt/clippy/tests, report failures and unresolved compatibility questions. Do not destructively change user files, run physical-disk operations, or elevate privileges during development tests.
+
+- Follow EVS-1 and the local verification/obligations.json registry. Preserve proof bounds, assumptions and oracle evidence. Do not weaken safety tests, accept new snapshots, or mark unrun tools as passing. Enforce the 500-line source convention with explicit reviewed exceptions; verify production code, not replacement stubs.
+
+## Mandatory ecosystem-wide operating scope
+
+Read the shared engineering standard (EES-1): `docs/architecture/ECOSYSTEM_ENGINEERING.md` in an imported repository, or `../shared/ENGINEERING.md` in the master documentation pack. Treat **dmgez, hfsplus and apfs as one coordinated task scope even if only this checkout is open in VS Code**. Discover and inspect all three Git roots, read their instructions, plan changes across all affected repositories and validate local cross-repository integration using actual sibling revisions. Use explicit working directories; preserve user changes and independent Git histories. If a checkout is inaccessible, report that blocker and continue independent work without claiming ecosystem qualification. Do not make unrelated changes merely to touch every repository. At handoff report each repository's changes/no-change rationale and evidence. Follow EES-1 for general Rust source conventions, workspace/lint policy, deterministic architecture, runtime and dependency discipline, verification, and release coordination.
+
+## Mandatory kernel portability
+Follow EES-1 §3a. Kernel-facing core/format/reader and future mutable engines (including APFS container/transactions) must support no_std + alloc from the first release. Bulk builders and host adapters may use std; no target-side std leakage. Run isolated bare-metal checks on both provisional targets, and the matching hosted semantic tests. Do not postpone this until Charles integration; do not equate compilation with kernel qualification.

@@ -1,0 +1,257 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Verification evidence record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "obligation_id",
+    "method",
+    "status",
+    "commit",
+    "dirty",
+    "source_hash",
+    "profile",
+    "features",
+    "tool_versions",
+    "command",
+    "assumptions",
+    "bounds",
+    "artifacts",
+    "runner",
+    "duration_ms",
+    "exit_code"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": 1
+    },
+    "obligation_id": {
+      "type": "string",
+      "pattern": "^[DHA]-V[0-9]{2}$"
+    },
+    "method": {
+      "enum": [
+        "kani",
+        "lean-linked",
+        "tlc",
+        "loom",
+        "shuttle",
+        "miri",
+        "property",
+        "state-machine",
+        "fuzz",
+        "differential",
+        "native",
+        "fault",
+        "integration",
+        "snapshots",
+        "mutation"
+      ]
+    },
+    "status": {
+      "enum": [
+        "planned",
+        "not_run",
+        "pass",
+        "fail",
+        "timeout",
+        "unsupported",
+        "unavailable",
+        "inconclusive"
+      ]
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40,64}$"
+    },
+    "dirty": {
+      "type": "boolean"
+    },
+    "source_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "features": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string"
+      }
+    },
+    "tool_versions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "minProperties": 1
+    },
+    "command": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "bounds": {
+      "type": "object"
+    },
+    "artifacts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "sha256"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "uri": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "runner": {
+      "type": "object",
+      "required": [
+        "os",
+        "arch"
+      ],
+      "properties": {
+        "os": {
+          "type": "string"
+        },
+        "arch": {
+          "type": "string"
+        },
+        "hardware": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "duration_ms": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "exit_code": {
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "seed": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "trace_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "fixture_hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "proof": {
+      "type": "object",
+      "properties": {
+        "theorem": {
+          "type": "string"
+        },
+        "extraction_hash": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "axioms": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "unwind_bound": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "states": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "distinct_states": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "status": {
+            "const": "pass"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "dirty": {
+            "const": false
+          },
+          "exit_code": {
+            "const": 0
+          },
+          "artifacts": {
+            "minItems": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "method": {
+            "enum": [
+              "lean-linked",
+              "kani",
+              "tlc"
+            ]
+          },
+          "status": {
+            "const": "pass"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "proof"
+        ],
+        "properties": {
+          "bounds": {
+            "minProperties": 1
+          }
+        }
+      }
+    }
+  ]
+}

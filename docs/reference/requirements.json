@@ -1,0 +1,341 @@
+{
+  "project": "hfsplus",
+  "schema_version": 1,
+  "requirements": [
+    {
+      "id": "H-FMT-01",
+      "milestone": "0.1.0",
+      "owner": "docs/features/FORMAT.md",
+      "requirement": "Checked volume geometry, headers, reserved regions and fork descriptors.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-FMT-01-T01",
+        "H-FMT-01-T02",
+        "H-FMT-01-T03",
+        "H-FMT-01-T04"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-FMT-02",
+      "milestone": "0.1.0",
+      "owner": "docs/features/FORMAT.md",
+      "requirement": "B-tree codec, ordering, map/header/index/leaf and catalog/extent/attr record correctness.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-FMT-02-T01",
+        "H-FMT-02-T02",
+        "H-FMT-02-T03",
+        "H-FMT-02-T04",
+        "H-FMT-02-T05",
+        "H-FMT-02-T06"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-FMT-03",
+      "milestone": "0.1.0",
+      "owner": "docs/features/FORMAT.md",
+      "requirement": "Historical HFS+ name normalization/comparison, exact identities.",
+      "source_ids": [
+        "S07"
+      ],
+      "acceptance_tests": [
+        "H-FMT-03-T01",
+        "H-FMT-03-T02",
+        "H-FMT-03-T03"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-FMT-04",
+      "milestone": "0.1.0",
+      "owner": "docs/features/FORMAT.md",
+      "requirement": "Correct fork, permissions, flags, timestamps and hardlink semantics.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-FMT-04-T01",
+        "H-FMT-04-T02",
+        "H-FMT-04-T03",
+        "H-FMT-04-T04"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-BUILD-01",
+      "milestone": "0.1.0",
+      "owner": "docs/features/BUILD.md",
+      "requirement": "Validate tree and freeze stable CNIDs/volume identity before generated metadata.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-BUILD-01-T01",
+        "H-BUILD-01-T02",
+        "H-BUILD-01-T03"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-BUILD-02",
+      "milestone": "0.1.0",
+      "owner": "docs/features/BUILD.md",
+      "requirement": "Capacity planning and exact allocation coverage.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-BUILD-02-T01",
+        "H-BUILD-02-T02",
+        "H-BUILD-02-T03",
+        "H-BUILD-02-T04"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-BUILD-03",
+      "milestone": "0.1.0",
+      "owner": "docs/features/BUILD.md",
+      "requirement": "Bulk-build special files and all required metadata tree records.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-BUILD-03-T01",
+        "H-BUILD-03-T02",
+        "H-BUILD-03-T03"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-BUILD-04",
+      "milestone": "0.1.0",
+      "owner": "docs/features/BUILD.md",
+      "requirement": "Sealed plan exact sequential/random sector access and bounded payload memory.",
+      "source_ids": [
+        "S07"
+      ],
+      "acceptance_tests": [
+        "H-BUILD-04-T01",
+        "H-BUILD-04-T02",
+        "H-BUILD-04-T03"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-BUILD-05",
+      "milestone": "0.1.0",
+      "owner": "docs/features/BUILD.md",
+      "requirement": "Fresh clean nonjournaled raw filesystem native interoperability and reproducibility.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-BUILD-05-T01",
+        "H-BUILD-05-T02"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-READ-01",
+      "milestone": "0.1.0",
+      "owner": "docs/features/READ.md",
+      "requirement": "Independent clean HFS+ reader for builder subset, exact file/fork reads.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-READ-01-T01",
+        "H-READ-01-T02"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-READ-02",
+      "milestone": "0.2.0",
+      "owner": "docs/features/READ.md",
+      "requirement": "HFSX, journal state and internal inspection/check.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-READ-02-T01",
+        "H-READ-02-T02"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-READ-03",
+      "milestone": "0.2.0",
+      "owner": "docs/features/READ.md",
+      "requirement": "Decmpfs support per type, unsupported encoded data not silently empty.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-READ-03-T01",
+        "H-READ-03-T02"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-READ-04",
+      "milestone": "0.2.0",
+      "owner": "docs/features/READ.md",
+      "requirement": "Resource-bounded traversal, check and raw metadata diagnostics.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-READ-04-T01",
+        "H-READ-04-T02"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-MUT-01",
+      "milestone": "0.4.0",
+      "owner": "docs/features/MUTATION.md",
+      "requirement": "Explicit exclusive mutable volume operations and consistency under failures.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-MUT-01-T01",
+        "H-MUT-01-T02",
+        "H-MUT-01-T03"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-MUT-02",
+      "milestone": "0.5.0",
+      "owner": "docs/features/MUTATION.md",
+      "requirement": "Qualified journal commit/replay and crash consistency.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-MUT-02-T01",
+        "H-MUT-02-T02",
+        "H-MUT-02-T03"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-MUT-03",
+      "milestone": "0.6+",
+      "owner": "docs/features/MUTATION.md",
+      "requirement": "Safe resize and independently qualified Charles storage adapter.",
+      "source_ids": [
+        "S07",
+        "S11"
+      ],
+      "acceptance_tests": [
+        "H-MUT-03-T01",
+        "H-MUT-03-T02"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-VER-01",
+      "milestone": "0.1.0",
+      "owner": "VERIFICATION.md",
+      "requirement": "Maintain independent test, fault, fuzz, coverage and architecture apparatus from bootstrap.",
+      "source_ids": [
+        "V04",
+        "V07",
+        "V10"
+      ],
+      "acceptance_tests": [
+        "H-VER-01-T01"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-VER-02",
+      "milestone": "0.1.0",
+      "owner": "VERIFICATION.md",
+      "requirement": "Track all activated proof obligations and evidence; run critical bounded Rust safety gates.",
+      "source_ids": [
+        "V04",
+        "V07",
+        "V10"
+      ],
+      "acceptance_tests": [
+        "H-VER-02-T01"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-VER-03",
+      "milestone": "1.0.0",
+      "owner": "VERIFICATION.md",
+      "requirement": "Qualify activated Lean, protocol and fault gates; retain source-linked evidence and reviewed assumptions.",
+      "source_ids": [
+        "V01",
+        "V02",
+        "V03",
+        "V05",
+        "V10"
+      ],
+      "acceptance_tests": [
+        "H-VER-03-T01"
+      ],
+      "status": "planned",
+      "mandatory": true
+    },
+    {
+      "id": "H-PORT-01",
+      "milestone": "0.1.0",
+      "owner": "ARCHITECTURE.md",
+      "requirement": "Mandatory no_std + alloc kernel-facing engine profiles from first crate release; both provisional bare-metal targets; std permitted in bulk builders and host adapters; actual kernel qualification separate.",
+      "source_ids": [],
+      "acceptance_tests": [
+        "H-PORT-01-T01",
+        "H-PORT-01-T02",
+        "H-PORT-01-T03",
+        "H-PORT-01-T04"
+      ],
+      "status": "planned",
+      "mandatory": true
+    }
+  ]
+}

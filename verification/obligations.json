@@ -1,0 +1,334 @@
+{
+  "schema_version": 1,
+  "project": "hfsplus",
+  "methods": {
+    "kani": "bounded Rust",
+    "lean-linked": "implementation-linked theorem",
+    "tlc": "finite protocol model",
+    "loom": "instrumented concurrency",
+    "shuttle": "seeded schedules",
+    "miri": "UB check",
+    "property": "property test",
+    "state-machine": "reference model test",
+    "fuzz": "fuzz/corpus",
+    "differential": "independent comparison",
+    "native": "native Apple oracle",
+    "fault": "failure injection",
+    "integration": "real integration",
+    "snapshots": "reviewed golden/screenshot",
+    "mutation": "mutation test"
+  },
+  "obligations": [
+    {
+      "id": "H-V01",
+      "activation": "0.1.0",
+      "scope": "geometry/codecs",
+      "requirement_ids": [
+        "H-FMT-01",
+        "H-READ-01"
+      ],
+      "target": "hfsplus-format / header, fork and region arithmetic",
+      "property": "Accepted geometry, block size/count and fork ranges fit exact bounded raw image; no integer overflow or out-of-range indexing.",
+      "assumptions_and_initial_bounds": "Kani full u64 values, arrays up to 8 extents, arbitrary truncated byte buffers; native min/max admissible profiles.",
+      "required_methods": [
+        "kani",
+        "property",
+        "fuzz",
+        "differential"
+      ],
+      "negative_witness": "allocation block index multiplied by size overflows",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V02",
+      "activation": "0.1.0",
+      "scope": "catalog/extent/attributes",
+      "requirement_ids": [
+        "H-FMT-02",
+        "H-BUILD-03"
+      ],
+      "target": "hfsplus-format / packed node codec",
+      "property": "Validated node offset table partitions records without overlap with descriptors/table; every parsed key and data range valid, typed and monotone under correct comparator.",
+      "assumptions_and_initial_bounds": "Kani <=8 records/128-byte synthetic packing and real nodes tested at qualified sizes; endian exact; comparator contract.",
+      "required_methods": [
+        "kani",
+        "property",
+        "fuzz",
+        "differential",
+        "native"
+      ],
+      "negative_witness": "offset table points into itself; malformed node count reads before start",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V03",
+      "activation": "0.1.0",
+      "scope": "names",
+      "requirement_ids": [
+        "H-FMT-03",
+        "H-BUILD-01"
+      ],
+      "target": "hfsplus-format / historical comparison key",
+      "property": "Name canonicalization is idempotent on admitted names; sibling equality agrees with historical HFS+ profile; comparator antisymmetry/transitivity, sorting and lookup agree; collisions rejected.",
+      "assumptions_and_initial_bounds": "Published historical tables/exclusions + native corpus; comparator laws cannot prove table fidelity alone; exhaustive pairs in selected alphabet + randomized Unicode.",
+      "required_methods": [
+        "property",
+        "differential",
+        "native"
+      ],
+      "negative_witness": "generic modern Unicode folding accepts an HFS+ collision",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V04",
+      "activation": "0.1.0",
+      "scope": "metadata/forks/links",
+      "requirement_ids": [
+        "H-FMT-04",
+        "H-READ-01",
+        "H-BUILD-03"
+      ],
+      "target": "hfsplus-format, hfsplus-reader / forks and link resolver",
+      "property": "Logical fork read returns exact data within allocated coverage; forks distinct; hard-link identity and reference count consistent for admitted regular-file profile; traversal cannot cycle indefinitely.",
+      "assumptions_and_initial_bounds": "Native source metadata known, lengths representable; small reference tree <=12 nodes, extents <=8; unsupported directory links explicitly refused until qualified.",
+      "required_methods": [
+        "property",
+        "fuzz",
+        "differential",
+        "native"
+      ],
+      "negative_witness": "resource fork confused with data fork; hardlink deref cycle",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V05",
+      "activation": "0.1.0",
+      "scope": "stable IDs",
+      "requirement_ids": [
+        "H-BUILD-01",
+        "H-BUILD-03"
+      ],
+      "target": "hfsplus-builder / draft/finalized identity registry",
+      "property": "Each live catalog object gets one valid CNID in correct namespace; parent/thread references resolve; generated asset length changes do not change frozen IDs; no reserved collisions.",
+      "assumptions_and_initial_bounds": "Finite tree <=16 entries + overflow boundaries; deterministic comparator; identities fixed before seal.",
+      "required_methods": [
+        "property",
+        "state-machine",
+        "differential",
+        "native"
+      ],
+      "negative_witness": "reallocation after alias bytes generated changes CNID",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V06",
+      "activation": "0.1.0",
+      "scope": "fresh image allocation",
+      "requirement_ids": [
+        "H-BUILD-02",
+        "H-BUILD-03"
+      ],
+      "target": "hfsplus-builder / planner and bitmap",
+      "property": "All allocated block ranges contained, disjoint for distinct owners except qualified links; bitmap and allocated/free counts equal reference sets; required reserved and metadata regions protected.",
+      "assumptions_and_initial_bounds": "Kani <=32 blocks/8 reservations with full-width endpoints; compare explicit set model, native free-count oracle.",
+      "required_methods": [
+        "kani",
+        "property",
+        "differential",
+        "native"
+      ],
+      "negative_witness": "allocator double uses alternate-header region",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V07",
+      "activation": "0.1.0",
+      "scope": "sealed image",
+      "requirement_ids": [
+        "H-BUILD-04",
+        "H-BUILD-05"
+      ],
+      "target": "hfsplus-builder / interval plan and range producer",
+      "property": "Sealed ranges cover [0,image_len) exactly once, known zeros explicit, source data exact; arbitrary partial reads concatenate to identical sequential output, source mutation fails.",
+      "assumptions_and_initial_bounds": "Kani <=8 ranges with arbitrary u64 endpoints; immutable bounded source contract; native raw image output.",
+      "required_methods": [
+        "kani",
+        "property",
+        "fault",
+        "differential",
+        "native"
+      ],
+      "negative_witness": "gap implicitly zeroed over unplanned metadata; short source read accepted",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V08",
+      "activation": "0.2.0",
+      "scope": "B-tree lookup",
+      "requirement_ids": [
+        "H-FMT-02",
+        "H-READ-01",
+        "H-READ-04"
+      ],
+      "target": "hfsplus-reader / pure B-tree descent and key search",
+      "property": "For a validated finite tree, search returns unique matching record iff present in abstract sorted map; separator routing and leaf iteration preserve total ordering; invalid links error, cycle bounded.",
+      "assumptions_and_initial_bounds": "Property/reference random histories; proof pilot later for pure packed search, not arbitrary malicious tree without validation.",
+      "required_methods": [
+        "kani",
+        "property",
+        "fuzz",
+        "differential"
+      ],
+      "negative_witness": "wrong boundary separator routes equal key to adjacent leaf",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V09",
+      "activation": "0.2.0",
+      "scope": "compressed/profile read",
+      "requirement_ids": [
+        "H-READ-02",
+        "H-READ-03",
+        "H-READ-04"
+      ],
+      "target": "hfsplus-reader / profile admission and decmpfs",
+      "property": "Unsupported journal/feature/compression type never masquerades as complete read; supported compressed fork exact declared size and within budget; malformed object yields error.",
+      "assumptions_and_initial_bounds": "Only individually qualified compression types, external codec contract; native type fixtures; bounded read counters.",
+      "required_methods": [
+        "property",
+        "fuzz",
+        "differential",
+        "native"
+      ],
+      "negative_witness": "unknown decmpfs type returns empty file",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V10",
+      "activation": "0.3.0",
+      "scope": "geometry/packing proof",
+      "requirement_ids": [
+        "H-FMT-01",
+        "H-FMT-02",
+        "H-BUILD-02",
+        "H-BUILD-04"
+      ],
+      "target": "hfsplus-format + hfsplus-builder / pure interval and packing helpers",
+      "property": "Actual extracted Rust checked interval construction, allocation merge and packing refine mathematical nonoverlapping cover model, preserving capacity and exact record boundaries for all representable accepted inputs.",
+      "assumptions_and_initial_bounds": "Lean natural arithmetic + machine-width conversion; extraction of pure safe helpers only; comparator/table and I/O assumptions separately tested.",
+      "required_methods": [
+        "lean-linked",
+        "property",
+        "differential"
+      ],
+      "negative_witness": "overlapping allocation accepted after arithmetic truncation",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V11",
+      "activation": "0.4.0",
+      "scope": "mutable operations",
+      "requirement_ids": [
+        "H-MUT-01"
+      ],
+      "target": "hfsplus-writer / allocator and operations model",
+      "property": "Create/unlink/rename/replace/setattr preserve unrelated object bytes and catalog/tree/link/allocation invariants; no new writable profile claimed crash-consistent yet.",
+      "assumptions_and_initial_bounds": "Exclusive disposable image, <=6 objects/16 blocks, mutation history and failures; no guarantee data atomicity on arbitrary in-place overwrites.",
+      "required_methods": [
+        "state-machine",
+        "property",
+        "fault",
+        "native"
+      ],
+      "negative_witness": "rename into descendant creates cycle; unlink frees still-linked file",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V12",
+      "activation": "0.5.0",
+      "scope": "journal commit/replay",
+      "requirement_ids": [
+        "H-MUT-02"
+      ],
+      "target": "hfsplus-writer / persistence and recovery state",
+      "property": "Metadata recovery selects admissible old/new transaction state; replay applies only committed verified records once logically; crash during replay idempotent; no referenced block wrongly free.",
+      "assumptions_and_initial_bounds": "TLC <=2 transactions/3 metadata blocks, bounded torn writes/flush/crashes; actual device order/alignment and HFS journal profile separately qualified; user data semantics separate.",
+      "required_methods": [
+        "tlc",
+        "fault",
+        "state-machine",
+        "native"
+      ],
+      "negative_witness": "commit record durable before required journal data; replay writes arbitrary home offset",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V13",
+      "activation": "0.6+",
+      "scope": "resize and device integration",
+      "requirement_ids": [
+        "H-MUT-03"
+      ],
+      "target": "hfsplus-writer / resize planner and adapter",
+      "property": "No live or reserved block becomes out-of-range after qualified resize; block device alignment, exclusive ownership and durable barriers enforced; failed resize/reopen reports exact state.",
+      "assumptions_and_initial_bounds": "Model <=32 blocks and two barriers; only qualified resize modes; native disposable image and no_std separate evidence.",
+      "required_methods": [
+        "kani",
+        "property",
+        "fault",
+        "native"
+      ],
+      "negative_witness": "shrink below live extent; header changed before referenced allocation relocated",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    },
+    {
+      "id": "H-V14",
+      "activation": "1.0.0",
+      "scope": "stable supported engine",
+      "requirement_ids": [
+        "H-FMT-02",
+        "H-READ-04",
+        "H-BUILD-02"
+      ],
+      "target": "hfsplus-format + hfsplus-reader / selected core helpers",
+      "property": "Production-linked proof of binary-search correctness and packing/free-space arithmetic against reference specs, with checked preconditions and exact type conversions.",
+      "assumptions_and_initial_bounds": "Safe sequential subset; no proof of entirety of tree mutations, journaling or hardware.",
+      "required_methods": [
+        "lean-linked",
+        "property",
+        "mutation",
+        "differential"
+      ],
+      "negative_witness": "binary search returns insertion point as equality",
+      "mandatory_when_activated": true,
+      "status": "planned",
+      "evidence": []
+    }
+  ]
+}

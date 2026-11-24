@@ -1,0 +1,666 @@
+{
+  "project": "hfsplus",
+  "schema_version": 1,
+  "tests": [
+    {
+      "id": "H-FMT-01-T01",
+      "requirement_ids": [
+        "H-FMT-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Native min/normal/large HFS+ volume and alternate header; mutate signature, size, offset/count, inconsistent primary/alternate; typed bounded error.",
+      "oracle": "newfs_hfs; fsck_hfs; unit",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-02-T01",
+      "requirement_ids": [
+        "H-FMT-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Native multi-level tree and overflow extents/large xattrs; corrupt offset table, record count, cycle, child height and duplicate key; compare raw record facts and traversal.",
+      "oracle": "native metadata; independent reader; fuzz",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-03-T01",
+      "requirement_ids": [
+        "H-FMT-03"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Composed/decomposed, combining, ignorable/case pairs, UTF-16 lengths, supplementary, forbidden/reserved names; compare native lookup/collision and key ordering; no modern normalization substitution.",
+      "oracle": "native filesystem name oracle",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-04-T01",
+      "requirement_ids": [
+        "H-FMT-04"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Native attrs, resource fork, link groups, symlink, known/unavailable times and overflow; compare native metadata and exact raw/logical forks.",
+      "oracle": "native stat/lstat/xattr; fstool overlap",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-01-T01",
+      "requirement_ids": [
+        "H-BUILD-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Create 2 identical canonical manifests with different traversal orders; reserved IDs, hardlinks and thread keys stable; bind generated payload and verify unchanged identity.",
+      "oracle": "property; independent raw reader",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-02-T01",
+      "requirement_ids": [
+        "H-BUILD-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Empty/small/multi-GiB/100k files, explicit capacity and insufficient space; validate nonoverlap, bitmap/free counts, reserved and alternate header; capped convergence.",
+      "oracle": "native fsck; allocation property tests",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-03-T01",
+      "requirement_ids": [
+        "H-BUILD-03"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Tree exceeding leaf/map capacity, large attrs and forks; inspect node packing and counts; native fsck/mount accepts; compare logical tree.",
+      "oracle": "native fsck/mount; independent reader",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-04-T01",
+      "requirement_ids": [
+        "H-BUILD-04"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Write nonseekable sink, random concurrent ranges vs raw output, sparse zeros, short/changing source, cancellation. Verify exact geometry, no full image buffer and no implicit allocation.",
+      "oracle": "instrumented source/sink; property",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-05-T01",
+      "requirement_ids": [
+        "H-BUILD-05"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Build full synthetic app tree (hardlinks/attrs/forks) on 3 hosts from same canonical metadata; compare raw digests, native fsck, mount and manifest.",
+      "oracle": "native fsck_hfs; native mount; independent reader",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-READ-01-T01",
+      "requirement_ids": [
+        "H-READ-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Read native-generated volume with nested dirs, fragmented/overflow data, hardlinks and attrs; compare bytes/name metadata; no host resolution.",
+      "oracle": "native mounted tree; hfsplus reader",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-READ-02-T01",
+      "requirement_ids": [
+        "H-READ-02"
+      ],
+      "milestone": "0.2.0",
+      "scenario": "Native HFSX comparator modes, clean journaled and dirty fixture; supported clean read, dirty refuse or explicit qualified private replay, no source write; checker identifies counts/extents issue.",
+      "oracle": "native fixtures; fsck",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-READ-03-T01",
+      "requirement_ids": [
+        "H-READ-03"
+      ],
+      "milestone": "0.2.0",
+      "scenario": "Native zlib inline/resource compressed file, malformed length, unknown type, expansion cap; compare decoded bytes, typed error for unsupported.",
+      "oracle": "native file bytes; independent decompressor",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-READ-04-T01",
+      "requirement_ids": [
+        "H-READ-04"
+      ],
+      "milestone": "0.2.0",
+      "scenario": "Large fragmented and corrupt images (loops, overlaps, bad attr extents) inspect/check with limits; full valid fixture read; source unchanged.",
+      "oracle": "fuzz; I/O counters; native fsck",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-MUT-01-T01",
+      "requirement_ids": [
+        "H-MUT-01"
+      ],
+      "milestone": "0.4.0",
+      "scenario": "Disposable raw volume create/remove/rename/link/fork/attr/write/truncate; ENOSPC and injected short writes; compare native read and consistent transaction/rollback.",
+      "oracle": "native read/fsck; model",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-MUT-02-T01",
+      "requirement_ids": [
+        "H-MUT-02"
+      ],
+      "milestone": "0.5.0",
+      "scenario": "Fault at each write/barrier, wrap/full journal, replay duplicate, torn write within device model; old/new valid metadata and native fsck after replay.",
+      "oracle": "fault-injecting device; native fsck",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-MUT-03-T01",
+      "requirement_ids": [
+        "H-MUT-03"
+      ],
+      "milestone": "0.6+",
+      "scenario": "Grow/shrink plan, unsupported relocation refusal, device alignment/flush, concurrent access and no_std compilation; actual kernel tests only later; no write to physical host device.",
+      "oracle": "raw image native check; simulated device",
+      "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-VER-01-T01",
+      "requirement_ids": [
+        "H-VER-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Run nextest, unit/property and fuzz corpus, negative graph test, 500-line policy and pinned native synthetic fixtures. Inject malformed geometry and verify no panic/escape; critical coverage and exceptions audited.",
+      "oracle": "EVS-1; cargo-nextest; proptest; native checker",
+      "expected": "All required gates in the active scope pass with current evidence; injected invalid evidence is rejected.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-VER-02-T01",
+      "requirement_ids": [
+        "H-VER-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Reject missing, stale, dirty, timed-out, unsupported, wrong-profile or vacuous required verification results; run actual Kani on admitted range/geometry helpers with bounds and non-vacuity.",
+      "oracle": "EVS-1; Kani; release evidence validator",
+      "expected": "All required gates in the active scope pass with current evidence; injected invalid evidence is rejected.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-VER-03-T01",
+      "requirement_ids": [
+        "H-VER-03"
+      ],
+      "milestone": "1.0.0",
+      "scenario": "Regenerate actual Rust extraction and verify named theorem dependency closure with no admitted placeholders; run activated TLC/actual fault/counterexample tests, native tests and mutation review; deliberately alter proof target hash and confirm evidence invalidated.",
+      "oracle": "EVS-1; Lean/hax; TLA+/TLC; native oracle; cargo-mutants",
+      "expected": "All required gates in the active scope pass with current evidence; injected invalid evidence is rejected.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-01-T02",
+      "requirement_ids": [
+        "H-FMT-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Primary and alternate volume headers disagree; tiny/truncated image",
+      "oracle": "native fsck; bounds spy",
+      "expected": "Reject strict view or explicit diagnostic; no reads outside source",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-01-T03",
+      "requirement_ids": [
+        "H-FMT-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Block size zero, nonqualified size, totalBlocks*blockSize overflow",
+      "oracle": "Kani",
+      "expected": "Reject before allocation",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-01-T04",
+      "requirement_ids": [
+        "H-FMT-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Fork physical start+count beyond volume; logical size exceeds coverage",
+      "oracle": "native fixture; set model",
+      "expected": "Corrupt, no zero-fill",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-02-T02",
+      "requirement_ids": [
+        "H-FMT-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "B-tree node record offsets decreasing, duplicate, past offset table",
+      "oracle": "Kani; fuzz",
+      "expected": "Corrupt, no out-of-range parse",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-02-T03",
+      "requirement_ids": [
+        "H-FMT-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Catalog thread absent or parent mismatched",
+      "oracle": "native checker",
+      "expected": "Invalid qualified tree; report specific record",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-02-T04",
+      "requirement_ids": [
+        "H-FMT-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Index node wrong height, cycle, duplicate leaf reference",
+      "oracle": "fuzz; read counter",
+      "expected": "Bounded diagnostic; no infinite traversal",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-02-T05",
+      "requirement_ids": [
+        "H-FMT-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Boundary leaf key exactly equals index separator",
+      "oracle": "proptest",
+      "expected": "Lookup matches reference sorted map",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-02-T06",
+      "requirement_ids": [
+        "H-FMT-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Record largest admissible size and one byte beyond node capacity",
+      "oracle": "independent packed layout ledger",
+      "expected": "Valid pack or explicit capacity failure",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-03-T02",
+      "requirement_ids": [
+        "H-FMT-03"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Decomposed Unicode and historical excluded characters; case pairs",
+      "oracle": "native name oracle",
+      "expected": "Expected native comparison and canonical collision",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-03-T03",
+      "requirement_ids": [
+        "H-FMT-03"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Comparator triples and canonicalization repeated",
+      "oracle": "proptest; historical corpus",
+      "expected": "Transitive, antisymmetric sign, idempotent key within admitted names",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-04-T02",
+      "requirement_ids": [
+        "H-FMT-04"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Epoch 1904 boundary and timestamp max plus one",
+      "oracle": "native stat and arithmetic model",
+      "expected": "Exact representable timestamp, out-of-range error",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-04-T03",
+      "requirement_ids": [
+        "H-FMT-04"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Data and resource forks both nonempty, large xattr",
+      "oracle": "native xattr/fork tools",
+      "expected": "Exact independently read bytes and metadata, forks distinct",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-FMT-04-T04",
+      "requirement_ids": [
+        "H-FMT-04"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Hard-linked regular files with unequal requested metadata",
+      "oracle": "native inode/link oracle",
+      "expected": "Correct shared file identity or conflict, no silent duplication",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-01-T02",
+      "requirement_ids": [
+        "H-BUILD-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Tree order permuted; generated asset size changed after identity freeze",
+      "oracle": "canonical manifest model",
+      "expected": "Stable IDs and valid catalog threads, no stale alias IDs",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-01-T03",
+      "requirement_ids": [
+        "H-BUILD-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Parent cycle, duplicate name after normalization, reserved private name",
+      "oracle": "reference tree",
+      "expected": "Reject before sealing",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-02-T02",
+      "requirement_ids": [
+        "H-BUILD-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Image barely fits metadata and alternate header, one block short",
+      "oracle": "explicit block set",
+      "expected": "Valid plan or capacity error before writes",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-02-T03",
+      "requirement_ids": [
+        "H-BUILD-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Allocation overlap introduced in fixture, free counter incorrect",
+      "oracle": "native fsck; set model",
+      "expected": "Detect overlap and counter discrepancy",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-02-T04",
+      "requirement_ids": [
+        "H-BUILD-02"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Sparse 10 GiB input with explicit known-zero regions",
+      "oracle": "counting source",
+      "expected": "Exact logical geometry, no payload-proportional RAM",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-03-T02",
+      "requirement_ids": [
+        "H-BUILD-03"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Packed catalog requiring multiple levels and extents-overflow entries",
+      "oracle": "independent reader and fsck",
+      "expected": "Every record reachable exactly once, search and scan agree",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-03-T03",
+      "requirement_ids": [
+        "H-BUILD-03"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Attributes tree has inline and extent-backed values (qualified profile)",
+      "oracle": "native fixture",
+      "expected": "Exact values; unsupported representation error if not qualified",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-04-T02",
+      "requirement_ids": [
+        "H-BUILD-04"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Read slices at all interval boundaries and across two source extents",
+      "oracle": "raw materialized reference",
+      "expected": "Identical bytes to full sequential emission",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-04-T03",
+      "requirement_ids": [
+        "H-BUILD-04"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Source short read, changed identity after plan, sink error",
+      "oracle": "fault device",
+      "expected": "Explicit failure, no fabricated padding or valid output report",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-BUILD-05-T02",
+      "requirement_ids": [
+        "H-BUILD-05"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Build same canonical metadata on Linux, macOS, Windows",
+      "oracle": "digest and native metadata",
+      "expected": "Byte-identical raw volume with fixed profile; native mount/fsck",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-READ-01-T02",
+      "requirement_ids": [
+        "H-READ-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Native volume with fragmented file and resource fork",
+      "oracle": "native reader",
+      "expected": "Logical bytes match native data and fork",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-READ-02-T02",
+      "requirement_ids": [
+        "H-READ-02"
+      ],
+      "milestone": "0.2.0",
+      "scenario": "HFSX case-sensitive vs insensitive and dirty journal",
+      "oracle": "native fixtures",
+      "expected": "Correct qualified comparison; unsupported dirty read profile diagnostic",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-READ-03-T02",
+      "requirement_ids": [
+        "H-READ-03"
+      ],
+      "milestone": "0.2.0",
+      "scenario": "decmpfs zlib inline/resource forms, corrupt decoded size, unknown type",
+      "oracle": "native and independent decoder",
+      "expected": "Exact valid bytes; reject short/long or unsupported, not empty",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-READ-04-T02",
+      "requirement_ids": [
+        "H-READ-04"
+      ],
+      "milestone": "0.2.0",
+      "scenario": "Malformed overflow extent chain or cycle, enormous entry count",
+      "oracle": "fuzz and read counters",
+      "expected": "Bounded diagnostic and no unbounded allocations",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-MUT-01-T02",
+      "requirement_ids": [
+        "H-MUT-01"
+      ],
+      "milestone": "0.4.0",
+      "scenario": "Rename directory into descendant, remove last hard link vs non-last",
+      "oracle": "reference state machine; native",
+      "expected": "Cycle refused; allocation freed only after final reference",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-MUT-01-T03",
+      "requirement_ids": [
+        "H-MUT-01"
+      ],
+      "milestone": "0.4.0",
+      "scenario": "ENOSPC during node split; unrelated xattr and file readback",
+      "oracle": "fault device and native fsck",
+      "expected": "Rollback/typed failure per mutation contract, unrelated data unchanged",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-MUT-02-T02",
+      "requirement_ids": [
+        "H-MUT-02"
+      ],
+      "milestone": "0.5.0",
+      "scenario": "Every journal write/flush boundary, crash during replay then crash again",
+      "oracle": "TLC; fault device; native checker",
+      "expected": "Recover committed metadata once logically or explicit unsupported dirty error; no arbitrary data guarantee",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-MUT-02-T03",
+      "requirement_ids": [
+        "H-MUT-02"
+      ],
+      "milestone": "0.5.0",
+      "scenario": "Journal wrap/full, invalid log entry target, checksum mismatch",
+      "oracle": "malformed native fixtures",
+      "expected": "No replay outside admitted block range or uncommitted records",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-MUT-03-T02",
+      "requirement_ids": [
+        "H-MUT-03"
+      ],
+      "milestone": "0.6+",
+      "scenario": "Shrink below highest live extent; grow with header/bitmap update failure",
+      "oracle": "native and fault device",
+      "expected": "Refuse unsafe shrink; qualified transactional behavior and reopen",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-PORT-01-T01",
+      "requirement_ids": [
+        "H-PORT-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Isolate every active kernel-facing crate with defaults disabled and explicit supported kernel features; check on aarch64-unknown-none and x86_64-unknown-none; build at release.",
+      "oracle": "Pinned rustc/Cargo target checks and release code generation",
+      "expected": "Both targets pass for each active profile; record exact commands, features and toolchain.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-PORT-01-T02",
+      "requirement_ids": [
+        "H-PORT-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Inspect target-specific normal dependency graph; inject a test-only negative feature fixture selecting a prohibited host/std dependency.",
+      "oracle": "Architecture checker and Cargo target feature graph",
+      "expected": "Real profile accepted; deliberately leaking dependency rejected; host proc macros not confused with target-side dependencies.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-PORT-01-T03",
+      "requirement_ids": [
+        "H-PORT-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Run same semantic fixtures against no_std-configured engine in hosted test harness and std-enabled engine; compare metadata, bytes and typed errors.",
+      "oracle": "Shared native-derived fixtures and independent expectations",
+      "expected": "Both configurations match the qualified semantics; no host-only logic substitute.",
+      "status": "planned",
+      "evidence": null
+    },
+    {
+      "id": "H-PORT-01-T04",
+      "requirement_ids": [
+        "H-PORT-01"
+      ],
+      "milestone": "0.1.0",
+      "scenario": "Verify hosted-only builder/adapter or optional codec features do not become required by kernel profiles; test supported feature variants separately.",
+      "oracle": "Feature graph and compilation matrix",
+      "expected": "Hosted features remain available on supported hosts; kernel graph excludes hosted-only dependencies and explicitly labels unsupported combinations.",
+      "status": "planned",
+      "evidence": null
+    }
+  ]
+}
