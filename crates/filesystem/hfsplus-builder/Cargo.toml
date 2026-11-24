@@ -9,6 +9,7 @@ description = "Deterministic streaming construction of HFS+ images"
 
 [dependencies]
 hfsplus-core.workspace = true
+hfsplus-format.workspace = true
 
 [lints]
 workspace = true

@@ -14,6 +14,7 @@ repository = "https://github.com/pomologie/hfsplus"
 
 [workspace.dependencies]
 hfsplus-core = { version = "0.1.0", path = "crates/foundation/hfsplus-core", default-features = false }
+hfsplus-format = { version = "0.1.0", path = "crates/formats/hfsplus-format", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

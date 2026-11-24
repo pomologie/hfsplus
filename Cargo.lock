@@ -7,6 +7,7 @@ name = "hfsplus-builder"
 version = "0.1.0"
 dependencies = [
  "hfsplus-core",
+ "hfsplus-format",
 ]
 
 [[package]]

@@ -3,9 +3,11 @@
 //! The layout layer joins filesystem metadata and immutable source windows. It
 //! deliberately has no host path, mount, or image-container dependencies.
 
+pub mod allocation;
 mod error;
 mod plan;
 mod stream;
+pub mod tree;
 
 pub use error::{PlanError, ReadError, WriteError};
 pub use plan::{Limits, PlanBuilder, RangeKind, SealedPlan};
