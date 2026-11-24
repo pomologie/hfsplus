@@ -1,0 +1,146 @@
+{
+  "profile": "Clean nonjournaled HFS+ with fragmented data and resource forks",
+  "oracle": {
+    "os": "macOS 14.7.2",
+    "build": "23H311",
+    "arch": "arm64",
+    "checker": "fsck_hfs 650.140.2",
+    "native_result": "read-only fsck exited zero; both mounted fork digests match independent direct raw extent assembly"
+  },
+  "generation": {
+    "create_argv": [
+      "hdiutil",
+      "create",
+      "-size",
+      "64m",
+      "-fs",
+      "HFS+",
+      "-volname",
+      "Pomologie Overflow",
+      "-layout",
+      "NONE",
+      "<temp>/native.dmg"
+    ],
+    "populate": "Create fragmented in the disposable read-write mount. For each index 0..19, append 256 KiB of index+1 to the data fork and fsync, then append 256 KiB of index+41 to the resource fork through ..namedfork/rsrc and fsync. Detach.",
+    "readback": "Run fsck_hfs -fn on the device confirmed by the read-only hdiutil attach -nomount result. Detach and mount the same image read-only to confirm exact contents and hashes of both forks. Detach.",
+    "export_argv": [
+      "hdiutil",
+      "convert",
+      "<temp>/native.dmg",
+      "-format",
+      "UDTO",
+      "-o",
+      "<temp>/native"
+    ]
+  },
+  "catalog_id": 18,
+  "allocation_block_bytes": 4096,
+  "raw_image_bytes": 67108864,
+  "raw_image_sha256": "27d24078eecf7fdc32194c2285a9ad6842d5e5fa14c7a7176c0f40f4aa7d78c0",
+  "forks": [
+    {
+      "kind": "data",
+      "logical_bytes": 5242880,
+      "allocated_blocks": 1280,
+      "extent_count": 20,
+      "overflow_starts": [
+        512,
+        1024
+      ],
+      "native_payload_sha256": "923206bf9a96d84ae3070863629b94d8420feba8cb74f7dd60038949198e4c8b"
+    },
+    {
+      "kind": "resource",
+      "logical_bytes": 5242880,
+      "allocated_blocks": 1280,
+      "extent_count": 20,
+      "overflow_starts": [
+        512,
+        1024
+      ],
+      "native_payload_sha256": "c3c39e51782df4571b267ba261a4dc8e6b2a807aa71c5cc9abb6a83e5ce2c86d"
+    }
+  ],
+  "fixture_format": "Big-endian volume size u64 and slice count u16, then for each slice volume offset u64, byte length u32 and exact original bytes. Other volume bytes are not captured.",
+  "fixture_sha256": "b218ac13bc132eeb649cb4de6a0e0fc262e8a2c6cbd29409123daf78e60cd988",
+  "slices": [
+    {
+      "purpose": "primary volume header",
+      "volume_offset": 1024,
+      "bytes": 512,
+      "sha256": "ee09165ac1acb4b8bacdb798a46c2778496c71694b0b053400c3ae88635253f3"
+    },
+    {
+      "purpose": "alternate volume header",
+      "volume_offset": 67107840,
+      "bytes": 512,
+      "sha256": "8e3aa165bfa7cf62250c593c06f6c761427f38487dd721059fc11b38240a9774"
+    },
+    {
+      "purpose": "overflow header node with allocation map",
+      "volume_offset": 8192,
+      "bytes": 4096,
+      "sha256": "a6cce02aae854ecc3376e758882126b72074f12bcd97beac031ca20a1ff2f093"
+    },
+    {
+      "purpose": "overflow leaf node",
+      "volume_offset": 12288,
+      "bytes": 4096,
+      "sha256": "2a88b51bf4e6742708ae5c72bf9cf2bc725e5ef22aa0ec67aed910869c6123bf"
+    },
+    {
+      "purpose": "catalog file record for fragmented",
+      "volume_offset": 6304098,
+      "bytes": 276,
+      "sha256": "db90ee2cbe2dc53f72b504b9a707fcd44ea68d07ea50e5ddd87e23e295f8a113"
+    },
+    {
+      "purpose": "data bytes immediately before logical block 512",
+      "volume_offset": 15998960,
+      "bytes": 16,
+      "sha256": "07942d5f6ddd9f547de37fb792a8f81ac5a90ccfea094b17293b099996540879"
+    },
+    {
+      "purpose": "data bytes at logical block 512",
+      "volume_offset": 16261120,
+      "bytes": 16,
+      "sha256": "06232b08dabb5a4fdb466598179349c845b0dc3436324794e270257b4e0fdbce"
+    },
+    {
+      "purpose": "data bytes immediately before logical block 1024",
+      "volume_offset": 20193264,
+      "bytes": 16,
+      "sha256": "9c744e43939b79a9c0d3fedde43da40acf0ae66d1c3a19d31dce44ad94869541"
+    },
+    {
+      "purpose": "data bytes at logical block 1024",
+      "volume_offset": 20455424,
+      "bytes": 16,
+      "sha256": "b8f12ea8c9a95d4b4641b03d9fa5a71ad30b44ed6cd4bf793bbe1a5801b986d4"
+    },
+    {
+      "purpose": "resource bytes immediately before logical block 512",
+      "volume_offset": 16261104,
+      "bytes": 16,
+      "sha256": "fcdb4b423f4e5283afa249d762ef6aef150e91fccd810d43e5e719d14512dec7"
+    },
+    {
+      "purpose": "resource bytes at logical block 512",
+      "volume_offset": 16523264,
+      "bytes": 16,
+      "sha256": "807ae5f38db47bff8b09b37ad803cb10ef5147567a89a33a66bb3282df4ad966"
+    },
+    {
+      "purpose": "resource bytes immediately before logical block 1024",
+      "volume_offset": 20455408,
+      "bytes": 16,
+      "sha256": "04b7771117065153159e20839b8c72bde77d3b3ec611af90861ce812c8bfcd93"
+    },
+    {
+      "purpose": "resource bytes at logical block 1024",
+      "volume_offset": 20717568,
+      "bytes": 16,
+      "sha256": "0866a6eaea5cb085e4cf6ef19296bf19647552dd5f96f1e530db3ae61837efe7"
+    }
+  ]
+}

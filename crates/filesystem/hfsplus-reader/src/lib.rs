@@ -1,7 +1,7 @@
 //! Portable reads from a caller-bounded HFS+ or HFSX volume.
 //!
-//! The reader opens volume headers, maps embedded forks, and traverses
-//! supported catalog and attribute trees over stored bytes.
+//! The reader opens volume headers, maps embedded and overflow extents, and
+//! traverses supported catalog and attribute trees over stored bytes.
 #![no_std]
 
 extern crate alloc;
@@ -17,6 +17,7 @@ use hfsplus_format::{
 pub mod attributes;
 pub mod catalog;
 mod fork;
+pub mod overflow;
 mod profile;
 
 pub use fork::{ForkReader, SpecialFile};
