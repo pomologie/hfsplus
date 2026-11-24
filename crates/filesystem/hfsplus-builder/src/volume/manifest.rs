@@ -6,7 +6,8 @@ use hfsplus_format::{catalog::MAX_NAME_UNITS, volume::CatalogId};
 use crate::SealedPlan;
 
 use super::{
-	EntryKind, EntryMetadata, ForkSource, ManifestEntry, VolumeError, VolumeOptions, emit,
+	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, MAX_SYMLINK_TARGET_BYTES,
+	ManifestEntry, SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError, VolumeOptions, emit,
 };
 
 pub(super) const ROOT_PARENT_ID: CatalogId = CatalogId(1);
@@ -107,7 +108,7 @@ pub fn plan_ascii<'a, S: ReadAt>(
 	);
 	for entry in &entries {
 		validate_path(entry.path)?;
-		validate_metadata(entry.metadata)?;
+		validate_entry(entry)?;
 	}
 	entries.sort_unstable_by(|left, right| compare_paths(left.path, right.path));
 	if entries
@@ -187,6 +188,27 @@ fn validate_metadata(metadata: EntryMetadata) -> Result<(), VolumeError> {
 		.any(|signature| metadata.finder_info.starts_with(signature))
 	{
 		return Err(VolumeError::UnsupportedFinderInfo);
+	}
+	Ok(())
+}
+
+fn validate_entry<S>(entry: &ManifestEntry<'_, S>) -> Result<(), VolumeError> {
+	validate_metadata(entry.metadata)?;
+	let type_and_creator = &entry.metadata.finder_info[..FINDER_TYPE_AND_CREATOR_BYTES];
+	let has_link_marker = type_and_creator == SYMLINK_FINDER_TYPE_AND_CREATOR;
+	match &entry.kind {
+		EntryKind::Symlink { target } => {
+			if target.is_empty() || target.len() > MAX_SYMLINK_TARGET_BYTES || target.contains(&0) {
+				return Err(VolumeError::InvalidSymlinkTarget);
+			}
+			if !has_link_marker && type_and_creator != [0; FINDER_TYPE_AND_CREATOR_BYTES] {
+				return Err(VolumeError::UnsupportedFinderInfo);
+			}
+		}
+		EntryKind::File { .. } | EntryKind::GeneratedFile { .. } if has_link_marker => {
+			return Err(VolumeError::UnsupportedFinderInfo);
+		}
+		_ => {}
 	}
 	Ok(())
 }

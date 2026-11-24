@@ -6,7 +6,7 @@ The initial `hfsplus-format` crate decodes volume headers, embedded fork extents
 
 Native fixtures from macOS 14.7.2 cover a clean partitionless volume and a regular file in an Apple-generated optical HFS+ volume. [Fixture provenance](tests/fixtures)
 
-`hfsplus-builder` can stream clean, nonjournaled HFS+ volumes from manifests of printable ASCII paths, directories, and files with data and resource forks. Its [crate-local verification](crates/filesystem/hfsplus-builder/verification) covers image placement admission.
+`hfsplus-builder` can stream clean, nonjournaled HFS+ volumes from manifests of printable ASCII paths, directories, symbolic links, and files with data and resource forks. Its [crate-local verification](crates/filesystem/hfsplus-builder/verification) covers image placement admission.
 
 ```sh
 cargo nextest run --locked

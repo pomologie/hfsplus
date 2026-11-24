@@ -20,7 +20,8 @@ use crate::{
 };
 
 use super::{
-	EntryKind, EntryMetadata, ForkSource, VolumeError,
+	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource,
+	SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError,
 	manifest::{AsciiVolumeDraft, ROOT_ID, ROOT_PARENT_ID, basename, compare_names},
 };
 
@@ -30,6 +31,7 @@ const EXTENTS_KEY_COMPARE: u8 = 0;
 const ALT_HEADER_FROM_END: u64 = 1024;
 const FILE_TYPE: u16 = 0o100000;
 const FOLDER_TYPE: u16 = 0o040000;
+const SYMLINK_TYPE: u16 = 0o120000;
 const MAC_ROMAN_ENCODING: u32 = 0;
 const MAC_ROMAN_ENCODING_PRESENT: u64 = 1 << MAC_ROMAN_ENCODING;
 const RESERVED_CATALOG_FORK_WORD: u32 = 0;
@@ -51,6 +53,7 @@ pub(super) fn seal<S: ReadAt>(
 	let metadata_limit = usize::try_from(options.limits.max_metadata_bytes.0).unwrap_or(usize::MAX);
 	let mut records = Catalog::new(geometry, entries.len(), metadata_limit)?;
 	let mut payloads = Vec::new();
+	let mut remaining_metadata = metadata_limit;
 
 	records.add_entry(
 		ROOT_PARENT_ID,
@@ -67,22 +70,41 @@ pub(super) fn seal<S: ReadAt>(
 				ThreadKind::Folder,
 			),
 			EntryKind::File { data, resource } => {
-				let data = plan_fork(data, &mut allocation, &mut payloads, geometry)?;
+				let data = plan_fork(
+					Payload::Source(data),
+					&mut allocation,
+					&mut payloads,
+					geometry,
+				)?;
 				let resource = match resource {
-					Some(source) => plan_fork(source, &mut allocation, &mut payloads, geometry)?,
+					Some(source) => plan_fork(
+						Payload::Source(source),
+						&mut allocation,
+						&mut payloads,
+						geometry,
+					)?,
 					None => Fork::empty(),
 				};
 				(
-					EncodeValue::File {
-						metadata: metadata(
-							entry.id,
-							entry.input.metadata,
-							FILE_TYPE,
-							FLAG_THREAD_EXISTS,
-						),
-						data,
-						resource,
-					},
+					file(entry.id, entry.input.metadata, FILE_TYPE, data, resource),
+					ThreadKind::File,
+				)
+			}
+			EntryKind::Symlink { target } => {
+				remaining_metadata = remaining_metadata
+					.checked_sub(target.len())
+					.ok_or(VolumeError::Limit)?;
+				let data = plan_fork(
+					Payload::Symlink(target),
+					&mut allocation,
+					&mut payloads,
+					geometry,
+				)?;
+				let mut input = entry.input.metadata;
+				input.finder_info[..FINDER_TYPE_AND_CREATOR_BYTES]
+					.copy_from_slice(&SYMLINK_FINDER_TYPE_AND_CREATOR);
+				(
+					file(entry.id, input, SYMLINK_TYPE, data, Fork::empty()),
 					ThreadKind::File,
 				)
 			}
@@ -95,7 +117,7 @@ pub(super) fn seal<S: ReadAt>(
 
 	let bitmap_bytes =
 		usize::try_from(allocation.bitmap_bytes()).map_err(|_| VolumeError::Limit)?;
-	let tree_budget = metadata_limit
+	let tree_budget = remaining_metadata
 		.checked_sub(bitmap_bytes)
 		.and_then(|bytes| bytes.checked_sub(HEADER_BYTES * 2))
 		.ok_or(VolumeError::Limit)?;
@@ -180,6 +202,20 @@ fn folder(id: CatalogId, input: EntryMetadata, valence: u32) -> EncodeValue<'sta
 	}
 }
 
+fn file(
+	id: CatalogId,
+	input: EntryMetadata,
+	kind: u16,
+	data: Fork,
+	resource: Fork,
+) -> EncodeValue<'static> {
+	EncodeValue::File {
+		metadata: metadata(id, input, kind, FLAG_THREAD_EXISTS),
+		data,
+		resource,
+	}
+}
+
 fn metadata(id: CatalogId, input: EntryMetadata, kind: u16, flags: u16) -> Metadata {
 	Metadata {
 		id,
@@ -198,24 +234,32 @@ fn metadata(id: CatalogId, input: EntryMetadata, kind: u16, flags: u16) -> Metad
 	}
 }
 
-struct AllocatedSource<S> {
+struct AllocatedPayload<S> {
 	extent: Extent,
-	payload: ForkSource<S>,
+	payload: Payload<S>,
+}
+
+enum Payload<S> {
+	Source(ForkSource<S>),
+	Symlink(Vec<u8>),
 }
 
 fn plan_fork<S>(
-	payload: ForkSource<S>,
+	payload: Payload<S>,
 	allocation: &mut Allocation,
-	payloads: &mut Vec<AllocatedSource<S>>,
+	payloads: &mut Vec<AllocatedPayload<S>>,
 	geometry: Geometry,
 ) -> Result<Fork, VolumeError> {
-	let length = payload.range.len().0;
+	let length = match &payload {
+		Payload::Source(source) => source.range.len().0,
+		Payload::Symlink(target) => ByteLen::from(target.len()).0,
+	};
 	let Some(extent) = allocation.allocate(length)? else {
 		return Ok(Fork::empty());
 	};
 	let fork = allocated_fork(geometry, length, extent, RESERVED_CATALOG_FORK_WORD)?;
 	payloads.try_reserve(1)?;
-	payloads.push(AllocatedSource { extent, payload });
+	payloads.push(AllocatedPayload { extent, payload });
 	Ok(fork)
 }
 
@@ -418,14 +462,18 @@ impl<S: ReadAt> Emitter<S> {
 		self.metadata(self.extent_start(extent)?, bytes)
 	}
 
-	fn payload(&mut self, allocation: AllocatedSource<S>) -> Result<(), VolumeError> {
+	fn payload(&mut self, allocation: AllocatedPayload<S>) -> Result<(), VolumeError> {
 		let offset = self.extent_start(allocation.extent)?;
-		self.pad_to(offset)?;
-		let ForkSource { source, range } = allocation.payload;
-		self.image
-			.push_source(offset, source, range.start(), range.len())?;
-		self.end = ByteOffset(offset.0 + range.len().0);
-		Ok(())
+		match allocation.payload {
+			Payload::Source(ForkSource { source, range }) => {
+				self.pad_to(offset)?;
+				self.image
+					.push_source(offset, source, range.start(), range.len())?;
+				self.end = ByteOffset(offset.0 + range.len().0);
+				Ok(())
+			}
+			Payload::Symlink(target) => self.metadata(offset, target.into_boxed_slice()),
+		}
 	}
 
 	fn finish(mut self) -> Result<SealedPlan<S>, VolumeError> {
