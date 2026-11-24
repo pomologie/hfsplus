@@ -7,6 +7,8 @@ use crate::{
 	binary::{field, u16_at, u32_at, u64_at},
 };
 
+mod encode;
+
 /// Primary header start relative to the raw bounded volume.
 pub const PRIMARY_HEADER_OFFSET: u64 = 1024;
 /// On-disk length of a volume header.
@@ -28,7 +30,8 @@ const VOLUME_DATE_COUNT: usize = 4;
 const DEFAULT_CLUMP_SIZE_COUNT: usize = 2;
 const EMBEDDED_EXTENT_COUNT: usize = 8;
 const EXTENT_BYTES: usize = size_of::<u32>() * 2;
-pub(crate) const FORK_BYTES: usize = 80;
+/// On-disk length of one fork descriptor in bytes.
+pub const FORK_BYTES: usize = 80;
 
 mod header_offset {
 	use super::FORK_BYTES;
@@ -86,6 +89,11 @@ pub struct AllocationBlock(pub u32);
 /// ID in the volume catalog namespace.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CatalogId(pub u32);
+
+impl CatalogId {
+	/// First catalog ID that can be allocated to a user entry.
+	pub const FIRST_USER: Self = Self(16);
+}
 
 /// Validated allocation block geometry for the bounded raw device.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -185,26 +193,78 @@ pub struct Fork {
 }
 
 impl Fork {
+	/// Construct a descriptor with zero logical bytes and zero allocation.
+	#[must_use]
+	pub const fn empty() -> Self {
+		Self {
+			logical_bytes: 0,
+			clump_bytes: 0,
+			total_blocks: 0,
+			extents: [EMPTY_EXTENT; EMBEDDED_EXTENT_COUNT],
+			embedded_blocks: 0,
+		}
+	}
+
+	/// Construct a descriptor from its logical size, allocation block count, and
+	/// ordered embedded extents. When all eight slots are used, `total_blocks` may
+	/// include allocation described by the overflow tree.
+	///
+	/// # Errors
+	/// Returns [`Error::InvalidFork`] if the extent count exceeds the embedded
+	/// capacity, an extent overlaps another or escapes the volume, or the
+	/// extents, allocation count, and logical size disagree.
+	pub fn new(
+		logical_bytes: u64,
+		clump_bytes: u32,
+		total_blocks: u32,
+		extents: &[Extent],
+		geometry: Geometry,
+	) -> Result<Self, Error> {
+		let mut fork = Self {
+			logical_bytes,
+			clump_bytes,
+			total_blocks,
+			..Self::empty()
+		};
+		fork.extents
+			.get_mut(..extents.len())
+			.ok_or(Error::InvalidFork)?
+			.copy_from_slice(extents);
+		fork.embedded_blocks = fork.validate(geometry)?;
+		Ok(fork)
+	}
+
 	/// Decode an 80-byte fork descriptor and validate its embedded extents against the volume.
 	///
 	/// # Errors
 	/// Returns an error for a truncated record or an inconsistent/out-of-range extent.
 	pub fn decode(bytes: &[u8], geometry: Geometry) -> Result<Self, Error> {
 		let bytes = bytes.get(..FORK_BYTES).ok_or(Error::Truncated)?;
-		let logical_bytes = u64_at(bytes, fork_offset::LOGICAL_BYTES)?;
-		let total_blocks = u32_at(bytes, fork_offset::TOTAL_BLOCKS)?;
-		if total_blocks > geometry.total_blocks
-			|| logical_bytes > u64::from(total_blocks) * u64::from(geometry.block_size)
-		{
-			return Err(Error::InvalidFork);
-		}
-		let mut extents = [EMPTY_EXTENT; EMBEDDED_EXTENT_COUNT];
-		let mut embedded_blocks = 0u32;
-		let mut exhausted = false;
-		for index in 0..extents.len() {
+		let mut fork = Self {
+			logical_bytes: u64_at(bytes, fork_offset::LOGICAL_BYTES)?,
+			clump_bytes: u32_at(bytes, fork_offset::CLUMP_BYTES)?,
+			total_blocks: u32_at(bytes, fork_offset::TOTAL_BLOCKS)?,
+			..Self::empty()
+		};
+		for (index, extent) in fork.extents.iter_mut().enumerate() {
 			let offset = fork_offset::EMBEDDED_EXTENTS + EXTENT_BYTES * index;
 			let start = AllocationBlock(u32_at(bytes, offset + fork_offset::EXTENT_START_BLOCK)?);
 			let blocks = u32_at(bytes, offset + fork_offset::EXTENT_BLOCK_COUNT)?;
+			*extent = Extent { start, blocks };
+		}
+		fork.embedded_blocks = fork.validate(geometry)?;
+		Ok(fork)
+	}
+
+	fn validate(&self, geometry: Geometry) -> Result<u32, Error> {
+		if self.total_blocks > geometry.total_blocks
+			|| self.logical_bytes > u64::from(self.total_blocks) * u64::from(geometry.block_size)
+		{
+			return Err(Error::InvalidFork);
+		}
+		let mut embedded_blocks = 0u32;
+		let mut exhausted = false;
+		for (index, &Extent { start, blocks }) in self.extents.iter().enumerate() {
 			if blocks == EMPTY_EXTENT.blocks {
 				if start != EMPTY_EXTENT.start {
 					return Err(Error::InvalidFork);
@@ -218,7 +278,7 @@ impl Fork {
 			let range = geometry
 				.block_range(start, blocks)
 				.map_err(|_| Error::InvalidFork)?;
-			for earlier in &extents[..index] {
+			for earlier in &self.extents[..index] {
 				let earlier = geometry
 					.block_range(earlier.start, earlier.blocks)
 					.map_err(|_| Error::InvalidFork)?;
@@ -228,20 +288,13 @@ impl Fork {
 			}
 			embedded_blocks = embedded_blocks
 				.checked_add(blocks)
-				.filter(|&count| count <= total_blocks)
+				.filter(|&count| count <= self.total_blocks)
 				.ok_or(Error::InvalidFork)?;
-			extents[index] = Extent { start, blocks };
 		}
-		if exhausted && embedded_blocks != total_blocks {
+		if exhausted && embedded_blocks != self.total_blocks {
 			return Err(Error::InvalidFork);
 		}
-		Ok(Self {
-			logical_bytes,
-			clump_bytes: u32_at(bytes, fork_offset::CLUMP_BYTES)?,
-			total_blocks,
-			extents,
-			embedded_blocks,
-		})
+		Ok(embedded_blocks)
 	}
 
 	/// Embedded nonempty extents in logical fork order.
@@ -310,6 +363,8 @@ pub struct Header {
 	pub finder_info: [u8; FINDER_INFO_BYTES],
 	/// The special file forks.
 	pub forks: SpecialFiles,
+	// Its bytes are reserved on unjournaled volumes and survive a read/write.
+	reserved_journal_info: u32,
 }
 
 impl Header {
@@ -336,16 +391,15 @@ impl Header {
 		)?;
 		let free_blocks = u32_at(bytes, header_offset::FREE_BLOCKS)?;
 		let next_allocation = AllocationBlock(u32_at(bytes, header_offset::NEXT_ALLOCATION)?);
-		if free_blocks > geometry.total_blocks || next_allocation.0 > geometry.total_blocks {
-			return Err(Error::InvalidGeometry);
-		}
+		validate_allocation_counters(geometry, free_blocks, next_allocation)?;
 		let attributes = u32_at(bytes, header_offset::ATTRIBUTES)?;
-		let journal_info = if attributes & JOURNALED_ATTRIBUTE != 0 {
-			let block = AllocationBlock(u32_at(bytes, header_offset::JOURNAL_INFO)?);
+		let journal_block = u32_at(bytes, header_offset::JOURNAL_INFO)?;
+		let (journal_info, reserved_journal_info) = if attributes & JOURNALED_ATTRIBUTE != 0 {
+			let block = AllocationBlock(journal_block);
 			geometry.block_range(block, 1)?;
-			Some(block)
+			(Some(block), 0)
 		} else {
-			None
+			(None, journal_block)
 		};
 		let fork = |offset| Fork::decode(&bytes[offset..], geometry);
 		Ok(Self {
@@ -354,6 +408,7 @@ impl Header {
 			attributes,
 			last_mounted: field(bytes, header_offset::LAST_MOUNTED)?,
 			journal_info,
+			reserved_journal_info,
 			dates: [
 				u32_at(bytes, header_offset::CREATION_DATE)?,
 				u32_at(bytes, header_offset::MODIFICATION_DATE)?,
@@ -387,4 +442,15 @@ impl Header {
 	pub fn unmounted_cleanly(&self) -> bool {
 		self.attributes & CLEAN_UNMOUNT_ATTRIBUTE != 0
 	}
+}
+
+fn validate_allocation_counters(
+	geometry: Geometry,
+	free_blocks: u32,
+	next_allocation: AllocationBlock,
+) -> Result<(), Error> {
+	if free_blocks > geometry.total_blocks() || next_allocation.0 > geometry.total_blocks() {
+		return Err(Error::InvalidGeometry);
+	}
+	Ok(())
 }

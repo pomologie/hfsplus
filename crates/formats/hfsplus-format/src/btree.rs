@@ -1,9 +1,28 @@
-//! Allocation-free structural decoding of packed HFS+ B-tree nodes.
+//! Allocation-free structural codecs for packed HFS+ B-tree nodes.
+
+mod encode;
 
 use crate::{
 	Error,
 	binary::{u16_at, u32_at},
 };
+
+pub use encode::{NodeLinks, TreeLayout, TreeMetadata, TreeTopology};
+
+/// Width of the first record in a B-tree header node.
+pub const HEADER_RECORD_BYTES: usize = 106;
+/// Width of the user data record in a B-tree header node.
+pub const HEADER_USER_DATA_BYTES: usize = 128;
+/// Tree type for the catalog, extent overflow and attributes trees.
+pub const HFS_BTREE_TYPE: u8 = 0;
+/// Header attribute for the two-byte key length used in HFS+ trees.
+pub const BIG_KEYS_MASK: u32 = 0x0000_0002;
+/// Header attribute for variable-length keys in index records.
+pub const VARIABLE_INDEX_KEYS_MASK: u32 = 0x0000_0004;
+/// Header comparator code for case-insensitive catalogs.
+pub const CASE_FOLDING_COMPARE: u8 = 0xcf;
+/// Header comparator code for case-sensitive HFSX catalogs.
+pub const BINARY_COMPARE: u8 = 0xbc;
 
 const MIN_NODE_BYTES: usize = 512;
 const MAX_NODE_BYTES: usize = 32_768;
@@ -12,10 +31,13 @@ const RECORD_ALIGNMENT_BYTES: usize = 2;
 const FREE_SPACE_OFFSET_COUNT: usize = 1;
 const NULL_NODE_ID: u32 = 0;
 const EMPTY_TREE_DEPTH: u16 = 0;
-const METADATA_NODE_HEIGHT: u8 = 0;
-const LEAF_HEIGHT: u8 = 1;
-const MIN_INDEX_HEIGHT: u8 = LEAF_HEIGHT + 1;
-const MIN_KEYS_PER_NODE: u32 = 2;
+/// Descriptor height for header and allocation map nodes.
+pub const METADATA_NODE_HEIGHT: u8 = 0;
+/// Descriptor height for leaf nodes.
+pub const LEAF_HEIGHT: u8 = 1;
+/// Lowest descriptor height for index nodes.
+pub const MIN_INDEX_HEIGHT: u8 = LEAF_HEIGHT + 1;
+const MIN_KEYS_PER_NODE: u16 = 2;
 
 mod descriptor {
 	pub(super) const BYTES: usize = 14;
@@ -35,7 +57,6 @@ mod descriptor {
 
 mod header_record {
 	pub(super) const ORDINAL: usize = 0;
-	pub(super) const BYTES: usize = 106;
 	pub(super) const DEPTH: usize = 0;
 	pub(super) const ROOT_NODE: usize = 2;
 	pub(super) const LEAF_RECORD_COUNT: usize = 6;
@@ -57,15 +78,16 @@ pub struct NodeId(pub u32);
 
 /// Record schema associated with the node descriptor.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
 pub enum Kind {
 	/// Leaf records with values.
-	Leaf,
+	Leaf = descriptor::LEAF_KIND,
 	/// Keyed child references.
-	Index,
+	Index = descriptor::INDEX_KIND,
 	/// Tree header, reserved record and allocation map.
-	Header,
+	Header = descriptor::HEADER_KIND,
 	/// Continuation of the allocation map.
-	Map,
+	Map = descriptor::MAP_KIND,
 }
 
 /// A structurally validated node view. Key order, bitmap and link traversal are
@@ -99,22 +121,10 @@ impl<'bytes> Node<'bytes> {
 		let height = bytes[descriptor::HEIGHT];
 		let count = usize::from(u16_at(bytes, descriptor::RECORD_COUNT)?);
 		let backward = NodeId(u32_at(bytes, descriptor::BACKWARD_LINK)?);
-		let valid_descriptor = match kind {
-			Kind::Leaf => height == LEAF_HEIGHT && count != 0,
-			Kind::Index => height >= MIN_INDEX_HEIGHT && count != 0,
-			Kind::Header => {
-				height == METADATA_NODE_HEIGHT
-					&& count == descriptor::HEADER_RECORD_COUNT
-					&& backward == NodeId(NULL_NODE_ID)
-			}
-			Kind::Map => height == METADATA_NODE_HEIGHT && count == descriptor::MAP_RECORD_COUNT,
-		};
-		let table_start = bytes
-			.len()
-			.checked_sub((count + FREE_SPACE_OFFSET_COUNT) * OFFSET_BYTES)
-			.filter(|&start| start >= descriptor::BYTES)
-			.ok_or(Error::InvalidNode)?;
-		if !valid_descriptor || record_offset(bytes, 0) != descriptor::BYTES {
+		let table_start = offset_table_start(bytes.len(), count)?;
+		if !valid_descriptor(kind, height, count, backward)
+			|| record_offset(bytes, 0) != descriptor::BYTES
+		{
 			return Err(Error::InvalidNode);
 		}
 		let mut previous = descriptor::BYTES;
@@ -185,8 +195,34 @@ fn valid_node_size(bytes: usize) -> bool {
 	(MIN_NODE_BYTES..=MAX_NODE_BYTES).contains(&bytes) && bytes.is_power_of_two()
 }
 
+fn valid_descriptor(kind: Kind, height: u8, count: usize, backward: NodeId) -> bool {
+	match kind {
+		Kind::Leaf => height == LEAF_HEIGHT && count != 0,
+		Kind::Index => height >= MIN_INDEX_HEIGHT && count != 0,
+		Kind::Header => {
+			height == METADATA_NODE_HEIGHT
+				&& count == descriptor::HEADER_RECORD_COUNT
+				&& backward == NodeId(NULL_NODE_ID)
+		}
+		Kind::Map => height == METADATA_NODE_HEIGHT && count == descriptor::MAP_RECORD_COUNT,
+	}
+}
+
+fn offset_table_start(node_bytes: usize, record_count: usize) -> Result<usize, Error> {
+	record_count
+		.checked_add(FREE_SPACE_OFFSET_COUNT)
+		.and_then(|count| count.checked_mul(OFFSET_BYTES))
+		.and_then(|width| node_bytes.checked_sub(width))
+		.filter(|&start| start >= descriptor::BYTES)
+		.ok_or(Error::InvalidNode)
+}
+
+fn record_offset_position(node_bytes: usize, ordinal: usize) -> usize {
+	node_bytes - (ordinal + 1) * OFFSET_BYTES
+}
+
 fn record_offset(bytes: &[u8], ordinal: usize) -> usize {
-	let start = bytes.len() - (ordinal + 1) * OFFSET_BYTES;
+	let start = record_offset_position(bytes.len(), ordinal);
 	usize::from(u16::from_be_bytes([bytes[start], bytes[start + 1]]))
 }
 
@@ -249,53 +285,55 @@ impl TreeHeader {
 		}
 		let bytes = node
 			.record(header_record::ORDINAL)
-			.filter(|record| record.len() == header_record::BYTES)
+			.filter(|record| record.len() == HEADER_RECORD_BYTES)
 			.ok_or(Error::InvalidNode)?;
-		let depth = u16_at(bytes, header_record::DEPTH)?;
-		let root = u32_at(bytes, header_record::ROOT_NODE)?;
-		let leaf_records = u32_at(bytes, header_record::LEAF_RECORD_COUNT)?;
-		let first = u32_at(bytes, header_record::FIRST_LEAF)?;
-		let last = u32_at(bytes, header_record::LAST_LEAF)?;
-		let node_bytes = u16_at(bytes, header_record::NODE_BYTES)?;
-		let max_key_bytes = u16_at(bytes, header_record::MAX_KEY_BYTES)?;
-		let total_nodes = u32_at(bytes, header_record::TOTAL_NODES)?;
-		let free_nodes = u32_at(bytes, header_record::FREE_NODES)?;
-		if usize::from(node_bytes) != node.bytes.len()
-			|| u32::from(max_key_bytes) * MIN_KEYS_PER_NODE + descriptor::BYTES as u32
-				>= u32::from(node_bytes)
-			|| total_nodes == 0
-			|| free_nodes >= total_nodes
-			|| u64::from(node_bytes) * u64::from(total_nodes) > fork_bytes
-			|| [root, first, last, node.forward.0]
-				.iter()
-				.any(|&id| id >= total_nodes)
-		{
-			return Err(Error::InvalidNode);
-		}
-		let node_ids = [root, first, last];
-		let layout_matches_depth = if depth == EMPTY_TREE_DEPTH {
-			node_ids.iter().all(|&id| id == NULL_NODE_ID) && leaf_records == 0
-		} else {
-			node_ids.iter().all(|&id| id != NULL_NODE_ID) && leaf_records != 0
-		};
-		if depth > u16::from(u8::MAX) || !layout_matches_depth {
-			return Err(Error::InvalidNode);
-		}
-		Ok(Self {
-			depth,
-			root: optional_id(root),
-			leaf_records,
-			first_leaf: optional_id(first),
-			last_leaf: optional_id(last),
-			node_bytes,
-			max_key_bytes,
-			total_nodes,
-			free_nodes,
+		let header = Self {
+			depth: u16_at(bytes, header_record::DEPTH)?,
+			root: optional_id(u32_at(bytes, header_record::ROOT_NODE)?),
+			leaf_records: u32_at(bytes, header_record::LEAF_RECORD_COUNT)?,
+			first_leaf: optional_id(u32_at(bytes, header_record::FIRST_LEAF)?),
+			last_leaf: optional_id(u32_at(bytes, header_record::LAST_LEAF)?),
+			node_bytes: u16_at(bytes, header_record::NODE_BYTES)?,
+			max_key_bytes: u16_at(bytes, header_record::MAX_KEY_BYTES)?,
+			total_nodes: u32_at(bytes, header_record::TOTAL_NODES)?,
+			free_nodes: u32_at(bytes, header_record::FREE_NODES)?,
 			clump_bytes: u32_at(bytes, header_record::CLUMP_BYTES)?,
 			tree_type: bytes[header_record::TREE_TYPE],
 			key_compare_type: bytes[header_record::KEY_COMPARE_TYPE],
 			attributes: u32_at(bytes, header_record::ATTRIBUTES)?,
-		})
+		};
+		if usize::from(header.node_bytes) != node.bytes.len()
+			|| u64::from(header.node_bytes) * u64::from(header.total_nodes) > fork_bytes
+			|| node.forward.0 >= header.total_nodes
+		{
+			return Err(Error::InvalidNode);
+		}
+		header.validate()?;
+		Ok(header)
+	}
+
+	fn validate(&self) -> Result<(), Error> {
+		let node_ids = [self.root, self.first_leaf, self.last_leaf];
+		let layout_matches_depth = if self.depth == EMPTY_TREE_DEPTH {
+			node_ids.iter().all(Option::is_none) && self.leaf_records == 0
+		} else {
+			node_ids.iter().all(Option::is_some) && self.leaf_records != 0
+		};
+		if !valid_node_size(usize::from(self.node_bytes))
+			|| u32::from(self.max_key_bytes) * u32::from(MIN_KEYS_PER_NODE)
+				+ descriptor::BYTES as u32
+				>= u32::from(self.node_bytes)
+			|| self.free_nodes >= self.total_nodes
+			|| node_ids
+				.into_iter()
+				.flatten()
+				.any(|id| id.0 == NULL_NODE_ID || id.0 >= self.total_nodes)
+			|| self.depth > u16::from(u8::MAX)
+			|| !layout_matches_depth
+		{
+			return Err(Error::InvalidNode);
+		}
+		Ok(())
 	}
 }
 
