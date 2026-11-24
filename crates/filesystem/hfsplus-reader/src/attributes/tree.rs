@@ -100,32 +100,32 @@ impl<'volume, S: ReadAt> Tree<'volume, S> {
 		})
 	}
 
-	pub(super) fn scan(
+	pub(super) fn scan<E: From<Error<S::Error>>>(
 		&self,
 		query: Query<'_>,
 		max_nodes: usize,
-		mut visit: impl FnMut(NodeId, Key<'_>, &[u8]) -> Result<ControlFlow<()>, Error<S::Error>>,
-	) -> Result<(), Error<S::Error>> {
+		mut visit: impl FnMut(NodeId, Key<'_>, &[u8]) -> Result<ControlFlow<()>, E>,
+	) -> Result<(), E> {
 		let Some(root) = self.header.root else {
 			return Ok(());
 		};
 		if usize::from(self.header.depth) > max_nodes {
-			return Err(Error::NodeLimit);
+			return Err(Error::NodeLimit.into());
 		}
-		let mut buffer = new_buffer()?;
+		let mut buffer = new_buffer::<S::Error>()?;
 		let mut remaining = max_nodes;
 		let (mut id, mut bounds) = self.locate(root, query, &mut remaining, &mut buffer)?;
 		let mut previous: Option<(NodeId, OwnedKey)> = None;
 		loop {
 			let leaf = self.decode_node(id, &buffer, Kind::Leaf, u16::from(LEAF_HEIGHT))?;
-			let keys = validate_keys(id, &leaf, &bounds)?;
+			let keys = validate_keys::<S::Error>(id, &leaf, &bounds)?;
 			if let Some((prev_id, last_key)) = &previous
 				&& (leaf.backward() != Some(*prev_id) || last_key.compare(keys.0) != Ordering::Less)
 			{
-				return Err(invalid_node(id));
+				return Err(invalid_node::<S::Error>(id).into());
 			}
 			for raw in leaf.records() {
-				let (key, _) = decode_key(id, raw)?;
+				let (key, _) = decode_key::<S::Error>(id, raw)?;
 				if query.compare(key) != Ordering::Greater && visit(id, key, raw)?.is_break() {
 					return Ok(());
 				}

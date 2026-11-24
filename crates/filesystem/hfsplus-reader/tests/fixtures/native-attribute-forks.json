@@ -274,5 +274,52 @@
       "sha256": "61740c9c3119f8c42fad7adb3de948b8a4188024434239a1d703cae0f4aff568",
       "purpose": "alternate header"
     }
-  ]
+  ],
+  "structural_check": {
+    "fixture": {
+      "file": "native-attribute-structure.bin",
+      "bytes": 98874,
+      "sha256": "b9109f201c0316fd566a0a14b34a3fd033e9450a6d96eaf832b6f63ab4b4798b",
+      "encoding": "Same sparse segment encoding and source as native-attribute-forks.bin. Load both fixtures together.",
+      "derivation": "Copy the allocation bitmap and all catalog and attribute nodes accessed by the check and missing from the original fixture. Zero unused B-tree record gaps and host provenance attribute values. No file payloads are included in the companion."
+    },
+    "expected": {
+      "total_blocks": 4096,
+      "free_blocks": 70,
+      "metadata_blocks": 99,
+      "reachable_fork_blocks": 3895,
+      "attribute_fork_blocks": 32,
+      "unclaimed_allocated_blocks": 0,
+      "inline_attributes": 99,
+      "fork_backed_attributes": 2,
+      "unsupported_attributes": 0,
+      "sample_data_block": 738
+    },
+    "segments": [
+      {
+        "source_offset": 4096,
+        "bytes": 512,
+        "sha256": "7ce9933408054e008500b16a9fee9c22664f81ef08107ee8a8583942fba11991",
+        "purpose": "allocation bitmap for all 4096 blocks"
+      },
+      {
+        "source_offset": 147456,
+        "bytes": 8192,
+        "sha256": "cdb8c88f20b116a0c2e188319fb58d82a004b0bdd92b4e135df5004f8b314e51",
+        "purpose": "attributes tree leaf 1"
+      },
+      {
+        "source_offset": 172032,
+        "bytes": 8192,
+        "sha256": "27aa1e5356b10eee743dc30880d959ae868ac34cb2c9c3827577d83c5b998bc3",
+        "purpose": "attributes tree leaf 4"
+      },
+      {
+        "source_offset": 1581056,
+        "bytes": 81920,
+        "sha256": "933cfad050cd630b90e0026ddc803611bfb4b9fe7271874de4d59af464c2fd72",
+        "purpose": "catalog tree header, index and leaf nodes"
+      }
+    ]
+  }
 }

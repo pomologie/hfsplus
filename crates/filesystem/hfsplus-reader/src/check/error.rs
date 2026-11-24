@@ -96,6 +96,12 @@ impl<E> From<HardLinkError<E>> for CheckError<E> {
 	}
 }
 
+impl<E> From<AttributeReadError<E>> for CheckError<E> {
+	fn from(error: AttributeReadError<E>) -> Self {
+		Self::Attributes(error)
+	}
+}
+
 impl<E> From<CatalogProblem> for CheckError<E> {
 	fn from(error: CatalogProblem) -> Self {
 		Self::Structure(error)

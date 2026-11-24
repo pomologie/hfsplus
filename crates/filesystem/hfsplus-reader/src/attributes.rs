@@ -219,13 +219,40 @@ impl<'volume, S: ReadAt> Attributes<'volume, S> {
 		&self,
 		owner: CatalogId,
 	) -> Result<Vec<AttributeEntry>, AttributeReadError<S::Error>> {
-		let mut entries: Vec<AttributeEntry> = Vec::new();
+		let mut entries = Vec::new();
+		self.visit_attrs::<AttributeReadError<S::Error>>(owner, |entry, _| {
+			entries
+				.try_reserve(1)
+				.map_err(AttributeReadError::Allocation)?;
+			entries.push(entry);
+			Ok(())
+		})?;
+		Ok(entries)
+	}
+
+	/// Visits logical keys in binary order, with an opened value for each
+	/// fork-backed entry after its complete extent chain is validated.
+	pub(crate) fn visit_attrs<E: From<AttributeReadError<S::Error>>>(
+		&self,
+		owner: CatalogId,
+		mut visit: impl FnMut(AttributeEntry, Option<AttributeValue<'volume, S>>) -> Result<(), E>,
+	) -> Result<(), E> {
 		let Some(tree) = &self.tree else {
-			return Ok(entries);
+			return Ok(());
 		};
 		let geometry = self.volume.header().geometry;
-		let mut chain: Option<ForkChain> = None;
-		tree.scan(
+		let mut pending: Option<(AttributeEntry, Option<ForkChain>)> = None;
+		let mut count = 0;
+		let mut finish = |(entry, chain): (AttributeEntry, Option<ForkChain>)| {
+			let fork = chain
+				.map(|chain| chain.finish(self.volume))
+				.transpose()?
+				.map(|fork| AttributeValue {
+					value: Storage::Fork(fork),
+				});
+			visit(entry, fork)
+		};
+		tree.scan::<E>(
 			Query { owner, name: &[] },
 			self.limits.max_nodes,
 			|node, key, raw| {
@@ -233,24 +260,23 @@ impl<'volume, S: ReadAt> Attributes<'volume, S> {
 					return Ok(ControlFlow::Break(()));
 				}
 				if key.start_block != FIRST_ATTRIBUTE_BLOCK {
-					if !entries
-						.last()
-						.is_some_and(|entry| key.name.units().eq(entry.name.iter().copied()))
-					{
-						return Err(AttributeReadError::format(
-							node,
-							FormatError::InvalidAttribute,
-						));
-					}
+					let (_, chain) = pending
+						.as_mut()
+						.filter(|(entry, _)| key.name.units().eq(entry.name.iter().copied()))
+						.ok_or_else(|| {
+							AttributeReadError::format(node, FormatError::InvalidAttribute)
+						})?;
 					append_continuation(chain.as_mut(), node, raw, geometry)?;
 					return Ok(ControlFlow::Continue(()));
 				}
-				if let Some(previous) = chain.take() {
-					previous.finish(self.volume)?;
+				if let Some(previous) = pending.take() {
+					finish(previous)?;
 				}
-				if entries.len() >= self.limits.max_entries {
-					return Err(AttributeReadError::EntryLimit);
+				if count >= self.limits.max_entries {
+					return Err(AttributeReadError::EntryLimit.into());
 				}
+				count += 1;
+				let mut chain = None;
 				let encoding = match Record::decode(raw, geometry).map(|record| record.value) {
 					Ok(Value::Inline(bytes)) => {
 						AttributeEncoding::Inline(ByteLen::from(bytes.len()))
@@ -263,7 +289,8 @@ impl<'volume, S: ReadAt> Attributes<'volume, S> {
 						return Err(AttributeReadError::format(
 							node,
 							FormatError::InvalidAttribute,
-						));
+						)
+						.into());
 					}
 					Err(FormatError::UnsupportedAttributeRecord(kind)) => {
 						AttributeEncoding::UnsupportedRecord(kind)
@@ -274,24 +301,21 @@ impl<'volume, S: ReadAt> Attributes<'volume, S> {
 					Err(FormatError::UnsupportedCompressedAttribute) => {
 						AttributeEncoding::CompressedFile
 					}
-					Err(error) => return Err(AttributeReadError::format(node, error)),
+					Err(error) => return Err(AttributeReadError::format(node, error).into()),
 				};
 				let units = key.name.units();
 				let mut name = Vec::new();
 				name.try_reserve_exact(units.len())
 					.map_err(AttributeReadError::Allocation)?;
 				name.extend(units);
-				entries
-					.try_reserve(1)
-					.map_err(AttributeReadError::Allocation)?;
-				entries.push(AttributeEntry { name, encoding });
+				pending = Some((AttributeEntry { name, encoding }, chain));
 				Ok(ControlFlow::Continue(()))
 			},
 		)?;
-		if let Some(fork) = chain {
-			fork.finish(self.volume)?;
+		if let Some(previous) = pending {
+			finish(previous)?;
 		}
-		Ok(entries)
+		Ok(())
 	}
 
 	/// Reads the exact stored value within [`MAX_OWNED_ATTRIBUTE_BYTES`]. A
@@ -347,7 +371,7 @@ impl<'volume, S: ReadAt> Attributes<'volume, S> {
 		let geometry = self.volume.header().geometry;
 		let mut inline = None;
 		let mut chain = None;
-		tree.scan(
+		tree.scan::<AttributeReadError<S::Error>>(
 			Query { owner, name },
 			self.limits.max_nodes,
 			|node, key, raw| {
@@ -396,7 +420,7 @@ impl<'volume, S: ReadAt> Attributes<'volume, S> {
 			*unit = u16::from(byte);
 		}
 		let mut result = None;
-		tree.scan(
+		tree.scan::<AttributeReadError<S::Error>>(
 			Query { owner, name: &name },
 			self.limits.max_nodes,
 			|node, key, raw| {

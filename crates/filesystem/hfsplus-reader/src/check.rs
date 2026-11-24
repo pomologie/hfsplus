@@ -24,7 +24,7 @@ const DEFAULT_ATTRIBUTE_NAMES: usize = 64 << 10;
 #[derive(Debug, Clone, Copy)]
 pub struct CheckLimits {
 	/// Allocation bitmap, claim count, and per-fork extent budgets. In this
-	/// operation the range limit includes metadata and reachable file claims.
+	/// operation the range limit includes metadata, file and attribute claims.
 	pub allocation: AllocationLimits,
 	/// Catalog map, parent depth and node-read bounds. The node-read allowance
 	/// applies to the complete catalog audit after its initial map is loaded.
@@ -63,7 +63,17 @@ impl Default for CheckLimits {
 #[non_exhaustive]
 pub enum AllocationOwner {
 	Metadata(MetadataOwner),
-	FileFork { id: CatalogId, kind: ForkKind },
+	FileFork {
+		id: CatalogId,
+		kind: ForkKind,
+	},
+	/// A stored attribute on this catalog ID. The ordinal is its zero-based
+	/// position in that owner's binary name order, including inline
+	/// and unsupported values.
+	AttributeFork {
+		id: CatalogId,
+		ordinal: usize,
+	},
 }
 
 impl From<MetadataOwner> for AllocationOwner {
@@ -87,10 +97,11 @@ pub enum AlternateStatus {
 #[non_exhaustive]
 pub enum AttributeCoverage {
 	Absent,
-	/// Checked names on catalog records declaring attributes. Records for
-	/// other or missing owners may still exist in the attributes tree.
+	/// Checked names and supported storage on catalog records declaring
+	/// attributes. Other or missing owners may still appear in the tree.
 	DeclaredOwners {
 		inline: usize,
+		fork_backed: usize,
 		unsupported: usize,
 	},
 	/// Special-file allocation was checked but the tree layout is unsupported.
@@ -106,7 +117,10 @@ pub struct StructuralReport {
 	pub total_blocks: u32,
 	pub free_blocks: u32,
 	pub metadata_blocks: u32,
+	/// Blocks claimed by reachable file data and resource forks.
 	pub reachable_fork_blocks: u32,
+	/// Blocks claimed by fork-backed attributes on declared owners.
+	pub attribute_fork_blocks: u32,
 	/// Allocated blocks outside the verified claims. They may correspond to
 	/// unsupported structures or unreachable objects.
 	pub unclaimed_allocated_blocks: u32,
@@ -166,6 +180,7 @@ impl<S: ReadAt> Volume<S> {
 			)?;
 		}
 		let attributes = self.check_attributes(
+			&mut allocation.claims,
 			audit
 				.entries
 				.iter()
@@ -179,15 +194,19 @@ impl<S: ReadAt> Volume<S> {
 		let metadata_blocks = checked.count(|owner| matches!(owner, AllocationOwner::Metadata(_)));
 		let reachable_fork_blocks =
 			checked.count(|owner| matches!(owner, AllocationOwner::FileFork { .. }));
+		let attribute_fork_blocks =
+			checked.count(|owner| matches!(owner, AllocationOwner::AttributeFork { .. }));
 		Ok(StructuralReport {
 			total_blocks,
 			free_blocks,
 			metadata_blocks,
 			reachable_fork_blocks,
+			attribute_fork_blocks,
 			unclaimed_allocated_blocks: total_blocks
 				- free_blocks
 				- metadata_blocks
-				- reachable_fork_blocks,
+				- reachable_fork_blocks
+				- attribute_fork_blocks,
 			catalog_files: audit.files,
 			catalog_folders: audit.folders,
 			hard_link_groups: audit.link_groups,
@@ -224,6 +243,7 @@ impl<S: ReadAt> Volume<S> {
 
 	fn check_attributes(
 		&self,
+		claims: &mut Claims<AllocationOwner>,
 		owners: impl Iterator<Item = CatalogId>,
 		limits: CheckLimits,
 	) -> Result<AttributeCoverage, CheckError<S::Error>> {
@@ -246,23 +266,34 @@ impl<S: ReadAt> Volume<S> {
 		};
 		let mut inspected = 0usize;
 		let mut inline = 0usize;
+		let mut fork_backed = 0usize;
 		for id in owners {
-			let entries = attributes.list_attrs(id).map_err(CheckError::Attributes)?;
-			if entries.is_empty() {
+			let mut ordinal = 0;
+			attributes.visit_attrs::<CheckError<S::Error>>(id, |entry, fork| {
+				if inspected >= limits.max_attribute_names {
+					return Err(CheckError::Limit(CheckLimit::AttributeNames));
+				}
+				if let Some(fork) = fork {
+					let owner = AllocationOwner::AttributeFork { id, ordinal };
+					for extent in fork.extents() {
+						claims.push(extent.start.0, extent.blocks, owner)?;
+					}
+					fork_backed += 1;
+				} else if matches!(entry.encoding, AttributeEncoding::Inline(_)) {
+					inline += 1;
+				}
+				inspected += 1;
+				ordinal += 1;
+				Ok(())
+			})?;
+			if ordinal == 0 {
 				return Err(CatalogProblem::MissingAttributes(id).into());
 			}
-			inspected = inspected
-				.checked_add(entries.len())
-				.filter(|&count| count <= limits.max_attribute_names)
-				.ok_or(CheckError::Limit(CheckLimit::AttributeNames))?;
-			inline += entries
-				.iter()
-				.filter(|entry| matches!(entry.encoding, AttributeEncoding::Inline(_)))
-				.count();
 		}
 		Ok(AttributeCoverage::DeclaredOwners {
 			inline,
-			unsupported: inspected - inline,
+			fork_backed,
+			unsupported: inspected - inline - fork_backed,
 		})
 	}
 }

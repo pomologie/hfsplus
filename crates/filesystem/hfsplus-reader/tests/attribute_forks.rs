@@ -1,29 +1,41 @@
-//! H-READ-01-T01 and H-READ-02-T01 native attribute allocation evidence.
+//! H-READ-01-T01, H-READ-02-T01 and H-READ-04-T01 native attribute evidence.
 
 use std::cell::Cell;
 
 use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt};
 use hfsplus_format::{
 	Error as FormatError,
-	attributes::{Key, NATIVE_NODE_BYTES},
+	attributes::{COMPRESSED_ATTRIBUTE_NAME, Key, NATIVE_NODE_BYTES},
 	btree::{Kind, LEAF_HEIGHT, Node, NodeId, NodeLinks},
 	volume::{AllocationBlock, CatalogId, Extent},
 };
 use hfsplus_reader::{
 	Error as VolumeError, Volume,
+	allocation::AllocationError,
 	attributes::{
 		AttributeEncoding, AttributeReadError, AttributeReadLimits, MAX_OWNED_ATTRIBUTE_BYTES,
 	},
-	overflow::OverflowError,
+	check::{AllocationOwner, AttributeCoverage, CheckError, CheckLimit, CheckLimits},
+	overflow::{ForkKind, OverflowError},
 };
 
 const IMAGE: &[u8] = include_bytes!("fixtures/native-attribute-forks.bin");
+const STRUCTURE: &[u8] = include_bytes!("fixtures/native-attribute-structure.bin");
 const OWNER: CatalogId = CatalogId(18);
+const BALLAST_OWNER: CatalogId = CatalogId(20);
+const SAMPLE_DATA_BLOCK: AllocationBlock = AllocationBlock(738);
+const CONTIGUOUS_ORDINAL: usize = 1;
+const NATIVE_INLINE_NAMES: usize = 99;
+const NATIVE_FORK_NAMES: usize = 2;
+const NATIVE_METADATA_BLOCKS: u32 = 99;
+const NATIVE_FILE_BLOCKS: u32 = 3895;
+const NATIVE_FREE_BLOCKS: u32 = 70;
 const INLINE: &str = "org.pomologie.inline";
 const CONTIGUOUS: &str = "org.pomologie.contiguous";
 const FRAGMENTED: &str = "org.pomologie.fragmented";
 const BLOCK_BYTES: usize = 4096;
 const CONTIGUOUS_BYTES: usize = BLOCK_BYTES + 1;
+const CONTIGUOUS_BLOCKS: u32 = 2;
 const FRAGMENTED_FULL_BLOCKS: u8 = 29;
 const FRAGMENTED_BLOCKS: u32 = FRAGMENTED_FULL_BLOCKS as u32 + 1;
 const FRAGMENTED_TRAILING_BYTES: &[u8] = b"unaligned trailing bytes";
@@ -120,6 +132,106 @@ fn reads_native_contiguous_and_fragmented_attributes_exactly_and_on_demand() {
 }
 
 #[test]
+fn check_accounts_for_native_attribute_and_file_forks_without_reading_payloads() {
+	let source = Slices::new(IMAGE).with_structure();
+	let volume = Volume::open(&source).unwrap();
+	let report = volume.check_structure(CheckLimits::default()).unwrap();
+	assert_eq!(report.free_blocks, NATIVE_FREE_BLOCKS);
+	assert_eq!(report.metadata_blocks, NATIVE_METADATA_BLOCKS);
+	assert_eq!(report.reachable_fork_blocks, NATIVE_FILE_BLOCKS);
+	assert_eq!(
+		report.attribute_fork_blocks,
+		CONTIGUOUS_BLOCKS + FRAGMENTED_BLOCKS
+	);
+	assert_eq!(report.unclaimed_allocated_blocks, 0);
+	assert_eq!(
+		report.attributes,
+		AttributeCoverage::DeclaredOwners {
+			inline: NATIVE_INLINE_NAMES,
+			fork_backed: NATIVE_FORK_NAMES,
+			unsupported: 0,
+		}
+	);
+	let limits = CheckLimits {
+		max_attribute_names: NATIVE_INLINE_NAMES + NATIVE_FORK_NAMES - 1,
+		..CheckLimits::default()
+	};
+	assert!(matches!(
+		volume.check_structure(limits),
+		Err(CheckError::Limit(CheckLimit::AttributeNames))
+	));
+	assert_eq!(source.payload_reads.get(), 0);
+}
+
+#[test]
+fn check_rejects_an_attribute_fork_that_claims_a_file_data_block() {
+	let mut image = IMAGE.to_vec();
+	let at =
+		body_offset(CONTIGUOUS_RECORD, CONTIGUOUS) + RECORD_DESCRIPTOR_OFFSET + FORK_EXTENTS_OFFSET;
+	patch(&mut image, at, &SAMPLE_DATA_BLOCK.0.to_be_bytes());
+	let source = Slices::new(&image).with_structure();
+	let volume = Volume::open(&source).unwrap();
+	let attribute = AllocationOwner::AttributeFork {
+		id: OWNER,
+		ordinal: CONTIGUOUS_ORDINAL,
+	};
+	let file = AllocationOwner::FileFork {
+		id: OWNER,
+		kind: ForkKind::Data,
+	};
+	assert!(matches!(
+		volume.check_structure(CheckLimits::default()),
+		Err(CheckError::Allocation(AllocationError::Overlap {
+			block: SAMPLE_DATA_BLOCK,
+			first,
+			second,
+		})) if [first, second].contains(&attribute) && [first, second].contains(&file)
+	));
+	assert_eq!(source.payload_reads.get(), 0);
+}
+
+#[test]
+fn check_reports_compression_metadata_as_unsupported() {
+	let source = Slices::new(IMAGE);
+	let raw = source
+		.segment(LEAF_OFFSET, usize::from(NATIVE_NODE_BYTES))
+		.unwrap();
+	let node = Node::decode(raw).unwrap();
+	let raw_records: Vec<_> = node.records().collect();
+	let ordinal = raw_records
+		.iter()
+		.position(|raw| Key::split(raw).unwrap().0.file_id == BALLAST_OWNER)
+		.unwrap();
+	let (key, body) = Key::split(raw_records[ordinal]).unwrap();
+	let name = units(COMPRESSED_ATTRIBUTE_NAME);
+	let key_len = Key::encoded_len(&name).unwrap();
+	let mut compressed = vec![0; key_len + body.len()];
+	Key::encode(key.file_id, &name, key.start_block, &mut compressed).unwrap();
+	compressed[key_len..].copy_from_slice(body);
+	let mut records = raw_records;
+	records[ordinal] = &compressed;
+	let links = NodeLinks {
+		forward: node.forward(),
+		backward: node.backward(),
+	};
+	let mut leaf = vec![0; usize::from(NATIVE_NODE_BYTES)];
+	Node::encode(&mut leaf, Kind::Leaf, LEAF_HEIGHT, links, &records).unwrap();
+	let mut image = IMAGE.to_vec();
+	patch(&mut image, LEAF_OFFSET, &leaf);
+	let volume = Volume::open(Slices::new(&image).with_structure()).unwrap();
+	let report = volume.check_structure(CheckLimits::default()).unwrap();
+	assert_eq!(
+		report.attributes,
+		AttributeCoverage::DeclaredOwners {
+			inline: NATIVE_INLINE_NAMES - 1,
+			fork_backed: NATIVE_FORK_NAMES,
+			unsupported: 1,
+		}
+	);
+	assert_eq!(report.unclaimed_allocated_blocks, 0);
+}
+
+#[test]
 fn rejects_continuations_with_gaps_or_overlapping_physical_extents() {
 	let mut image = IMAGE.to_vec();
 	let start = FIRST_CONTINUATION_RECORD + KEY_START_BLOCK_OFFSET;
@@ -133,6 +245,15 @@ fn rejects_continuations_with_gaps_or_overlapping_physical_extents() {
 	assert!(
 		matches!(attrs.list_attrs(OWNER), Err(AttributeReadError::InvalidStart { node: LEAF, expected: FIRST_CONTINUATION, actual }) if actual == wrong)
 	);
+	let structure = Volume::open(Slices::new(&image).with_structure()).unwrap();
+	assert!(matches!(
+		structure.check_structure(CheckLimits::default()),
+		Err(CheckError::Attributes(AttributeReadError::InvalidStart {
+			node: LEAF,
+			expected: FIRST_CONTINUATION,
+			actual,
+		})) if actual == wrong
+	));
 
 	let mut image = IMAGE.to_vec();
 	let at = body_offset(FIRST_CONTINUATION_RECORD, FRAGMENTED) + RECORD_DESCRIPTOR_OFFSET;
@@ -298,6 +419,13 @@ impl<'fixture> Slices<'fixture> {
 			payload_reads: Cell::new(0),
 			fail_at: None,
 		}
+	}
+
+	fn with_structure(mut self) -> Self {
+		let supplemental = Self::new(STRUCTURE);
+		assert_eq!(self.len, supplemental.len);
+		self.ranges.extend(supplemental.ranges);
+		self
 	}
 
 	fn segment(&self, offset: u64, len: usize) -> Option<&'fixture [u8]> {
