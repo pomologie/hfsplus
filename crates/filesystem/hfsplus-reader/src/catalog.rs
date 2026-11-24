@@ -9,6 +9,7 @@ use hfsplus_core::{
 use hfsplus_format::{
 	btree::NodeId,
 	catalog::{RawName, Record, ThreadKind, Value},
+	hard_links::PRIVATE_DIRECTORY_NAME,
 	volume::{CNID_REUSE_ATTRIBUTE, CatalogId, Fork, Geometry, Signature},
 };
 
@@ -16,10 +17,15 @@ use crate::{ForkReader, SpecialFile, Volume};
 
 mod directory;
 mod error;
+mod hard_links;
 mod tree;
 
 pub use directory::{Directory, DirectoryPage};
 pub use error::{CatalogError, Corruption, Limit};
+pub use hard_links::{
+	HardLink, HardLinkError, HardLinkLimits, HardLinkProfile, LinkCorruption, LinkTarget,
+	RegularFile,
+};
 
 use tree::{Position, Query, Tree};
 
@@ -31,7 +37,6 @@ const DEFAULT_MAP_BYTES: usize = 64 * 1024;
 const DEFAULT_DEPTH: u8 = 16;
 const DEFAULT_ANCESTORS: usize = 64;
 const DEFAULT_PAGE_ENTRIES: usize = 128;
-const PRIVATE_FILE_LINK_DIRECTORY: &str = "\0\0\0\0HFS+ Private Data";
 const PRIVATE_DIRECTORY_LINK_DIRECTORY: &str = ".HFS+ Private Directory Data\r";
 
 /// Bound the work and allocations associated with an open catalog.
@@ -104,6 +109,7 @@ impl EntryKind {
 #[derive(Debug)]
 pub struct Catalog<'volume, S> {
 	tree: Tree<ForkReader<'volume, S>>,
+	volume: &'volume Volume<S>,
 	geometry: Geometry,
 	next_id: CatalogId,
 	reused_ids: bool,
@@ -129,6 +135,7 @@ impl<S: ReadAt> Volume<S> {
 			.map_err(CatalogError::Read)?;
 		Ok(Catalog {
 			tree: Tree::open(fork, limits)?,
+			volume: self,
 			geometry: header.geometry,
 			next_id: header.next_catalog_id,
 			reused_ids: header.attributes & CNID_REUSE_ATTRIBUTE != 0,
@@ -365,12 +372,10 @@ fn copy_name<E>(name: RawName<'_>) -> Result<Vec<u16>, CatalogError<E>> {
 
 fn is_private(entry: &Entry) -> bool {
 	entry.parent == ROOT_ID
-		&& [
-			PRIVATE_FILE_LINK_DIRECTORY,
-			PRIVATE_DIRECTORY_LINK_DIRECTORY,
-		]
-		.into_iter()
-		.any(|name| name.encode_utf16().eq(entry.name.iter().copied()))
+		&& (entry.name == PRIVATE_DIRECTORY_NAME
+			|| PRIVATE_DIRECTORY_LINK_DIRECTORY
+				.encode_utf16()
+				.eq(entry.name.iter().copied()))
 }
 
 const fn invalid<E>(node: NodeId, reason: Corruption) -> CatalogError<E> {

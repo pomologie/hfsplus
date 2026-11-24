@@ -1,0 +1,184 @@
+{
+  "source": "Synthetic files created using hdiutil and os.link on a disposable HFS+ volume",
+  "license": "Apache-2.0; synthetic data only",
+  "requirement": "H-READ-01, H-V04",
+  "os": "macOS 14.7.2 (23H311) arm64",
+  "checker": "fsck_hfs 650.140.2",
+  "reference": "https://developer.apple.com/library/archive/technotes/tn/tn1150.html#HardLinks",
+  "construction": [
+    "hdiutil create -size 16m -fs HFS+ -volname \"Hard Link Qualification\" -layout NONE -nospotlight linked.dmg",
+    "Create two regular files, then os.link them to aliases in the root and nested directory",
+    "Write a binary resource fork to the first group and set its mode and modification date",
+    "hdiutil detach and hdiutil convert linked.dmg -format UDTO -o linked.raw"
+  ],
+  "chain_free_variant": "The project converted the native fixture to the historical chain-free representation. It removed chain fields and the empty directory-link namespace, assigned references 100 and 101, and set root, private directory and stub creation dates to zero. macOS read-only attachment verified the same inode IDs, mode, payloads and resource fork in both layouts.",
+  "fixture_encoding": "A u64 volume length and u16 slice count, followed by each slice u64 physical offset, u32 length, and bytes. All integers big endian. Reads in omitted ranges fail.",
+  "native_oracle": {
+    "one": {
+      "ino": 19,
+      "nlink": 3,
+      "mode": 33257,
+      "size": 22,
+      "uid": 501,
+      "gid": 20,
+      "birthtime": 1704195296.0,
+      "atime": 1704195296.0,
+      "mtime": 1704195296.0,
+      "ctime": 1795560960.0
+    },
+    "two": {
+      "ino": 19,
+      "nlink": 3,
+      "mode": 33257,
+      "size": 22,
+      "uid": 501,
+      "gid": 20,
+      "birthtime": 1704195296.0,
+      "atime": 1795560960.0,
+      "mtime": 1704195296.0,
+      "ctime": 1795560960.0
+    },
+    "nested/three": {
+      "ino": 19,
+      "nlink": 3,
+      "mode": 33257,
+      "size": 22,
+      "uid": 501,
+      "gid": 20,
+      "birthtime": 1704195296.0,
+      "atime": 1795560960.0,
+      "mtime": 1704195296.0,
+      "ctime": 1795560960.0
+    },
+    "four": {
+      "ino": 23,
+      "nlink": 2,
+      "mode": 33184,
+      "size": 23,
+      "uid": 501,
+      "gid": 20,
+      "birthtime": 1795560960.0,
+      "atime": 1795560960.0,
+      "mtime": 1795560960.0,
+      "ctime": 1795560960.0
+    },
+    "nested/five": {
+      "ino": 23,
+      "nlink": 2,
+      "mode": 33184,
+      "size": 23,
+      "uid": 501,
+      "gid": 20,
+      "birthtime": 1795560960.0,
+      "atime": 1795560960.0,
+      "mtime": 1795560960.0,
+      "ctime": 1795560960.0
+    },
+    "visible_root": [
+      "four",
+      "nested",
+      "one",
+      "two"
+    ]
+  },
+  "fixtures": {
+    "native-chained-hardlinks.bin": {
+      "source_raw_sha256": "d17d38025e8fa43ec6951859676af1c89d6f9ed8691f104704d5489fdc000f6a",
+      "fixture_sha256": "e22a68bd293506a479b24e14ce8851bc26fb914ba4d126e1c4f1e9726455765a",
+      "fixture_bytes": 9379,
+      "slices": [
+        {
+          "role": "primary volume header",
+          "raw_offset": 1024,
+          "length": 512,
+          "sha256": "1871cc82f57b1919a3e165716d840fa29de46be75373b69e700eab17e758bafe"
+        },
+        {
+          "role": "allocated catalog node 0",
+          "raw_offset": 1581056,
+          "length": 4096,
+          "sha256": "6d26d400afbf06d6bbddaa20f9f8e7d54646a812b7278a19a9c6341bf8200c37"
+        },
+        {
+          "role": "allocated catalog node 1",
+          "raw_offset": 1585152,
+          "length": 4096,
+          "sha256": "06e1728c7b11b8de9b6fd682e32cf116b2da76b3265b2f4aec00427f823bdecc"
+        },
+        {
+          "role": "inode 19 data fork",
+          "raw_offset": 3022848,
+          "length": 22,
+          "sha256": "d6e97b422d4cd03d0f2ee96b40953f8005bdffff6a07383e495aed914a62fcb8"
+        },
+        {
+          "role": "inode 23 data fork",
+          "raw_offset": 3026944,
+          "length": 23,
+          "sha256": "b4c58d35d24ba4b538dbea1ce4a62051f3ef1d85ca37786e29711ebad378a293"
+        },
+        {
+          "role": "inode 19 resource fork",
+          "raw_offset": 3031040,
+          "length": 24,
+          "sha256": "d05427e1dd3d5c9045801a13069771db14c62b59025c9d2470781fe4d8b57b48"
+        },
+        {
+          "role": "alternate volume header",
+          "raw_offset": 16776192,
+          "length": 512,
+          "sha256": "126e8989b3e845df0bab64042cc5b556e2f1e1ade16f4407212684088d525cfc"
+        }
+      ]
+    },
+    "native-chain-free-hardlinks.bin": {
+      "source_raw_sha256": "65faf0d70d86f9dfc5e501a0d2fd3f94503078c02d694a364e0703babf5a2b69",
+      "fixture_sha256": "02285cd4522a096c8eb4ff217ba2246f0c935f6f298b477d9119eda8ee222403",
+      "fixture_bytes": 9379,
+      "slices": [
+        {
+          "role": "primary volume header",
+          "raw_offset": 1024,
+          "length": 512,
+          "sha256": "13e1109668bd32b27a44ab5f56c59039a82492e70a756352f40688a7c606d1f5"
+        },
+        {
+          "role": "allocated catalog node 0",
+          "raw_offset": 1581056,
+          "length": 4096,
+          "sha256": "2404844564107dc02ccf16afbcc0c49e6f13098ec0c1f63fbd0e5d8ba01da737"
+        },
+        {
+          "role": "allocated catalog node 1",
+          "raw_offset": 1585152,
+          "length": 4096,
+          "sha256": "e8ab8f05d80318ada6ffe3ee1414eefbeceb0e89c10e045949dbdcc24f59b4e0"
+        },
+        {
+          "role": "inode 19 data fork",
+          "raw_offset": 3022848,
+          "length": 22,
+          "sha256": "d6e97b422d4cd03d0f2ee96b40953f8005bdffff6a07383e495aed914a62fcb8"
+        },
+        {
+          "role": "inode 23 data fork",
+          "raw_offset": 3026944,
+          "length": 23,
+          "sha256": "b4c58d35d24ba4b538dbea1ce4a62051f3ef1d85ca37786e29711ebad378a293"
+        },
+        {
+          "role": "inode 19 resource fork",
+          "raw_offset": 3031040,
+          "length": 24,
+          "sha256": "d05427e1dd3d5c9045801a13069771db14c62b59025c9d2470781fe4d8b57b48"
+        },
+        {
+          "role": "alternate volume header",
+          "raw_offset": 16776192,
+          "length": 512,
+          "sha256": "ce72a8edde62302968dbbcc26f7015da0e85dbd5219288beb31c955db90b293c"
+        }
+      ]
+    }
+  }
+}
