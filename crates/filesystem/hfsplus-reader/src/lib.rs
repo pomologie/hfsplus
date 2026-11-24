@@ -5,6 +5,8 @@
 //! extents, replay journals, or interpret catalog paths or compressed files.
 #![no_std]
 
+extern crate alloc;
+
 use core::fmt;
 
 use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt};
@@ -13,6 +15,7 @@ use hfsplus_format::{
 	volume::{HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET},
 };
 
+pub mod attributes;
 mod fork;
 mod profile;
 

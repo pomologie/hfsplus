@@ -1,0 +1,34 @@
+{
+  "source": "Native synthetic HFS+ attribute fixture from macOS 14.7.2 (23H311) arm64",
+  "source_manifest": "../../../../formats/hfsplus-format/tests/fixtures/native-inline-attrs.json",
+  "license": "Apache-2.0; synthetic data only",
+  "source_sha256": "9e2d544511584c08d70bcc35e42019d8bd42e62b68d1f62759fae90ce9d5cb74",
+  "source_length": 16777216,
+  "sparse_segments": [
+    {
+      "source_offset": 1024,
+      "fixture_offset": 0,
+      "length": 512,
+      "sha256": "48e13e93acd633bd5eacb00b2b2af17a0b0f33f903e2881ed3acaafa5dd9897e"
+    },
+    {
+      "source_offset": 16776192,
+      "fixture_offset": 512,
+      "length": 512,
+      "sha256": "afa0321645506414d1f4b6478cf86529842367f6e4d3b9ee044810844fe03520"
+    },
+    {
+      "source_offset": 139264,
+      "fixture_offset": 1024,
+      "length": 32768,
+      "sha256": "83e2eb11f691f1e9b6c882111ce2a8d17db7909a646fad56f214485bb52c896f"
+    }
+  ],
+  "fixture": {
+    "file": "native-attribute-tree.bin",
+    "length": 33792,
+    "sha256": "64f96d0ff4e90d9a3f14f381ba7ad71b46aa8df84c926d825fcd28b708cb39ed"
+  },
+  "derivation": "Copy primary and alternate headers and live nodes 0–3. Zero the com.apple.provenance value while preserving its record size and key. Zero each node’s unused gap between the final record end and the offset table. No original provenance bytes or host file payloads retained.",
+  "qualified_profile": "Embedded attributes fork with native 8192-byte nodes, height-2 tree, two linked leaves and header-resident allocation map. Includes exact empty, 3802-byte, and canonically distinct UTF-16 names, plus fork-backed values for explicit unsupported coverage."
+}
