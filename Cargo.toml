@@ -1,6 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/formats/hfsplus-format"]
+members = [
+    "crates/formats/hfsplus-format",
+    "crates/foundation/hfsplus-core",
+]
 
 [workspace.package]
 edition = "2024"

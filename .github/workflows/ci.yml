@@ -31,17 +31,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        package: [hfsplus-core, hfsplus-format]
         target: [aarch64-unknown-none, x86_64-unknown-none]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
           persist-credentials: false
       - run: rustup show active-toolchain
-      - run: cargo check --locked -p hfsplus-format --no-default-features --target ${{ matrix.target }}
-      - run: cargo build --locked -p hfsplus-format --no-default-features --target ${{ matrix.target }}
+      - run: cargo check --locked -p ${{ matrix.package }} --no-default-features --target ${{ matrix.target }}
+      - run: cargo build --locked -p ${{ matrix.package }} --no-default-features --target ${{ matrix.target }}
       - name: Enforce the standalone target dependency boundary
         env:
+          FS_PACKAGE: ${{ matrix.package }}
           FS_TARGET: ${{ matrix.target }}
         run: |
-          tree=$(cargo tree --locked -p hfsplus-format --no-default-features --target "$FS_TARGET" -e normal --prefix none --format '{p}')
+          tree=$(cargo tree --locked -p "$FS_PACKAGE" --no-default-features --target "$FS_TARGET" -e normal --prefix none --format '{p}')
           test "$(wc -l <<< "$tree")" -eq 1

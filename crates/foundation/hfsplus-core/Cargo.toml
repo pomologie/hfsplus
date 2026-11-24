@@ -1,0 +1,11 @@
+[package]
+name = "hfsplus-core"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Portable bounded storage contracts for HFS+"
+
+[lints]
+workspace = true
