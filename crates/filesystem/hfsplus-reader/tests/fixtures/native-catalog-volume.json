@@ -1,0 +1,54 @@
+{
+  "source": "Apple hdiutil HFS+ optical filesystem inside a raw APM image",
+  "license": "Apache-2.0; synthetic data only",
+  "os": "macOS 14.7.2",
+  "build": "23H311",
+  "architecture": "arm64",
+  "argv": [
+    "/usr/bin/hdiutil",
+    "makehybrid",
+    "-hfs",
+    "-hfs-volume-name",
+    "Pomologie Catalog",
+    "-o",
+    "native.dmg",
+    "native-source"
+  ],
+  "synthetic_entries": {
+    "item-000 through item-095": "zero-byte regular files",
+    "Nested/Résumé.txt": "catalog unicode payload\n"
+  },
+  "raw_apm_sha256": "06927dc456ad0846c8457a08a56d12f45f528e0d5839f3033d760d5e1941b70a",
+  "volume_offset": 32768,
+  "volume_bytes": 86016,
+  "bounded_volume_sha256": "49721704a091e42b68ed7241d44118a0189363269e7c4fe39a0c90a26e5a94cf",
+  "catalog": {
+    "node_bytes": 4096,
+    "depth": 2,
+    "root_node": 3,
+    "leaf_nodes": 16,
+    "leaf_records": 198
+  },
+  "differential_check": {
+    "tool": "p7zip 17.05",
+    "listing_argv": [
+      "7z",
+      "l",
+      "-slt",
+      "native-catalog-volume.bin"
+    ],
+    "extraction_argv": [
+      "7z",
+      "x",
+      "-so",
+      "native-catalog-volume.bin",
+      "Pomologie Catalog/Nested/*sume*.txt"
+    ],
+    "checks": [
+      "96 empty root files in the declared name range",
+      "Nested directory and decomposed UTF-16 spelling of Résumé.txt",
+      "exact nonempty payload"
+    ],
+    "payload_sha256": "affadc0a0affa149d7b895f85b5ae77696c89f2bc6056e253ba94c333c481940"
+  }
+}
