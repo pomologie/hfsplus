@@ -1,0 +1,26 @@
+# UTF-16 units in native optical catalog leaf order. See UNICODE32.md.
+200d 0024
+feff 0026
+005b
+005f
+202e 0041
+200e 0042
+0065 0301
+0051
+00c6
+0181
+0254
+03c2 0062
+03a3 0061
+0416
+0531
+10a0
+10d1
+200b 0041
+212b
+2178
+2169
+d801 dc00
+d801 dc29
+d83d de00
+ff21

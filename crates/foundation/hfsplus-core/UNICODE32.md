@@ -1,6 +1,6 @@
-# HFS+ Unicode 3.2 decomposition
+# HFS+ name normalization and comparison
 
-`hfsplus_core::names` implements the pinned canonical decomposition profile described in Apple TN1150 for macOS 10.3 and later. It produces bounded UTF-16 units, applies algorithmic Hangul decomposition, preserves the HFS+ exclusion ranges, and orders combining marks by Unicode 3.2 combining class. Equal classes retain their original order. Name admission, collision detection, and FastUnicodeCompare belong to separate layers.
+`hfsplus_core::names` implements the pinned canonical decomposition profile described in Apple TN1150 for macOS 10.3 and later. It produces bounded UTF-16 units, applies algorithmic Hangul decomposition, preserves the HFS+ exclusion ranges, and orders combining marks by Unicode 3.2 combining class. Equal classes retain their original order. Name admission and collision reporting belong to callers.
 
 The exclusions are U+2000–U+2FFF, U+F900–U+FAFF, and U+2F800–U+2FAFF. A scalar in one of those ranges retains its value. Combining classes still govern ordering. [Apple TN1150](https://developer.apple.com/library/archive/technotes/tn/tn1150.html#UnicodeSubtleties) · [Apple CoreServices encoding variants](https://developer.apple.com/documentation/coreservices/1399897-encoding_variants_for_unicode)
 
@@ -26,4 +26,20 @@ python3 tools/capture_native_names.py /tmp/hfsplus-native-normalization.tsv
 cmp /tmp/hfsplus-native-normalization.tsv tests/fixtures/native-normalization.tsv
 ```
 
-The fixture has 17 agreement cases for canonical decomposition, excluded characters, Hangul, supplementary scalars, and combining classes. Three probes expose newer Unicode behavior in the optical image tool. It assigns a combining class to U+1AB0 and decomposes U+1B06 and U+1109A, which Unicode 3.2 leaves unchanged. Tests preserve the pinned contract and the observed divergence. Native kernel-created volume comparisons and the historical case-folding qualification remain pending.
+The fixture has 17 agreement cases for canonical decomposition, excluded characters, Hangul, supplementary scalars, and combining classes. Three probes expose newer Unicode behavior in the optical image tool. It assigns a combining class to U+1AB0 and decomposes U+1B06 and U+1109A, which Unicode 3.2 leaves unchanged. Tests preserve the pinned contract and the observed divergence. Native kernel-created volume comparisons remain pending.
+
+## Historical collation
+
+`NameCollation::CaseFolded` compares catalog UTF-16 units using the historical HFS+ ordering and equivalence classes. `NameCollation::Binary` orders the unsigned units directly for binary HFSX. Callers normalize host strings before comparison and select the mode from the catalog header. [Apple TN1150](https://developer.apple.com/library/archive/technotes/tn/tn1150.html#StringComparisonAlgorithm)
+
+The collation capture tool queries the public `UCCompareTextNoLocale` API with its HFS Extended ordering option. It uses the API's equivalence result to discard secondary tie breaking. It observes singleton comparisons over all 65,536 UTF-16 units, checks that each class has a strictly ordered maximum member, and records 329 ordinal overrides including 16 ignorable units. The generator uses public comparison results and chooses the ordinal representatives independently. The portable Rust comparator requires only the resulting sparse overrides. [Apple CoreServices comparison API](https://developer.apple.com/documentation/coreservices/1390513-uccomparetextnolocale)
+
+The capture on macOS 14.7.2 build 23H311, arm64 checked 40,000 seeded sequence pairs up to the 255-unit limit, substitutability of every override inside a string, and 38 targeted pairs in both directions. The Rust tests replay the targeted observations and check all 300 ordered pairs of 25 keys extracted from the leaf order of a separate optical `hdiutil` image. The optical probe only supplies catalog ordering evidence. Normalization differences from the optical tool are recorded above.
+
+```sh
+python3 tools/capture_native_collation.py --check
+PYTHONDONTWRITEBYTECODE=1 python3 tools/capture_collation_catalog.py /tmp/hfsplus-native-catalog-order.txt
+cmp /tmp/hfsplus-native-catalog-order.txt tests/fixtures/native-catalog-order.txt
+```
+
+The SHA-256 for `src/names/collation/ordinal_overrides.rs` is `ed9e6063e5d6aa6295a7b31cb43f6ac68966ab8c952944cc3963940df585cadb`.

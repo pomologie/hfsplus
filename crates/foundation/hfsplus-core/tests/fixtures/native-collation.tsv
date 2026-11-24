@@ -1,0 +1,40 @@
+# Source: public CoreServices HFS Extended profile. See UNICODE32.md.
+# Left UTF-16 units	Right UTF-16 units	HFS+ ordering
+		0
+	0020	-1
+0041	0061	0
+0041	005f	1
+005a	005b	1
+0061	0061 0020	-1
+0045 0301	0065 0301	0
+0045 0301	0065 0300	1
+0065	0065 0301	-1
+00c6	00e6	0
+0181	0253	0
+01c4	01c5	0
+01c5	01c6	0
+03a3	03c3	0
+03a3	03c2	1
+0410	0430	0
+0531	0561	0
+10a0	10d0	0
+10a0	2d00	-1
+2160	2170	0
+ff21	ff41	0
+ff21	0061	1
+200c		0
+200d		0
+202e		0
+206f		0
+feff		0
+200b		1
+202f		1
+2069		1
+fe0f		1
+0061 200c 0062	0041 0062 feff	0
+d801 dc00	d801 dc28	-1
+d83d de00	d83d de01	-1
+d800	d801	-1
+0000	fffe	1
+0000	ffff	0
+0000 0041	ffff 0062	-1

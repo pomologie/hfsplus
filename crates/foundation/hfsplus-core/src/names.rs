@@ -1,14 +1,18 @@
-//! Canonical decomposition for the Unicode 3.2 HFS+ name profile.
+//! Canonical decomposition and historical ordering of HFS+ names.
 //!
-//! Decomposition produces stored UTF-16 units. Filesystem case folding,
-//! reserved names, and host path validation belong to other layers.
+//! Decomposition produces stored UTF-16 units. Collation compares that storage
+//! form without changing it. Name admission and host path validation belong
+//! to callers.
 
 extern crate alloc;
 
 use alloc::{collections::TryReserveError, vec::Vec};
 use core::{char, error::Error, fmt};
 
+mod collation;
 mod unicode32;
+
+pub use collation::NameCollation;
 
 /// Maximum number of UTF-16 code units in an on-disk HFS+ name.
 pub const MAX_NAME_UNITS: usize = 255;
