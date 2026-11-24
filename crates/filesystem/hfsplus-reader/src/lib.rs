@@ -18,6 +18,7 @@ pub mod allocation;
 pub mod attributes;
 pub mod catalog;
 pub mod check;
+pub mod decmpfs;
 mod fork;
 pub mod overflow;
 mod profile;

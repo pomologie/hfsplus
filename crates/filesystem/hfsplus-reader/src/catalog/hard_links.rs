@@ -108,6 +108,11 @@ impl<S> RegularFile<'_, S> {
 		&self.metadata
 	}
 
+	#[cfg(feature = "decmpfs-zlib")]
+	pub(crate) const fn volume(&self) -> &Volume<S> {
+		self.volume
+	}
+
 	/// Link reference and count evidence, if the file is a hard link.
 	#[must_use]
 	pub const fn hard_link(&self) -> Option<HardLink> {

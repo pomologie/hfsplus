@@ -1,0 +1,182 @@
+{
+  "profile": "Unjournaled native HFS+ type 3 inline and type 4 resource fork zlib",
+  "oracle": {
+    "macos": [
+      "ProductName:\t\tmacOS",
+      "ProductVersion:\t\t14.7.2",
+      "BuildVersion:\t\t23H311"
+    ],
+    "arch": "arm64",
+    "extractor": "Apple bsdtar 3.5.3 with libarchive 3.5.3 and zlib 1.2.12",
+    "fsck": "fsck_hfs 650.140.2 -fn returned zero on disposable readonly attachment",
+    "comparison": "Native read-only mounted file reads matched complete source bytes. Independent Python zlib with exact frame consumption matched both raw representations."
+  },
+  "generation": {
+    "create_argv": [
+      "hdiutil",
+      "create",
+      "-size",
+      "64m",
+      "-fs",
+      "HFS+",
+      "-volname",
+      "Pomologie Zlib",
+      "-layout",
+      "NONE",
+      "<temp>/native.dmg"
+    ],
+    "archive_argv": [
+      "tar",
+      "-cf",
+      "<temp>/fixtures.tar",
+      "-C",
+      "<temp>/source",
+      "inline",
+      "resource"
+    ],
+    "extract_argv": [
+      "tar",
+      "--hfsCompression",
+      "-xf",
+      "<temp>/fixtures.tar",
+      "-C",
+      "<mount>"
+    ],
+    "tar_env": {
+      "COPYFILE_DISABLE": "1"
+    },
+    "inline_input": "1024 repetitions of ASCII portable-zlib-inline-fixture followed by one LF",
+    "resource_input": "65536 bytes each of ASCII A, B and C, then exactly native-decmpfs-tail.bin as reproducible synthetic incompressible input.",
+    "tail_origin": "Python random.Random(43).randbytes(513); checked in directly to freeze exact expected bytes.",
+    "export_argv": [
+      "hdiutil",
+      "convert",
+      "<temp>/native.dmg",
+      "-format",
+      "UDTO",
+      "-o",
+      "<temp>/native"
+    ]
+  },
+  "raw_image_bytes": 67108864,
+  "raw_image_sha256": "0cfeba6595858e2473c20f69948197bc937545a72efcafbbe52cdf61a10c5bac",
+  "sparse_fixture_sha256": "5198873fb5b8b78b0c4af6de32b40ebfa4d5bede3097332db6fb6b1545f23120",
+  "tail_sha256": "658323d9a0975f900015bbe1dbf0d4e1fef564b50116335c1e7c8d8d4eadc90d",
+  "sparse_fixture_format": "Big-endian volume size u64 and slice count u16, then per slice volume offset u64, byte length u32 and exact original bytes.",
+  "slices": [
+    {
+      "purpose": "primary volume header",
+      "volume_offset": 1024,
+      "bytes": 512,
+      "sha256": "a9c38a7cbf51542d3b87aa6bd233e5b37ee8d52a9c29b93b491702af48b10073"
+    },
+    {
+      "purpose": "alternate volume header",
+      "volume_offset": 67107840,
+      "bytes": 512,
+      "sha256": "cac6af182e9b587d59ee8e0bd80263380686ead1adba84d17febfb04d9eb6766"
+    },
+    {
+      "purpose": "catalog header",
+      "volume_offset": 6299648,
+      "bytes": 4096,
+      "sha256": "ccd7a0c5b988636238b35c2ac4846b377f92c7ae6c7ff43f69e3eb02c4bedd2e"
+    },
+    {
+      "purpose": "catalog leaf",
+      "volume_offset": 6303744,
+      "bytes": 4096,
+      "sha256": "575a16aa82d21aa8ff508c7d7360efb246c20186720f319f5457191420052e9f"
+    },
+    {
+      "purpose": "attributes header",
+      "volume_offset": 532480,
+      "bytes": 8192,
+      "sha256": "72d5150fa8339daf48a97a8aaedfccf40cad32e88ef657c9cfecbb2fafd371a5"
+    },
+    {
+      "purpose": "attributes leaf",
+      "volume_offset": 540672,
+      "bytes": 8192,
+      "sha256": "65c4a394dd83cbd53541e853ee47aaccae4049bb6f7e2f51c6b4fb5347b6ff06"
+    },
+    {
+      "purpose": "complete stored cmpf resource fork",
+      "volume_offset": 12066816,
+      "bytes": 1115,
+      "sha256": "8b4eb160aec2ed19bfea0067369c9f732ed4f0cf0888d2445a32c49af8fe2919"
+    }
+  ],
+  "files": [
+    {
+      "entry": "inline",
+      "catalog_id": 18,
+      "decmpfs_type": 3,
+      "logical_bytes": 29696,
+      "logical_sha256": "f59dd109f9288a08caca6f63e943c5f798f41ef7ddf53bbe2cf4edb011fa29ee",
+      "stored_resource_bytes": 0,
+      "resource_frames": []
+    },
+    {
+      "entry": "resource",
+      "catalog_id": 19,
+      "decmpfs_type": 4,
+      "logical_bytes": 197121,
+      "logical_sha256": "25d73e23398348dfa30e1146abd8b44cc7441332ace04b21030530ca8481f212",
+      "stored_resource_bytes": 1115,
+      "resource_frames": [
+        {
+          "relative_to_resource_fork": 296,
+          "encoded_bytes": 85,
+          "decoded_bytes": 65536,
+          "framing": "zlib"
+        },
+        {
+          "relative_to_resource_fork": 381,
+          "encoded_bytes": 85,
+          "decoded_bytes": 65536,
+          "framing": "zlib"
+        },
+        {
+          "relative_to_resource_fork": 466,
+          "encoded_bytes": 85,
+          "decoded_bytes": 65536,
+          "framing": "zlib"
+        },
+        {
+          "relative_to_resource_fork": 551,
+          "encoded_bytes": 514,
+          "decoded_bytes": 513,
+          "framing": "stored"
+        }
+      ]
+    }
+  ],
+  "shared_forks": {
+    "operation": "Copy the same disposable image, mount the copy read-write, and add inline-hardlink and resource-hardlink with link(2). Read each alias and verify exact bytes, matching inode numbers, BSD flags 0x20 and link count two. Detach and export with hdiutil convert -format UDTO.",
+    "raw_image_sha256": "7a25904097e9a1a0dd6d8a443a6e1c113ad3275b5a7ffe6542cc80df4e70ff30",
+    "overlay_sha256": "7abe7bb7c62c4081f35c0ddc0b9568fc21179996f9fec4d5ebba0f2549aa408a",
+    "overlay_format": "Replace only the changed absolute ranges of the source sparse fixture, captured in the same slice format.",
+    "changed_slices": [
+      {
+        "purpose": "primary volume header",
+        "volume_offset": 1024,
+        "bytes": 512,
+        "sha256": "5d000f83dbfcfc6445ed7711e4223a6b2f3479d44518c04f5df4d2a1d198e7c8"
+      },
+      {
+        "purpose": "catalog header",
+        "volume_offset": 6299648,
+        "bytes": 4096,
+        "sha256": "1201ad97e164ddfb99d143f5df819361e26a9e0ac9352a1017e057c57f9ff524"
+      },
+      {
+        "purpose": "catalog leaf",
+        "volume_offset": 6303744,
+        "bytes": 4096,
+        "sha256": "7861eb33809a1b3ad23f3821106ab337a1d7ebf2a6769b599887c52a89b7d138"
+      }
+    ],
+    "unchanged": "Attributes and stored resource fork are byte-identical to the unlinked fixture. The visible entry for each alias resolves to original compressed inode 18 or 19."
+  }
+}

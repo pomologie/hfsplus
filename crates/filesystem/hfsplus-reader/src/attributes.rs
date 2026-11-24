@@ -380,6 +380,37 @@ impl<'volume, S: ReadAt> Attributes<'volume, S> {
 		};
 		Ok(result.map(|value| AttributeValue { value }))
 	}
+
+	#[cfg(feature = "decmpfs-zlib")]
+	pub(crate) fn read_compression_metadata(
+		&self,
+		owner: CatalogId,
+	) -> Result<Option<Vec<u8>>, AttributeReadError<S::Error>> {
+		use hfsplus_format::attributes::{COMPRESSED_ATTRIBUTE_NAME, InlineRecord};
+
+		let Some(tree) = &self.tree else {
+			return Ok(None);
+		};
+		let mut name = [0; COMPRESSED_ATTRIBUTE_NAME.len()];
+		for (unit, byte) in name.iter_mut().zip(COMPRESSED_ATTRIBUTE_NAME.bytes()) {
+			*unit = u16::from(byte);
+		}
+		let mut result = None;
+		tree.scan(
+			Query { owner, name: &name },
+			self.limits.max_nodes,
+			|node, key, raw| {
+				if key.file_id != owner || key.name.units().ne(name) {
+					return Ok(ControlFlow::Break(()));
+				}
+				let record = InlineRecord::decode_compression_metadata(raw)
+					.map_err(|error| AttributeReadError::format(node, error))?;
+				result = Some(copy_inline(record.value)?);
+				Ok(ControlFlow::Continue(()))
+			},
+		)?;
+		Ok(result)
+	}
 }
 
 fn append_continuation<E>(

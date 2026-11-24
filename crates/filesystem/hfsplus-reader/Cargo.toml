@@ -7,9 +7,13 @@ license.workspace = true
 repository.workspace = true
 description = "Portable read-only HFS+ volume and fork access"
 
+[features]
+decmpfs-zlib = ["dep:miniz_oxide"]
+
 [dependencies]
 hfsplus-core.workspace = true
 hfsplus-format.workspace = true
+miniz_oxide = { workspace = true, optional = true }
 
 [lints]
 workspace = true
