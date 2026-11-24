@@ -6,8 +6,8 @@ use crate::{Limits, PlanBuilder, PlanError, SealedPlan};
 use super::{
 	EntryKind, ForkSource, VolumeError,
 	catalog::DEFAULT_ENCODING_HINT,
-	layout::{self, Layout, allocated_fork, attributes_clump_bytes},
-	manifest::VolumeDraft,
+	layout::{self, EntryExtents, Layout, allocated_fork, attributes_clump_bytes},
+	manifest::{Input, VolumeDraft},
 };
 
 const ALT_HEADER_FROM_END: u64 = 1024;
@@ -76,16 +76,15 @@ pub(super) fn seal<S: ReadAt>(mut draft: VolumeDraft<'_, S>) -> Result<SealedPla
 		allocation.bitmap_extent(),
 		allocation.encode_bitmap(metadata_limit)?,
 	)?;
-	for (entry, placement) in draft.entries.into_iter().zip(payloads) {
-		match entry.input.kind {
+	let mut payloads = payloads.into_iter();
+	for (entry, placement) in draft.entries.into_iter().zip(payloads.by_ref()) {
+		let Input::Ordinary(input) = entry.input else {
+			continue;
+		};
+		match input.kind {
 			EntryKind::Folder => {}
 			EntryKind::File { data, resource } => {
-				if let Some(extent) = placement.data {
-					image.source(extent, data)?;
-				}
-				if let Some((extent, resource)) = placement.resource.zip(resource) {
-					image.source(extent, resource)?;
-				}
+				image.file(placement, data, resource)?;
 			}
 			EntryKind::Symlink { target } => {
 				let extent = placement
@@ -96,6 +95,11 @@ pub(super) fn seal<S: ReadAt>(mut draft: VolumeDraft<'_, S>) -> Result<SealedPla
 			EntryKind::GeneratedFile { .. } => {
 				return Err(VolumeError::MissingGeneratedData(entry.id));
 			}
+		}
+	}
+	if let Some(links) = draft.hard_links {
+		for (file, placement) in links.files.into_iter().zip(payloads) {
+			image.file(placement, file.data, file.resource)?;
 		}
 	}
 	image.extent_metadata(catalog.extent, catalog.tree.into_bytes())?;
@@ -170,6 +174,21 @@ impl<S: ReadAt> Emitter<S> {
 		self.image
 			.push_source(offset, fork.source, fork.range.start(), fork.range.len())?;
 		self.end = ByteOffset(offset.0 + fork.range.len().0);
+		Ok(())
+	}
+
+	fn file(
+		&mut self,
+		placement: EntryExtents,
+		data: ForkSource<S>,
+		resource: Option<ForkSource<S>>,
+	) -> Result<(), VolumeError> {
+		if let Some(extent) = placement.data {
+			self.source(extent, data)?;
+		}
+		if let Some((extent, resource)) = placement.resource.zip(resource) {
+			self.source(extent, resource)?;
+		}
 		Ok(())
 	}
 

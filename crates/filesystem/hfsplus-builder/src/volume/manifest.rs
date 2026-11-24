@@ -4,11 +4,13 @@ use hfsplus_format::volume::CatalogId;
 use crate::SealedPlan;
 
 use super::{
-	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, MAX_SYMLINK_TARGET_BYTES,
-	ManifestEntry, SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError, VolumeOptions,
+	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, HardLinkGroup,
+	MAX_SYMLINK_TARGET_BYTES, ManifestEntry, SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError,
+	VolumeOptions,
 	attributes::Attributes,
 	catalog_path::{NameProfile, NormalizedPath, compare_paths},
 	emit,
+	hard_links::HardLinks,
 };
 
 pub(super) const ROOT_PARENT_ID: CatalogId = CatalogId(1);
@@ -17,8 +19,27 @@ const POSIX_PERMISSION_MASK: u16 = 0o7777;
 const INDIRECT_NODE_FINDER_CODES: &[[u8; 8]] = &[*b"hlnkhfs+", *b"fdrpMACS"];
 
 #[derive(Debug)]
+pub(super) enum Input<'a, S> {
+	Ordinary(ManifestEntry<'a, S>),
+	Alias { path: &'a str, group: usize },
+}
+
+impl<S> Input<'_, S> {
+	fn path(&self) -> &str {
+		match self {
+			Self::Ordinary(entry) => entry.path,
+			Self::Alias { path, .. } => path,
+		}
+	}
+
+	fn is_folder(&self) -> bool {
+		matches!(self, Self::Ordinary(entry) if matches!(entry.kind, EntryKind::Folder))
+	}
+}
+
+#[derive(Debug)]
 pub(super) struct PlannedEntry<'a, S> {
-	pub(super) input: ManifestEntry<'a, S>,
+	pub(super) input: Input<'a, S>,
 	pub(super) path: NormalizedPath,
 	pub(super) id: CatalogId,
 	pub(super) parent: CatalogId,
@@ -37,6 +58,7 @@ pub struct VolumeDraft<'a, S> {
 	pub(super) file_count: u32,
 	pub(super) next_id: CatalogId,
 	pub(super) attributes: Attributes,
+	pub(super) hard_links: Option<HardLinks<S>>,
 }
 
 /// An admitted manifest returned by the printable-ASCII planning entry point.
@@ -56,11 +78,43 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 	/// # Errors
 	/// Returns an error for an inadmissible path or failed normalization.
 	pub fn try_catalog_id(&self, path: &str) -> Result<Option<CatalogId>, VolumeError> {
+		self.find_id(path, |entry| entry.id)
+	}
+
+	/// Gets the frozen inode ID of a path, shared by all aliases of a linked
+	/// file. For a path with no hard links this is its catalog ID.
+	#[must_use]
+	pub fn inode_id(&self, path: &str) -> Option<CatalogId> {
+		self.try_inode_id(path).ok().flatten()
+	}
+
+	/// Gets the frozen inode ID with the same name rules as catalog lookup.
+	/// The empty path denotes the root folder.
+	/// # Errors
+	/// Returns an error for an inadmissible path or failed normalization.
+	pub fn try_inode_id(&self, path: &str) -> Result<Option<CatalogId>, VolumeError> {
+		self.find_id(path, |entry| match entry.input {
+			Input::Ordinary(_) => entry.id,
+			Input::Alias { group, .. } => {
+				self.hard_links
+					.as_ref()
+					.expect("every admitted alias has a hard-link group")
+					.files[group]
+					.id
+			}
+		})
+	}
+
+	fn find_id(
+		&self,
+		path: &str,
+		id: impl FnOnce(&PlannedEntry<'_, S>) -> CatalogId,
+	) -> Result<Option<CatalogId>, VolumeError> {
 		if path.is_empty() {
 			return Ok(Some(ROOT_ID));
 		}
 		let normalized = NormalizedPath::new(path, self.profile)?;
-		Ok(find_path(&self.entries, normalized.units()).map(|index| self.entries[index].id))
+		Ok(find_path(&self.entries, normalized.units()).map(|index| id(&self.entries[index])))
 	}
 
 	/// Supplies the data fork for a reserved generated file without changing its ID.
@@ -81,7 +135,10 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 		})?;
 		let index = find_path(&self.entries, normalized.units())
 			.ok_or(VolumeError::NotAwaitingGeneratedData)?;
-		let kind = &mut self.entries[index].input.kind;
+		let Input::Ordinary(entry) = &mut self.entries[index].input else {
+			return Err(VolumeError::NotAwaitingGeneratedData);
+		};
+		let kind = &mut entry.kind;
 		let EntryKind::GeneratedFile { resource } = kind else {
 			return Err(VolumeError::NotAwaitingGeneratedData);
 		};
@@ -93,8 +150,8 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 	}
 
 	/// Adds an inline attribute to a previously admitted catalog owner. The empty
-	/// path denotes the root folder. Attribute names preserve their supplied UTF-16
-	/// spelling and do not use catalog normalization or collation.
+	/// path denotes the root folder. Paths in one hard-link group share all
+	/// attributes. Attribute names preserve their supplied UTF-16 spelling.
 	///
 	/// # Errors
 	/// Rejects unknown owners, invalid names, special attributes, values requiring
@@ -107,7 +164,7 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 		value: &[u8],
 	) -> Result<(), VolumeError> {
 		let owner = self
-			.try_catalog_id(path)?
+			.try_inode_id(path)?
 			.ok_or(VolumeError::MissingAttributeOwner)?;
 		let limit = usize::try_from(self.options.limits.max_metadata_bytes.0).unwrap_or(usize::MAX);
 		self.attributes.add(owner, name, value, limit)
@@ -136,7 +193,7 @@ pub fn plan_ascii<'a, S: ReadAt>(
 	options: VolumeOptions<'a>,
 	entries: Vec<ManifestEntry<'a, S>>,
 ) -> Result<AsciiVolumeDraft<'a, S>, VolumeError> {
-	prepare(options, entries, NameProfile::Ascii)
+	prepare(options, entries, Vec::new(), NameProfile::Ascii)
 }
 
 /// Validates a Unicode manifest and freezes its catalog IDs.
@@ -154,35 +211,67 @@ pub fn plan<'a, S: ReadAt>(
 	options: VolumeOptions<'a>,
 	entries: Vec<ManifestEntry<'a, S>>,
 ) -> Result<VolumeDraft<'a, S>, VolumeError> {
-	prepare(options, entries, NameProfile::Unicode)
+	prepare(options, entries, Vec::new(), NameProfile::Unicode)
+}
+
+/// Plans regular-file hard links alongside an ordinary Unicode manifest.
+/// Supply each visible path in exactly one group or ordinary manifest entry.
+/// Catalog IDs remain distinct by path and each group shares an inode ID,
+/// metadata and fork allocation. Directory links are outside this profile.
+/// # Errors
+/// Applies the same rules as [`plan`] and rejects groups with fewer than two
+/// paths or too many link references for the chain-free format.
+pub fn plan_with_hard_links<'a, S: ReadAt>(
+	options: VolumeOptions<'a>,
+	entries: Vec<ManifestEntry<'a, S>>,
+	groups: Vec<HardLinkGroup<'a, S>>,
+) -> Result<VolumeDraft<'a, S>, VolumeError> {
+	prepare(options, entries, groups, NameProfile::Unicode)
 }
 
 fn prepare<'a, S: ReadAt>(
 	options: VolumeOptions<'a>,
 	entries: Vec<ManifestEntry<'a, S>>,
+	groups: Vec<HardLinkGroup<'a, S>>,
 	profile: NameProfile,
 ) -> Result<VolumeDraft<'a, S>, VolumeError> {
 	let label = profile.volume_label(options.label)?;
 	validate_metadata(options.root)?;
-	if entries.len() > options.max_entries {
+	let visible_entries = groups.iter().try_fold(entries.len(), |count, group| {
+		if group.paths.len() < 2 {
+			return Err(VolumeError::InvalidHardLinkGroup);
+		}
+		count
+			.checked_add(group.paths.len())
+			.ok_or(VolumeError::Limit)
+	})?;
+	if visible_entries > options.max_entries {
 		return Err(VolumeError::Limit);
 	}
-	let count = u32::try_from(entries.len()).map_err(|_| VolumeError::Limit)?;
-	let next_id = CatalogId(
+	let count = u32::try_from(visible_entries).map_err(|_| VolumeError::Limit)?;
+	let first_hidden_id = CatalogId(
 		CatalogId::FIRST_USER
 			.0
 			.checked_add(count)
 			.ok_or(VolumeError::Limit)?,
 	);
 	let mut canonical = Vec::new();
-	canonical.try_reserve_exact(entries.len())?;
+	canonical.try_reserve_exact(visible_entries)?;
 	for entry in entries {
 		let path = NormalizedPath::new(entry.path, profile)?;
 		validate_entry(&entry)?;
-		canonical.push((path, entry));
+		canonical.push((path, Input::Ordinary(entry)));
+	}
+	for (group, input) in groups.iter().enumerate() {
+		validate_metadata(input.metadata)?;
+		validate_file_marker(input.metadata)?;
+		for &path in &input.paths {
+			let normalized = NormalizedPath::new(path, profile)?;
+			canonical.push((normalized, Input::Alias { path, group }));
+		}
 	}
 	canonical.sort_unstable_by(|(left, a), (right, b)| {
-		compare_paths(left.units(), right.units()).then_with(|| a.path.cmp(b.path))
+		compare_paths(left.units(), right.units()).then_with(|| a.path().cmp(b.path()))
 	});
 	for pair in canonical.windows(2) {
 		let ((left, a), (right, b)) = (&pair[0], &pair[1]);
@@ -190,8 +279,8 @@ fn prepare<'a, S: ReadAt>(
 			return match profile {
 				NameProfile::Ascii => Err(VolumeError::DuplicatePath),
 				NameProfile::Unicode => Err(VolumeError::PathCollision {
-					first: copy_path(a.path)?,
-					second: copy_path(b.path)?,
+					first: copy_path(a.path())?,
+					second: copy_path(b.path())?,
 				}),
 			};
 		}
@@ -201,7 +290,7 @@ fn prepare<'a, S: ReadAt>(
 	planned.try_reserve_exact(canonical.len())?;
 	let mut root_valence = 0;
 	let mut folder_count = 0;
-	for (ordinal, (path, input)) in (CatalogId::FIRST_USER.0..next_id.0).zip(canonical) {
+	for (ordinal, (path, input)) in (CatalogId::FIRST_USER.0..first_hidden_id.0).zip(canonical) {
 		let parent = match path.parent() {
 			None => {
 				root_valence += 1;
@@ -210,14 +299,14 @@ fn prepare<'a, S: ReadAt>(
 			Some(parent_path) => {
 				let index = find_path(&planned, parent_path).ok_or(VolumeError::InvalidParent)?;
 				let parent = &mut planned[index];
-				if !matches!(parent.input.kind, EntryKind::Folder) {
+				if !parent.input.is_folder() {
 					return Err(VolumeError::InvalidParent);
 				}
 				parent.valence += 1;
 				parent.id
 			}
 		};
-		folder_count += u32::from(matches!(input.kind, EntryKind::Folder));
+		folder_count += u32::from(input.is_folder());
 		planned.push(PlannedEntry {
 			input,
 			path,
@@ -226,16 +315,20 @@ fn prepare<'a, S: ReadAt>(
 			valence: 0,
 		});
 	}
+	let hidden_folders = u32::from(!groups.is_empty());
+	let hidden_files = u32::try_from(groups.len()).map_err(|_| VolumeError::Limit)?;
+	let (hard_links, next_id) = HardLinks::assign(&mut planned, groups, first_hidden_id)?;
 	Ok(VolumeDraft {
 		options,
 		label,
 		profile,
 		entries: planned,
-		root_valence,
-		folder_count,
-		file_count: count - folder_count,
+		root_valence: root_valence + hidden_folders,
+		folder_count: folder_count + hidden_folders,
+		file_count: count - folder_count + hidden_files,
 		next_id,
 		attributes: Attributes::default(),
+		hard_links,
 	})
 }
 
@@ -272,10 +365,20 @@ fn validate_entry<S>(entry: &ManifestEntry<'_, S>) -> Result<(), VolumeError> {
 				return Err(VolumeError::UnsupportedFinderInfo);
 			}
 		}
-		EntryKind::File { .. } | EntryKind::GeneratedFile { .. } if has_link_marker => {
-			return Err(VolumeError::UnsupportedFinderInfo);
+		EntryKind::File { .. } | EntryKind::GeneratedFile { .. } => {
+			validate_file_marker(entry.metadata)?
 		}
 		_ => {}
+	}
+	Ok(())
+}
+
+fn validate_file_marker(metadata: EntryMetadata) -> Result<(), VolumeError> {
+	if metadata
+		.finder_info
+		.starts_with(&SYMLINK_FINDER_TYPE_AND_CREATOR)
+	{
+		return Err(VolumeError::UnsupportedFinderInfo);
 	}
 	Ok(())
 }

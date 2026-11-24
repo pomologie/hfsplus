@@ -8,6 +8,8 @@ Native fixtures from macOS 14.7.2 cover a clean partitionless volume and a regul
 
 `hfsplus-builder` can stream clean, nonjournaled HFS+ volumes from Unicode manifests of folders, symbolic links, and files with data and resource forks. `volume::plan` writes Unicode 3.2 canonical names and uses historical HFS+ collation for catalog order and collisions. `volume::plan_ascii` limits inputs to printable ASCII.
 
+`volume::plan_with_hard_links` gives each visible file path its own catalog ID. All paths in a regular-file hard-link group share a private inode, data and resource forks, and inline attributes. Apple’s read-only checker and a read-only mount verified two such groups, including link counts, modes, timestamps, and exact fork and attribute bytes, on macOS 14.7.2 build 23H311. [Native format evidence](crates/formats/hfsplus-format/tests/fixtures/native-hard-links.json)
+
 On macOS 14.7.2 build 23H311, Apple’s read-only checker accepted a synthesized multilevel catalog with 210 files. A read-only mount exposed all payloads and resolved the tested accent, ignorable-character, and historical case aliases. A separate mount reported the full 255-unit CJK volume name. Some supplementary decompositions are addressable on this system by their canonical catalog spelling only. The builder rejects the NUL presentation symbol U+2400 and the BMP noncharacters U+FFFE and U+FFFF because macOS did not expose them as round-trippable names. [Unicode rules and provenance](crates/foundation/hfsplus-core/UNICODE32.md)
 
 The builder’s [crate-local verification](crates/filesystem/hfsplus-builder/verification) covers image placement admission.

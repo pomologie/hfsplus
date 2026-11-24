@@ -43,7 +43,7 @@ pub(super) fn file(
 	}
 }
 
-fn metadata(id: CatalogId, input: EntryMetadata, kind: u16, flags: u16) -> Metadata {
+pub(super) fn metadata(id: CatalogId, input: EntryMetadata, kind: u16, flags: u16) -> Metadata {
 	Metadata {
 		id,
 		flags,

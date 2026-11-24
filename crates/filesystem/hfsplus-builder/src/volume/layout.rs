@@ -5,6 +5,7 @@ use hfsplus_format::{
 		BIG_KEYS_MASK, CASE_FOLDING_COMPARE, HFS_BTREE_TYPE, TreeMetadata, VARIABLE_INDEX_KEYS_MASK,
 	},
 	catalog::{MAX_KEY_LENGTH, ThreadKind},
+	hard_links::{Inode, PRIVATE_DIRECTORY_NAME, Stub, private_directory_value},
 	volume::{Extent, Fork, Geometry, HEADER_BYTES},
 };
 
@@ -14,11 +15,12 @@ use crate::{
 };
 
 use super::{
-	EntryKind, FINDER_TYPE_AND_CREATOR_BYTES, SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError,
+	EntryKind, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, SYMLINK_FINDER_TYPE_AND_CREATOR,
+	VolumeError,
 	attributes::Attributes,
 	capacity::Footprint,
-	catalog::{Catalog, file, folder},
-	manifest::{ROOT_ID, ROOT_PARENT_ID, VolumeDraft},
+	catalog::{Catalog, file, folder, metadata},
+	manifest::{Input, ROOT_ID, ROOT_PARENT_ID, VolumeDraft},
 };
 
 const NODE_BYTES: u16 = 4096;
@@ -28,6 +30,7 @@ const FILE_TYPE: u16 = 0o100000;
 const SYMLINK_TYPE: u16 = 0o120000;
 const RESERVED_CATALOG_FORK_WORD: u32 = 0;
 
+#[derive(Default)]
 pub(super) struct EntryExtents {
 	pub(super) data: Option<Extent>,
 	pub(super) resource: Option<Extent>,
@@ -54,7 +57,11 @@ pub(super) fn prepare<S>(
 	let geometry = draft.options.geometry;
 	let allocation = Allocation::new(geometry)?;
 	let bitmap_bytes = allocation.bitmap_bytes();
-	payloads.try_reserve_exact(draft.entries.len())?;
+	let linked_files = draft
+		.hard_links
+		.as_ref()
+		.map_or(0, |links| links.files.len());
+	payloads.try_reserve_exact(draft.entries.len() + linked_files)?;
 	place(draft, geometry, allocation, bitmap_bytes, |extents| {
 		payloads.push(extents);
 	})
@@ -85,7 +92,11 @@ fn place<S>(
 ) -> Result<Layout, VolumeError> {
 	let options = &draft.options;
 	let metadata_limit = usize::try_from(options.limits.max_metadata_bytes.0).unwrap_or(usize::MAX);
-	let mut records = Catalog::new(geometry, draft.entries.len(), metadata_limit)?;
+	let hidden = draft
+		.hard_links
+		.as_ref()
+		.map_or(0, |links| links.files.len() + 1);
+	let mut records = Catalog::new(geometry, draft.entries.len() + hidden, metadata_limit)?;
 	let mut remaining_metadata = metadata_limit;
 	draft.attributes.sort()?;
 
@@ -102,38 +113,41 @@ fn place<S>(
 		ThreadKind::Folder,
 	)?;
 	for entry in &draft.entries {
-		let flags = draft.attributes.owner_flags(entry.id);
-		let mut extents = EntryExtents {
-			data: None,
-			resource: None,
+		let input = match &entry.input {
+			Input::Ordinary(input) => input,
+			Input::Alias { group, .. } => {
+				let links = draft
+					.hard_links
+					.as_ref()
+					.expect("an admitted alias has a hard-link group");
+				let stub = Stub {
+					reference: links.files[*group].reference,
+					neighbors: None,
+				};
+				records.add_entry(
+					entry.parent,
+					entry.id,
+					entry.path.name(),
+					stub.catalog_value(entry.id, options.root.dates[0])?,
+					ThreadKind::File,
+				)?;
+				record_payload(EntryExtents::default());
+				continue;
+			}
 		};
-		let (value, kind) = match &entry.input.kind {
+		let flags = draft.attributes.owner_flags(entry.id);
+		let mut extents = EntryExtents::default();
+		let (value, kind) = match &input.kind {
 			EntryKind::Folder => (
-				folder(entry.id, entry.input.metadata, entry.valence, flags),
+				folder(entry.id, input.metadata, entry.valence, flags),
 				ThreadKind::Folder,
 			),
 			EntryKind::File { data, resource } => {
-				let (data, data_extent) =
-					allocate_fork(&mut allocation, geometry, data.range.len().0)?;
-				extents.data = data_extent;
-				let resource = match resource {
-					Some(source) => {
-						let (resource, extent) =
-							allocate_fork(&mut allocation, geometry, source.range.len().0)?;
-						extents.resource = extent;
-						resource
-					}
-					None => Fork::empty(),
-				};
+				let (data, resource, placement) =
+					allocate_file(&mut allocation, geometry, data, resource.as_ref())?;
+				extents = placement;
 				(
-					file(
-						entry.id,
-						entry.input.metadata,
-						FILE_TYPE,
-						data,
-						resource,
-						flags,
-					),
+					file(entry.id, input.metadata, FILE_TYPE, data, resource, flags),
 					ThreadKind::File,
 				)
 			}
@@ -144,7 +158,7 @@ fn place<S>(
 				let (data, extent) =
 					allocate_fork(&mut allocation, geometry, ByteLen::from(target.len()).0)?;
 				extents.data = extent;
-				let mut input = entry.input.metadata;
+				let mut input = input.metadata;
 				input.finder_info[..FINDER_TYPE_AND_CREATOR_BYTES]
 					.copy_from_slice(&SYMLINK_FINDER_TYPE_AND_CREATOR);
 				(
@@ -158,6 +172,46 @@ fn place<S>(
 		};
 		record_payload(extents);
 		records.add_entry(entry.parent, entry.id, entry.path.name(), value, kind)?;
+	}
+	if let Some(links) = &draft.hard_links {
+		let valence = u32::try_from(links.files.len()).map_err(|_| VolumeError::Limit)?;
+		records.add_entry(
+			ROOT_ID,
+			links.directory,
+			&PRIVATE_DIRECTORY_NAME,
+			private_directory_value(links.directory, options.root.dates[0], valence)?,
+			ThreadKind::Folder,
+		)?;
+		for file in &links.files {
+			let (data, resource, placement) = allocate_file(
+				&mut allocation,
+				geometry,
+				&file.data,
+				file.resource.as_ref(),
+			)?;
+			record_payload(placement);
+			let inode = Inode {
+				reference: file.reference,
+				link_count: file.link_count,
+				first_link: None,
+				metadata: metadata(
+					file.id,
+					file.metadata,
+					FILE_TYPE,
+					draft.attributes.owner_flags(file.id),
+				),
+				data,
+				resource,
+			};
+			let name = file.reference.inode_name();
+			records.add_entry(
+				links.directory,
+				file.id,
+				name.units(),
+				inode.chain_free_value()?,
+				ThreadKind::File,
+			)?;
+		}
 	}
 
 	let bitmap_bytes = usize::try_from(bitmap_bytes).map_err(|_| VolumeError::Limit)?;
@@ -245,6 +299,27 @@ fn allocate_fork(
 	};
 	let fork = allocated_fork(geometry, bytes, extent, RESERVED_CATALOG_FORK_WORD)?;
 	Ok((fork, Some(extent)))
+}
+
+fn allocate_file<S>(
+	allocation: &mut Allocation,
+	geometry: Geometry,
+	data: &ForkSource<S>,
+	resource: Option<&ForkSource<S>>,
+) -> Result<(Fork, Fork, EntryExtents), VolumeError> {
+	let (data, data_extent) = allocate_fork(allocation, geometry, data.range.len().0)?;
+	let (resource, resource_extent) = match resource {
+		Some(source) => allocate_fork(allocation, geometry, source.range.len().0)?,
+		None => (Fork::empty(), None),
+	};
+	Ok((
+		data,
+		resource,
+		EntryExtents {
+			data: data_extent,
+			resource: resource_extent,
+		},
+	))
 }
 
 pub(super) fn allocated_fork(
