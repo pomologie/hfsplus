@@ -6,7 +6,9 @@ The initial `hfsplus-format` crate decodes volume headers, embedded fork extents
 
 Native fixtures from macOS 14.7.2 cover a clean partitionless volume and a regular file in an Apple-generated optical HFS+ volume. [Fixture provenance](crates/formats/hfsplus-format/tests/fixtures)
 
-`hfsplus-reader` can check the allocation bitmap's free-block count and verify that both header regions and the five special files occupy distinct marked extents. The report counts other allocated blocks separately for future catalog and attribute ownership checks. [Native allocation fixture](crates/filesystem/hfsplus-reader/tests/fixtures/native-hfs-plus.json)
+`hfsplus-reader` checks the allocation bitmap, catalog hierarchy, and reachable file forks. It counts shared regular-file inodes once and reports unclaimed allocations and unsupported record layouts. [Native structural-check fixtures](crates/filesystem/hfsplus-reader/tests/check.rs)
+
+The reader opens inline and fork-backed attributes, including fragmented values with continuation records. Its optional `decmpfs-zlib` feature exposes logical bytes for native inline and resource-fork zlib profiles, including regular hard links. Stored forks remain separately accessible. [Native attribute evidence](crates/filesystem/hfsplus-reader/tests/fixtures/native-attribute-forks.json) · [Native compression evidence](crates/filesystem/hfsplus-reader/tests/fixtures/native-decmpfs-zlib.json)
 
 `hfsplus-builder` can stream clean, nonjournaled HFS+ volumes from Unicode manifests of folders, symbolic links, and files with data and resource forks. `volume::plan` writes Unicode 3.2 canonical names and uses historical HFS+ collation for catalog order and collisions. `volume::plan_ascii` limits inputs to printable ASCII.
 
@@ -14,7 +16,7 @@ Native fixtures from macOS 14.7.2 cover a clean partitionless volume and a regul
 
 On macOS 14.7.2 build 23H311, Apple’s read-only checker accepted a synthesized multilevel catalog with 210 files. A read-only mount exposed all payloads and resolved the tested accent, ignorable-character, and historical case aliases. A separate mount reported the full 255-unit CJK volume name. Some supplementary decompositions are addressable on this system by their canonical catalog spelling only. The builder rejects the NUL presentation symbol U+2400 and the BMP noncharacters U+FFFE and U+FFFF because macOS did not expose them as round-trippable names. [Unicode rules and provenance](crates/foundation/hfsplus-core/UNICODE32.md)
 
-The builder’s [crate-local verification](crates/filesystem/hfsplus-builder/verification) covers image placement admission.
+The builder’s [crate-local verification](crates/filesystem/hfsplus-builder/verification) covers image placement admission, bounded allocation transitions, and bitmap accounting.
 
 ```sh
 cargo nextest run --locked
