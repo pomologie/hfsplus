@@ -14,6 +14,7 @@ use hfsplus_format::{
 	volume::{HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET},
 };
 
+pub mod allocation;
 pub mod attributes;
 pub mod catalog;
 mod fork;

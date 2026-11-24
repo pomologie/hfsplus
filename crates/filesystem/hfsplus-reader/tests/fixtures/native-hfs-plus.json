@@ -36,6 +36,11 @@
       "offset": 1024,
       "bytes": 512,
       "sha256": "5fc29ecc501444d8ca9a6a0bd6d8f758ca52a9d9254c0a69109d7d92d8f2ad49"
+    },
+    "native-allocation.bin": {
+      "offset": 4096,
+      "bytes": 256,
+      "sha256": "2cf7c0d462867db15f9c23a86066826573c820416cfc3aa3819ee2fe831f6f42"
     }
   },
   "allocation_block_bytes": 4096,

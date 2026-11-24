@@ -6,6 +6,8 @@ The initial `hfsplus-format` crate decodes volume headers, embedded fork extents
 
 Native fixtures from macOS 14.7.2 cover a clean partitionless volume and a regular file in an Apple-generated optical HFS+ volume. [Fixture provenance](crates/formats/hfsplus-format/tests/fixtures)
 
+`hfsplus-reader` can check the allocation bitmap's free-block count and verify that both header regions and the five special files occupy distinct marked extents. The report counts other allocated blocks separately for future catalog and attribute ownership checks. [Native allocation fixture](crates/filesystem/hfsplus-reader/tests/fixtures/native-hfs-plus.json)
+
 `hfsplus-builder` can stream clean, nonjournaled HFS+ volumes from Unicode manifests of folders, symbolic links, and files with data and resource forks. `volume::plan` writes Unicode 3.2 canonical names and uses historical HFS+ collation for catalog order and collisions. `volume::plan_ascii` limits inputs to printable ASCII.
 
 `volume::plan_with_hard_links` gives each visible file path its own catalog ID. All paths in a regular-file hard-link group share a private inode, data and resource forks, and inline attributes. Apple’s read-only checker and a read-only mount verified two such groups, including link counts, modes, timestamps, and exact fork and attribute bytes, on macOS 14.7.2 build 23H311. [Native format evidence](crates/formats/hfsplus-format/tests/fixtures/native-hard-links.json)

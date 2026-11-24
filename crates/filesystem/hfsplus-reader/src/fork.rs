@@ -80,6 +80,12 @@ pub struct ForkReader<'a, S> {
 	geometry: Geometry,
 }
 
+impl<S> ForkReader<'_, S> {
+	pub(crate) const fn descriptor(&self) -> &Fork {
+		&self.fork
+	}
+}
+
 impl<S: ReadAt> ReadAt for ForkReader<'_, S> {
 	type Error = Error<S::Error>;
 

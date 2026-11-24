@@ -284,6 +284,17 @@ enum Mapping<'a, S> {
 	},
 }
 
+impl<S> ResolvedFork<'_, S> {
+	/// Physical allocation extents in stored-fork logical order, including slack.
+	pub fn extents(&self) -> impl Iterator<Item = Extent> + '_ {
+		let groups = match &self.mapping {
+			Mapping::Embedded(reader) => core::slice::from_ref(reader.descriptor()),
+			Mapping::Overflow { groups, .. } => groups.as_slice(),
+		};
+		groups.iter().flat_map(Fork::extents)
+	}
+}
+
 impl<S: ReadAt> ReadAt for ResolvedFork<'_, S> {
 	type Error = Error<S::Error>;
 
