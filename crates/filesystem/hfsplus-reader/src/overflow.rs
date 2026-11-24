@@ -295,6 +295,30 @@ impl<S> ResolvedFork<'_, S> {
 	}
 }
 
+impl<'volume, S: ReadAt> ResolvedFork<'volume, S> {
+	pub(super) fn from_extent_groups(
+		volume: &'volume Volume<S>,
+		groups: Vec<Fork>,
+		logical_len: ByteLen,
+	) -> Result<Self, OverflowError<S::Error>> {
+		let mut covered = 0u64;
+		for group in &groups {
+			volume.open_embedded_fork(group)?;
+			covered = covered
+				.checked_add(group.logical_bytes)
+				.ok_or(FormatError::InvalidFork)?;
+		}
+		if logical_len.0 > covered {
+			return Err(FormatError::InvalidFork.into());
+		}
+		check_disjoint(&groups)?;
+		Ok(Self {
+			mapping: Mapping::Overflow { volume, groups },
+			logical_len,
+		})
+	}
+}
+
 impl<S: ReadAt> ReadAt for ResolvedFork<'_, S> {
 	type Error = Error<S::Error>;
 

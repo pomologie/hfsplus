@@ -1,0 +1,278 @@
+{
+  "profile": "Clean HFS+ with native contiguous and fragmented fork-backed attributes",
+  "oracle": {
+    "os": "14.7.2",
+    "build": "23H311",
+    "arch": "arm64",
+    "readback": "Darwin getxattr on the disposable mounted volume returned exact byte lengths and contents before detach. Independent raw extent assembly then matched the same payloads."
+  },
+  "format_reference": "https://developer.apple.com/library/archive/technotes/tn/tn1150.html#AttributesFile",
+  "source": {
+    "bytes": 16777216,
+    "sha256": "bffccac33cc78ceb201a9c7d204aeba1964ef3c566828ee7ac4ff43e9d29bbd8",
+    "recipe": [
+      "Create a 16 MiB partitionless HFS+ image with hdiutil create -size 16m -fs HFS+ -layout NONE and label Pomologie Attribute Overflow.",
+      "Mount the disposable image read-write. Write sample, then use the Darwin setxattr API to set org.pomologie.inline to short and org.pomologie.contiguous to 4097 ASCII zero bytes.",
+      "Write and fsync 192 single-block ballast files. Fill almost all remaining free blocks with a tail ballast file. Delete alternating ballast files to leave dispersed free blocks.",
+      "Set org.pomologie.fragmented to 29 allocation-block chunks, each filled with successive byte values 1 through 29, followed by the literal ASCII string unaligned trailing bytes.",
+      "Read exact values with getxattr, detach the image, and export with hdiutil convert -format UDTO."
+    ]
+  },
+  "owner_catalog_id": 18,
+  "allocation_block_bytes": 4096,
+  "attributes": {
+    "org.pomologie.contiguous": {
+      "logical_bytes": 4097,
+      "allocated_blocks": 2,
+      "extent_count": 1,
+      "payload_sha256": "9722fa4a83e528278c7f5009da2486e7255af8756a888733a4ceaee449e0f102",
+      "records": [
+        {
+          "start_block": 0,
+          "kind": 32,
+          "source_offset": 155744,
+          "bytes": 150
+        }
+      ]
+    },
+    "org.pomologie.fragmented": {
+      "logical_bytes": 118808,
+      "allocated_blocks": 30,
+      "extent_count": 27,
+      "payload_sha256": "f1674b022a41f2124b4f5255adfc3faa65fe2440d3dd40afbaf8e551384f6adc",
+      "records": [
+        {
+          "start_block": 0,
+          "kind": 32,
+          "source_offset": 155894,
+          "bytes": 150
+        },
+        {
+          "start_block": 11,
+          "kind": 48,
+          "source_offset": 156044,
+          "bytes": 134
+        },
+        {
+          "start_block": 19,
+          "kind": 48,
+          "source_offset": 156178,
+          "bytes": 134
+        },
+        {
+          "start_block": 27,
+          "kind": 48,
+          "source_offset": 156312,
+          "bytes": 134
+        }
+      ]
+    }
+  },
+  "fixture": {
+    "file": "native-attribute-forks.bin",
+    "bytes": 148911,
+    "sha256": "e8051462f29620a0085fa178ccb61bf32b5f52f433e89ac7985e618262798dc6",
+    "encoding": "Big-endian source size u64 and segment count u16, then ascending segments prefixed with source offset u64 and byte count u32.",
+    "derivation": "Store only the two volume headers, attribute header/index/selected leaf, and exact project-owned fork value bytes. Zero host provenance attribute values and unused node record gaps. Other source ranges are deliberately absent."
+  },
+  "segments": [
+    {
+      "source_offset": 1024,
+      "bytes": 512,
+      "sha256": "dccaef1b951a3f551095180055c49165e531098dcb19c4c9dda6388fbe204b7d",
+      "purpose": "primary header"
+    },
+    {
+      "source_offset": 139264,
+      "bytes": 8192,
+      "sha256": "29398e627b54d09cb6fe7de15180277ae9b5660c5d5225e33aaf0c6b9cb39a67",
+      "purpose": "attribute tree node 0"
+    },
+    {
+      "source_offset": 155648,
+      "bytes": 8192,
+      "sha256": "c78508f19d568e18936431154196707f7c97fe3d3c508de8669de8c5446df9d8",
+      "purpose": "attribute tree node 2"
+    },
+    {
+      "source_offset": 163840,
+      "bytes": 8192,
+      "sha256": "e28404e0cad0e1671662a82c59023b27f2baba61397b9d2ec6f2ca0a3ae7ed4a",
+      "purpose": "attribute tree node 3"
+    },
+    {
+      "source_offset": 3006464,
+      "bytes": 16384,
+      "sha256": "9bb2c8a84e4db0480bd48fba3b04c2e49b82e28afd1dae5024fa40a07a1b0995",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3026944,
+      "bytes": 4097,
+      "sha256": "9722fa4a83e528278c7f5009da2486e7255af8756a888733a4ceaee449e0f102",
+      "purpose": "org.pomologie.contiguous stored data"
+    },
+    {
+      "source_offset": 3035136,
+      "bytes": 4096,
+      "sha256": "fb7363f1f02c2f244c32aa8076ef7edbc2e621137542836adc1e312143968d75",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3043328,
+      "bytes": 4096,
+      "sha256": "300149a02cb87df26610b2e874637411f567bba9b586c90f47dc126ff203c0e8",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3051520,
+      "bytes": 4096,
+      "sha256": "c9ac7b0624824f844f6c7f3d50fab9741a8914e878467e8daaedca143a34d90b",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3059712,
+      "bytes": 4096,
+      "sha256": "1e640ad0fd3b249a835edf54dd802b9a4be0b093b17db2c60be2dd9c6b6c6ebf",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3067904,
+      "bytes": 4096,
+      "sha256": "8027abbcb17ff5a4c6bf2a5a8761dbd29e465336b0bfbf9bcd77e0d8a622f2ff",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3076096,
+      "bytes": 4096,
+      "sha256": "40bcea1a7a15701f47850819f064c5ea097d5ac9dce7a3861036b302ff82cc41",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3084288,
+      "bytes": 4096,
+      "sha256": "3deff1bf6e362c3ab528926550faccbdca220dbb124fa28d88daa694072d165f",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3092480,
+      "bytes": 4096,
+      "sha256": "c150fdde6caca7012e0b945b0917146ec19da5d03e9ca14685b66e4c8190f1b3",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3100672,
+      "bytes": 4096,
+      "sha256": "ab3072409797eddf337b34f4c0e68c55c5d358b1b939031879f8d8b4922865cf",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3108864,
+      "bytes": 4096,
+      "sha256": "eb12cdd03f846d40900de0534e04edd3fe464839bc40784678fa08f2f64da068",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3117056,
+      "bytes": 4096,
+      "sha256": "a17f54b1452b2bda077b58ad5cec2b49764dddf1b09c9b345475ac603c514cf7",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3125248,
+      "bytes": 4096,
+      "sha256": "a1d8e952ebca8e3b696a08bf238740eb415de106914f978637e097a0d785cdb7",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3133440,
+      "bytes": 4096,
+      "sha256": "c663cfac30430ae0063ef566967a3309489f9a0b6f74b6feefd93f163a593bc4",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3141632,
+      "bytes": 4096,
+      "sha256": "108e61a3206271b8ee237033cb15a240cb33b912ca7c2ee40f703409f7f044d8",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3149824,
+      "bytes": 4096,
+      "sha256": "1fef5f6a0d5dcc70dc8b47de8920f3dbd014d89c81683f6f784e027562a49063",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3158016,
+      "bytes": 4096,
+      "sha256": "3557087672712b6a65e7b37ceae836a58c2fe1739cb8fad5cb317ebb2ffb94e2",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3166208,
+      "bytes": 4096,
+      "sha256": "a3ee21d0ee09617b7d834e76b0e08967e9a45576a299c3281af1ba34de4330fd",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3174400,
+      "bytes": 4096,
+      "sha256": "4896f1347da904df64a01d201a2e24058481b430ce8c3e9b4ffd6e25b83bd09e",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3182592,
+      "bytes": 4096,
+      "sha256": "7c118c7c0efdb62a070d76a3b1c13b565d27eb4bb9513660f93588115a7c30ab",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3190784,
+      "bytes": 4096,
+      "sha256": "4c8eb34dd61fec7359a240d9639febfc5d7207307095cd26c0b9660cb8d56da9",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3198976,
+      "bytes": 4096,
+      "sha256": "797d227c1422c1218cb2e87b6f07fcb8540048824006ce162fec7c92292357a1",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3207168,
+      "bytes": 4096,
+      "sha256": "5facf3f3fc3cb9c9f9084538295bfbd6adc3fba2a4594fad8a230be3d3933b41",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3215360,
+      "bytes": 4096,
+      "sha256": "9dceb988e4a670d7b0de6d850e263479acfa926c95a4de5fb4351dc8e15d866b",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3223552,
+      "bytes": 4096,
+      "sha256": "abc2409e203f5318d39a29d9d858d266c0038f2fe4c7d84af7e40e57390af3bf",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3231744,
+      "bytes": 4096,
+      "sha256": "c0bd750efb26f9bcc0c6e25617e3b19469e67810f5021540e08cf2b6caee8808",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 3239936,
+      "bytes": 24,
+      "sha256": "d92500838f9a0e4d132a66513ed58675b8661baa0af64696c58b9dd09ac3a069",
+      "purpose": "org.pomologie.fragmented stored data"
+    },
+    {
+      "source_offset": 16776192,
+      "bytes": 512,
+      "sha256": "61740c9c3119f8c42fad7adb3de948b8a4188024434239a1d703cae0f4aff568",
+      "purpose": "alternate header"
+    }
+  ]
+}

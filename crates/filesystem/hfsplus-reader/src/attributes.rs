@@ -1,27 +1,31 @@
-//! Bounded reads of the native HFS+ inline attribute tree.
+//! Bounded stored-value reads of the native HFS+ attribute tree.
 
 use alloc::{collections::TryReserveError, vec::Vec};
 use core::{fmt, ops::ControlFlow};
 
-use hfsplus_core::{ByteLen, ReadAt};
+use hfsplus_core::{ByteLen, ByteOffset, ReadAt};
 use hfsplus_format::{
 	Error as FormatError,
-	attributes::{InlineRecord, Key},
+	attributes::{Key, Record, Value},
 	btree::NodeId,
-	volume::CatalogId,
+	volume::{CatalogId, Geometry},
 };
 
-use crate::{Error as VolumeError, SpecialFile, Volume};
+use crate::{Error as VolumeError, SpecialFile, Volume, overflow::OverflowError};
 
 mod tree;
+mod value;
 
 use tree::{Query, Tree};
+use value::{ForkChain, Storage};
+
+pub use value::AttributeValue;
 
 const FIRST_ATTRIBUTE_BLOCK: u32 = 0;
-const FORK_ATTRIBUTE_RECORD: u32 = 0x20;
-const EXTENTS_ATTRIBUTE_RECORD: u32 = 0x30;
 const DEFAULT_MAX_NODES: usize = 64;
 const DEFAULT_MAX_ENTRIES: usize = 1024;
+/// Maximum owned value size returned by [`Attributes::open_attr`].
+pub const MAX_OWNED_ATTRIBUTE_BYTES: ByteLen = ByteLen(1 << 20);
 
 /// Resource limits for one attribute lookup or listing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,7 +50,7 @@ impl Default for AttributeReadLimits {
 pub struct AttributeEntry {
 	/// Exact UTF-16 name units in binary order, without catalog normalization.
 	pub name: Vec<u16>,
-	/// Inline value length or an unsupported representation reported by the decoder.
+	/// Stored value length or an unsupported representation reported by the decoder.
 	pub encoding: AttributeEncoding,
 }
 
@@ -56,11 +60,13 @@ pub struct AttributeEntry {
 pub enum AttributeEncoding {
 	/// Exact byte length of the inline value, excluding alignment padding.
 	Inline(ByteLen),
+	/// Exact logical byte length of a validated extent-backed value.
+	Fork(ByteLen),
 	/// Inline value outside the qualified size profile.
 	UnsupportedInlineSize(usize),
 	/// The attribute controls compressed file data.
 	CompressedFile,
-	/// Unsupported on-disk record kind, including fork-backed attributes.
+	/// Unsupported on-disk record kind.
 	UnsupportedRecord(u32),
 }
 
@@ -81,6 +87,25 @@ pub enum AttributeReadError<E> {
 		/// The format error, including typed unsupported attribute representations.
 		error: FormatError,
 	},
+	/// A continuation begins at the wrong logical allocation block.
+	InvalidStart {
+		node: NodeId,
+		expected: u32,
+		actual: u32,
+	},
+	/// Allocation records ended before the declared fork allocation was covered.
+	IncompleteFork {
+		node: NodeId,
+		covered: u32,
+		declared: u32,
+	},
+	/// The assembled fork contains an invalid physical mapping.
+	Layout {
+		node: NodeId,
+		error: OverflowError<E>,
+	},
+	/// A value exceeds the convenience method's owned byte limit.
+	ValueLimit { bytes: ByteLen },
 	/// The operation reached its node limit.
 	NodeLimit,
 	/// The listing reached its name limit.
@@ -104,6 +129,32 @@ impl<E: fmt::Display> fmt::Display for AttributeReadError<E> {
 			Self::Format { node, error } => {
 				write!(formatter, "attribute tree node {}: {error}", node.0)
 			}
+			Self::InvalidStart {
+				node,
+				expected,
+				actual,
+			} => write!(
+				formatter,
+				"attribute node {} starts at block {actual}, expected {expected}",
+				node.0
+			),
+			Self::IncompleteFork {
+				node,
+				covered,
+				declared,
+			} => write!(
+				formatter,
+				"attribute at node {} covers {covered} of {declared} blocks",
+				node.0
+			),
+			Self::Layout { node, error } => {
+				write!(formatter, "attribute fork at node {}: {error}", node.0)
+			}
+			Self::ValueLimit { bytes } => write!(
+				formatter,
+				"attribute value of {} bytes exceeds the owned read limit",
+				bytes.0
+			),
 			Self::NodeLimit => formatter.write_str("attribute tree node limit exceeded"),
 			Self::EntryLimit => formatter.write_str("attribute listing limit exceeded"),
 			Self::Allocation(error) => error.fmt(formatter),
@@ -116,8 +167,9 @@ impl<E: core::error::Error + 'static> core::error::Error for AttributeReadError<
 		match self {
 			Self::Fork(error) => Some(error),
 			Self::Format { error, .. } => Some(error),
+			Self::Layout { error, .. } => Some(error),
 			Self::Allocation(error) => Some(error),
-			Self::UnsupportedTree | Self::InvalidName | Self::NodeLimit | Self::EntryLimit => None,
+			_ => None,
 		}
 	}
 }
@@ -125,6 +177,7 @@ impl<E: core::error::Error + 'static> core::error::Error for AttributeReadError<
 /// Attribute access bound to one immutable volume view.
 #[derive(Debug)]
 pub struct Attributes<'volume, S> {
+	volume: &'volume Volume<S>,
 	tree: Option<Tree<'volume, S>>,
 	limits: AttributeReadLimits,
 }
@@ -148,23 +201,30 @@ impl<S: ReadAt> Volume<S> {
 		} else {
 			Some(Tree::open(fork)?)
 		};
-		Ok(Attributes { tree, limits })
+		Ok(Attributes {
+			volume: self,
+			tree,
+			limits,
+		})
 	}
 }
 
-impl<S: ReadAt> Attributes<'_, S> {
+impl<'volume, S: ReadAt> Attributes<'volume, S> {
 	/// Lists every distinct attribute on `owner`, preserving binary name order.
+	/// Validates each fork's allocation chain without reading its payload.
 	/// Unsupported values are listed with their observed encoding.
 	/// # Errors
-	/// Returns an error for corrupt keys, failed I/O, or exhaustion of a read limit.
+	/// Returns an error for corrupt keys or chains, failed I/O, or read limits.
 	pub fn list_attrs(
 		&self,
 		owner: CatalogId,
 	) -> Result<Vec<AttributeEntry>, AttributeReadError<S::Error>> {
-		let mut entries = Vec::new();
+		let mut entries: Vec<AttributeEntry> = Vec::new();
 		let Some(tree) = &self.tree else {
 			return Ok(entries);
 		};
+		let geometry = self.volume.header().geometry;
+		let mut chain: Option<ForkChain> = None;
 		tree.scan(
 			Query { owner, name: &[] },
 			self.limits.max_nodes,
@@ -173,14 +233,38 @@ impl<S: ReadAt> Attributes<'_, S> {
 					return Ok(ControlFlow::Break(()));
 				}
 				if key.start_block != FIRST_ATTRIBUTE_BLOCK {
-					check_continuation(entries.last(), node, key, raw)?;
+					if !entries
+						.last()
+						.is_some_and(|entry| key.name.units().eq(entry.name.iter().copied()))
+					{
+						return Err(AttributeReadError::format(
+							node,
+							FormatError::InvalidAttribute,
+						));
+					}
+					append_continuation(chain.as_mut(), node, raw, geometry)?;
 					return Ok(ControlFlow::Continue(()));
+				}
+				if let Some(previous) = chain.take() {
+					previous.finish(self.volume)?;
 				}
 				if entries.len() >= self.limits.max_entries {
 					return Err(AttributeReadError::EntryLimit);
 				}
-				let encoding = match InlineRecord::decode(raw) {
-					Ok(record) => AttributeEncoding::Inline(ByteLen::from(record.value.len())),
+				let encoding = match Record::decode(raw, geometry).map(|record| record.value) {
+					Ok(Value::Inline(bytes)) => {
+						AttributeEncoding::Inline(ByteLen::from(bytes.len()))
+					}
+					Ok(Value::Fork(fork)) => {
+						chain = Some(ForkChain::new(node, fork, geometry)?);
+						AttributeEncoding::Fork(ByteLen(fork.logical_bytes))
+					}
+					Ok(_) => {
+						return Err(AttributeReadError::format(
+							node,
+							FormatError::InvalidAttribute,
+						));
+					}
 					Err(FormatError::UnsupportedAttributeRecord(kind)) => {
 						AttributeEncoding::UnsupportedRecord(kind)
 					}
@@ -204,25 +288,65 @@ impl<S: ReadAt> Attributes<'_, S> {
 				Ok(ControlFlow::Continue(()))
 			},
 		)?;
+		if let Some(fork) = chain {
+			fork.finish(self.volume)?;
+		}
 		Ok(entries)
 	}
 
-	/// Reads the exact inline value for a raw UTF-16 name. A present empty value
-	/// is `Some` with an empty vector. A missing attribute is `None`.
+	/// Reads the exact stored value within [`MAX_OWNED_ATTRIBUTE_BYTES`]. A
+	/// present empty value returns `Some` with an empty vector. Use
+	/// [`Self::open_attribute`] to read larger values by logical range.
 	/// # Errors
-	/// Returns an error for invalid names, changed or incomplete source reads,
-	/// corrupt trees, or unsupported records such as fork-backed attributes and
-	/// compression metadata.
+	/// Returns an error for unreadable metadata or payloads, unsupported
+	/// representations, or values exceeding the owned read limit.
 	pub fn open_attr(
 		&self,
 		owner: CatalogId,
 		name: &[u16],
 	) -> Result<Option<Vec<u8>>, AttributeReadError<S::Error>> {
+		let Some(value) = self.open_attribute(owner, name)? else {
+			return Ok(None);
+		};
+		let bytes = value.len();
+		if bytes.0 > MAX_OWNED_ATTRIBUTE_BYTES.0 {
+			return Err(AttributeReadError::ValueLimit { bytes });
+		}
+		let result = match value.value {
+			Storage::Inline(bytes) => bytes,
+			Storage::Fork(fork) => {
+				let len = usize::try_from(bytes.0)
+					.map_err(|_| AttributeReadError::ValueLimit { bytes })?;
+				let mut result = Vec::new();
+				result
+					.try_reserve_exact(len)
+					.map_err(AttributeReadError::Allocation)?;
+				result.resize(len, 0);
+				fork.read_exact_at(ByteOffset(0), &mut result)
+					.map_err(AttributeReadError::Fork)?;
+				result
+			}
+		};
+		Ok(Some(result))
+	}
+
+	/// Opens a validated inline or fork-backed value by its raw UTF-16 name.
+	/// A missing attribute returns `None`. Fork payloads are read on demand.
+	/// # Errors
+	/// Rejects invalid names, source and range failures, malformed extent chains,
+	/// exhausted limits, and unsupported forms such as compression metadata.
+	pub fn open_attribute(
+		&self,
+		owner: CatalogId,
+		name: &[u16],
+	) -> Result<Option<AttributeValue<'volume, S>>, AttributeReadError<S::Error>> {
 		Key::encoded_len(name).map_err(|_| AttributeReadError::InvalidName)?;
 		let Some(tree) = &self.tree else {
 			return Ok(None);
 		};
-		let mut result = None;
+		let geometry = self.volume.header().geometry;
+		let mut inline = None;
+		let mut chain = None;
 		tree.scan(
 			Query { owner, name },
 			self.limits.max_nodes,
@@ -231,46 +355,54 @@ impl<S: ReadAt> Attributes<'_, S> {
 					return Ok(ControlFlow::Break(()));
 				}
 				if key.start_block != FIRST_ATTRIBUTE_BLOCK {
-					return Err(AttributeReadError::format(
-						node,
-						FormatError::InvalidAttribute,
-					));
+					append_continuation(chain.as_mut(), node, raw, geometry)?;
+					return Ok(ControlFlow::Continue(()));
 				}
-				let record = InlineRecord::decode(raw)
+				let record = Record::decode(raw, geometry)
 					.map_err(|error| AttributeReadError::format(node, error))?;
-				let mut bytes = Vec::new();
-				bytes
-					.try_reserve_exact(record.value.len())
-					.map_err(AttributeReadError::Allocation)?;
-				bytes.extend_from_slice(record.value);
-				result = Some(bytes);
+				match record.value {
+					Value::Inline(bytes) => inline = Some(copy_inline(bytes)?),
+					Value::Fork(fork) => chain = Some(ForkChain::new(node, fork, geometry)?),
+					_ => {
+						return Err(AttributeReadError::format(
+							node,
+							FormatError::InvalidAttribute,
+						));
+					}
+				}
 				Ok(ControlFlow::Continue(()))
 			},
 		)?;
-		Ok(result)
+		let result = if let Some(fork) = chain {
+			Some(Storage::Fork(fork.finish(self.volume)?))
+		} else {
+			inline.map(Storage::Inline)
+		};
+		Ok(result.map(|value| AttributeValue { value }))
 	}
 }
 
-fn check_continuation<E>(
-	previous: Option<&AttributeEntry>,
+fn append_continuation<E>(
+	chain: Option<&mut ForkChain>,
 	node: NodeId,
-	key: Key<'_>,
 	raw: &[u8],
+	geometry: Geometry,
 ) -> Result<(), AttributeReadError<E>> {
-	let follows_fork = previous.is_some_and(|entry| {
-		entry.encoding == AttributeEncoding::UnsupportedRecord(FORK_ATTRIBUTE_RECORD)
-			&& key.name.units().eq(entry.name.iter().copied())
-	});
-	if follows_fork
-		&& InlineRecord::decode(raw)
-			== Err(FormatError::UnsupportedAttributeRecord(
-				EXTENTS_ATTRIBUTE_RECORD,
-			)) {
-		Ok(())
-	} else {
-		Err(AttributeReadError::format(
-			node,
-			FormatError::InvalidAttribute,
-		))
-	}
+	let invalid = || AttributeReadError::format(node, FormatError::InvalidAttribute);
+	let chain = chain.ok_or_else(invalid)?;
+	let record =
+		Record::decode(raw, geometry).map_err(|error| AttributeReadError::format(node, error))?;
+	let Value::Extents(group) = record.value else {
+		return Err(invalid());
+	};
+	chain.append(node, record.key.start_block, group)
+}
+
+fn copy_inline<E>(value: &[u8]) -> Result<Vec<u8>, AttributeReadError<E>> {
+	let mut bytes = Vec::new();
+	bytes
+		.try_reserve_exact(value.len())
+		.map_err(AttributeReadError::Allocation)?;
+	bytes.extend_from_slice(value);
+	Ok(bytes)
 }

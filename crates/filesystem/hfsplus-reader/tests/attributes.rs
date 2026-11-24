@@ -34,7 +34,8 @@ const BELOW_LIMIT: &str = "org.pomologie.n3801";
 const INLINE_LIMIT: &str = "org.pomologie.n3802";
 const FIRST_FORK: &str = "org.pomologie.n3803";
 const SECOND_FORK: &str = "org.pomologie.n4096";
-const FORK_RECORD: u32 = 0x20;
+const FIRST_FORK_BYTES: ByteLen = ByteLen(3803);
+const SECOND_FORK_BYTES: ByteLen = ByteLen(4096);
 const INLINE_FILL_BYTE: u8 = b's';
 
 #[test]
@@ -69,11 +70,11 @@ fn lists_native_attributes_and_reads_exact_distinct_inline_values() {
 	);
 	assert_eq!(
 		encoding(FIRST_FORK),
-		AttributeEncoding::UnsupportedRecord(FORK_RECORD)
+		AttributeEncoding::Fork(FIRST_FORK_BYTES)
 	);
 	assert_eq!(
 		encoding(SECOND_FORK),
-		AttributeEncoding::UnsupportedRecord(FORK_RECORD)
+		AttributeEncoding::Fork(SECOND_FORK_BYTES)
 	);
 	assert_eq!(source.node_reads.get(), 4);
 
@@ -88,12 +89,18 @@ fn lists_native_attributes_and_reads_exact_distinct_inline_values() {
 	assert_eq!(read("org.pomologie.absent"), None);
 	assert!(attributes.list_attrs(ABSENT_OWNER).unwrap().is_empty());
 
+	let first = attributes
+		.open_attribute(OWNER, &utf16(FIRST_FORK))
+		.unwrap()
+		.unwrap();
+	assert_eq!(first.len(), FIRST_FORK_BYTES);
+	assert_eq!(first.extents().count(), 1);
 	assert!(matches!(
 		attributes.open_attr(OWNER, &utf16(FIRST_FORK)),
-		Err(AttributeReadError::Format {
-			node: LAST_LEAF,
-			error: FormatError::UnsupportedAttributeRecord(FORK_RECORD),
-		})
+		Err(AttributeReadError::Fork(VolumeError::Source {
+			error: FixtureError::OutsideStoredSegments,
+			..
+		}))
 	));
 }
 

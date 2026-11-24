@@ -1,4 +1,4 @@
-//! Lossless attribute keys and checked inline values for native HFS+ trees.
+//! Lossless attribute records for native HFS+ trees.
 //!
 //! The modern inline layout and limits are qualified against macOS 14.7.2
 //! and the Apple macOS 14.5 SDK declarations for `HFSPlusAttrKey` and
@@ -12,6 +12,10 @@ use crate::{
 	catalog::{RawName, write_name},
 	volume::CatalogId,
 };
+
+mod forks;
+
+pub use forks::{EXTENTS_PER_RECORD, Record, Value};
 
 /// Maximum number of UTF-16 code units in an attribute name.
 pub const MAX_NAME_UNITS: usize = 127;
@@ -39,7 +43,8 @@ const INLINE_VALUE_LENGTH_OFFSET: usize = 12;
 const INLINE_HEADER_BYTES: usize = INLINE_VALUE_LENGTH_OFFSET + size_of::<u32>();
 const INLINE_START_BLOCK: u32 = 0;
 const VALUE_ALIGNMENT: usize = 2;
-const COMPRESSED_ATTRIBUTE_NAME: &str = "com.apple.decmpfs";
+/// Name reserved for Apple's compressed-file control metadata.
+pub const COMPRESSED_ATTRIBUTE_NAME: &str = "com.apple.decmpfs";
 
 /// Owner ID, raw attribute name, and logical starting block of one record.
 /// Attribute records sort by these fields, comparing the name as raw UTF-16.
@@ -175,6 +180,26 @@ impl<'bytes> InlineRecord<'bytes> {
 			return Err(Error::UnsupportedAttributeRecord(kind));
 		}
 		reject_compressed_attribute(key.name.units())?;
+		Self::decode_value(key, inline)
+	}
+
+	/// Decodes the exact stored inline compression metadata for a logical
+	/// compressed-fork reader. The attribute name must be `com.apple.decmpfs`.
+	/// # Errors
+	/// Rejects other names, non-inline records, and invalid starts or lengths.
+	pub fn decode_compression_metadata(bytes: &'bytes [u8]) -> Result<Self, Error> {
+		let (key, inline) = Key::split(bytes)?;
+		if !is_compressed_attribute(key.name.units()) {
+			return Err(Error::InvalidAttribute);
+		}
+		let kind = u32_at(inline, RECORD_KIND_OFFSET)?;
+		if kind != INLINE_RECORD {
+			return Err(Error::UnsupportedAttributeRecord(kind));
+		}
+		Self::decode_value(key, inline)
+	}
+
+	fn decode_value(key: Key<'bytes>, inline: &'bytes [u8]) -> Result<Self, Error> {
 		if key.start_block != INLINE_START_BLOCK {
 			return Err(Error::InvalidAttribute);
 		}
@@ -212,10 +237,14 @@ fn inline_record_lengths(name: &[u16], value_bytes: usize) -> Result<(usize, usi
 }
 
 fn reject_compressed_attribute(units: impl Iterator<Item = u16>) -> Result<(), Error> {
-	if units.eq(COMPRESSED_ATTRIBUTE_NAME.bytes().map(u16::from)) {
+	if is_compressed_attribute(units) {
 		return Err(Error::UnsupportedCompressedAttribute);
 	}
 	Ok(())
+}
+
+fn is_compressed_attribute(units: impl Iterator<Item = u16>) -> bool {
+	units.eq(COMPRESSED_ATTRIBUTE_NAME.bytes().map(u16::from))
 }
 
 fn write_key(
