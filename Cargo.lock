@@ -17,3 +17,11 @@ version = "0.1.0"
 [[package]]
 name = "hfsplus-format"
 version = "0.1.0"
+
+[[package]]
+name = "hfsplus-reader"
+version = "0.1.0"
+dependencies = [
+ "hfsplus-core",
+ "hfsplus-format",
+]

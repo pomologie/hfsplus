@@ -14,7 +14,7 @@ pub const PRIMARY_HEADER_OFFSET: u64 = 1024;
 /// On-disk length of a volume header.
 pub const HEADER_BYTES: usize = 512;
 /// Start of the alternate header relative to the volume end.
-const ALTERNATE_HEADER_FROM_END: u64 = 1024;
+pub const ALTERNATE_HEADER_FROM_END: u64 = 1024;
 const MIN_VOLUME_BYTES: u64 =
 	PRIMARY_HEADER_OFFSET + HEADER_BYTES as u64 + ALTERNATE_HEADER_FROM_END;
 const MIN_ALLOCATION_BLOCK_BYTES: u32 = 512;
@@ -22,8 +22,27 @@ const HFS_PLUS_SIGNATURE: [u8; 2] = *b"H+";
 const HFS_X_SIGNATURE: [u8; 2] = *b"HX";
 const HFS_PLUS_VERSION: u16 = 4;
 const HFS_X_VERSION: u16 = 5;
-const CLEAN_UNMOUNT_ATTRIBUTE: u32 = 1 << 8;
-const JOURNALED_ATTRIBUTE: u32 = 1 << 13;
+/// Volume hardware write lock.
+pub const HARDWARE_LOCK_ATTRIBUTE: u32 = 1 << 7;
+/// Volume declared cleanly unmounted.
+pub const CLEAN_UNMOUNT_ATTRIBUTE: u32 = 1 << 8;
+/// Extents overflow tree contains records for bad allocation blocks.
+pub const SPARED_BLOCKS_ATTRIBUTE: u32 = 1 << 9;
+/// Volume requests that blocks are not cached.
+pub const NO_CACHE_ATTRIBUTE: u32 = 1 << 10;
+/// Volume requires a consistency check.
+pub const INCONSISTENT_ATTRIBUTE: u32 = 1 << 11;
+/// Catalog node identifiers may have wrapped and been reused.
+pub const CNID_REUSE_ATTRIBUTE: u32 = 1 << 12;
+/// Volume uses a journal.
+pub const JOURNALED_ATTRIBUTE: u32 = 1 << 13;
+/// Volume software write lock.
+pub const SOFTWARE_LOCK_ATTRIBUTE: u32 = 1 << 15;
+/// Volume records the unused B-tree node fix.
+///
+/// This bit is documented in Apple's HFS volume attribute declarations and is
+/// present on the native partitionless fixture.
+pub const UNUSED_NODE_FIX_ATTRIBUTE: u32 = 1 << 31;
 const LAST_MOUNTED_BYTES: usize = 4;
 const FINDER_INFO_BYTES: usize = 32;
 const VOLUME_DATE_COUNT: usize = 4;
@@ -303,6 +322,15 @@ impl Fork {
 			.iter()
 			.copied()
 			.take_while(|extent| extent.blocks != EMPTY_EXTENT.blocks)
+	}
+
+	/// Revalidates this descriptor against the receiving volume's geometry.
+	///
+	/// # Errors
+	/// Returns [`Error::InvalidFork`] for out-of-range or overlapping extents
+	/// and inconsistent logical or allocated sizes.
+	pub fn validate_geometry(&self, geometry: Geometry) -> Result<(), Error> {
+		self.validate(geometry).map(|_| ())
 	}
 
 	/// Whether additional extents are needed to read the full fork allocation.

@@ -31,7 +31,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [hfsplus-core, hfsplus-format]
+        package: [hfsplus-core, hfsplus-format, hfsplus-reader]
         target: [aarch64-unknown-none, x86_64-unknown-none]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -46,7 +46,12 @@ jobs:
           FS_TARGET: ${{ matrix.target }}
         run: |
           tree=$(cargo tree --locked -p "$FS_PACKAGE" --no-default-features --target "$FS_TARGET" -e normal --prefix none --format '{p}')
-          test "$(wc -l <<< "$tree")" -eq 1
+          actual=$(awk '{print $1}' <<< "$tree" | LC_ALL=C sort -u)
+          expected="$FS_PACKAGE"
+          if [[ "$FS_PACKAGE" == hfsplus-reader ]]; then
+            expected=$(printf '%s\n' hfsplus-core hfsplus-format hfsplus-reader)
+          fi
+          test "$actual" = "$expected"
 
   placement-proof:
     runs-on: ubuntu-24.04
