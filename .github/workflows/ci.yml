@@ -47,3 +47,13 @@ jobs:
         run: |
           tree=$(cargo tree --locked -p "$FS_PACKAGE" --no-default-features --target "$FS_TARGET" -e normal --prefix none --format '{p}')
           test "$(wc -l <<< "$tree")" -eq 1
+
+  placement-proof:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - run: cargo install --locked kani-verifier --version '=0.68.0'
+      - run: cargo kani setup
+      - run: bash crates/filesystem/hfsplus-builder/verification/check.sh

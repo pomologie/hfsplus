@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "hfsplus-builder"
+version = "0.1.0"
+dependencies = [
+ "hfsplus-core",
+]
+
+[[package]]
 name = "hfsplus-core"
 version = "0.1.0"
 
