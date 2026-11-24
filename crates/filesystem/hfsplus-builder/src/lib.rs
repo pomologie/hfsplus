@@ -8,6 +8,7 @@ mod error;
 mod plan;
 mod stream;
 pub mod tree;
+pub mod volume;
 
 pub use error::{PlanError, ReadError, WriteError};
 pub use plan::{Limits, PlanBuilder, RangeKind, SealedPlan};
