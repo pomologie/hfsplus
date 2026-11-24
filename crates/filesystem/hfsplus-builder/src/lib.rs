@@ -15,5 +15,8 @@ pub use plan::{Limits, PlanBuilder, RangeKind, SealedPlan};
 pub use stream::ImageReader;
 
 #[cfg(kani)]
+#[path = "../verification/kani/bitmap.rs"]
+mod bitmap_proof;
+#[cfg(kani)]
 #[path = "../verification/kani/placement.rs"]
 mod placement_proof;
