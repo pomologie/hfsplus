@@ -4,8 +4,8 @@ use hfsplus_format::{
 		BIG_KEYS_MASK, CASE_FOLDING_COMPARE, HFS_BTREE_TYPE, TreeMetadata, VARIABLE_INDEX_KEYS_MASK,
 	},
 	catalog::{
-		EncodeValue, FLAG_THREAD_EXISTS, Key, MAX_KEY_LENGTH, MAX_NAME_UNITS, Metadata,
-		Permissions, Record as CatalogRecord, ThreadKind,
+		EncodeValue, FLAG_THREAD_EXISTS, Key, MAX_KEY_LENGTH, Metadata, Permissions,
+		Record as CatalogRecord, ThreadKind,
 	},
 	volume::{
 		CatalogId, Extent, Fork, Geometry, HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET,
@@ -22,7 +22,7 @@ use crate::{
 use super::{
 	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource,
 	SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError,
-	manifest::{AsciiVolumeDraft, ROOT_ID, ROOT_PARENT_ID, basename, compare_names},
+	manifest::{ROOT_ID, ROOT_PARENT_ID, VolumeDraft},
 };
 
 const NODE_BYTES: u16 = 4096;
@@ -32,21 +32,23 @@ const ALT_HEADER_FROM_END: u64 = 1024;
 const FILE_TYPE: u16 = 0o100000;
 const FOLDER_TYPE: u16 = 0o040000;
 const SYMLINK_TYPE: u16 = 0o120000;
-const MAC_ROMAN_ENCODING: u32 = 0;
-const MAC_ROMAN_ENCODING_PRESENT: u64 = 1 << MAC_ROMAN_ENCODING;
+// Catalog names are Unicode and carry no source Mac encoding. Keep the
+// legacy Pascal-string encoding hint and corresponding bitmap at their defaults.
+const DEFAULT_ENCODING_HINT: u32 = 0;
+const DEFAULT_ENCODING_PRESENT: u64 = 1 << DEFAULT_ENCODING_HINT;
 const RESERVED_CATALOG_FORK_WORD: u32 = 0;
 const RECORDS_PER_ENTRY: usize = 2;
 
-pub(super) fn seal<S: ReadAt>(
-	draft: AsciiVolumeDraft<'_, S>,
-) -> Result<SealedPlan<S>, VolumeError> {
-	let AsciiVolumeDraft {
+pub(super) fn seal<S: ReadAt>(draft: VolumeDraft<'_, S>) -> Result<SealedPlan<S>, VolumeError> {
+	let VolumeDraft {
 		options,
+		label,
 		entries,
 		root_valence,
 		folder_count,
 		file_count,
 		next_id,
+		..
 	} = draft;
 	let geometry = options.geometry;
 	let mut allocation = Allocation::new(geometry)?;
@@ -58,12 +60,12 @@ pub(super) fn seal<S: ReadAt>(
 	records.add_entry(
 		ROOT_PARENT_ID,
 		ROOT_ID,
-		options.label,
+		label.as_units(),
 		folder(ROOT_ID, options.root, root_valence),
 		ThreadKind::Folder,
 	)?;
 	for entry in entries {
-		let name = basename(entry.input.path);
+		let name = entry.path.name();
 		let (value, kind) = match entry.input.kind {
 			EntryKind::Folder => (
 				folder(entry.id, entry.input.metadata, entry.valence),
@@ -173,7 +175,7 @@ pub(super) fn seal<S: ReadAt>(
 	header.next_catalog_id = next_id;
 	header.dates = options.dates;
 	header.finder_info = options.finder_info;
-	header.encodings = MAC_ROMAN_ENCODING_PRESENT;
+	header.encodings = DEFAULT_ENCODING_PRESENT;
 	let header = header.encode()?;
 
 	let mut image = Emitter::new(geometry, options.limits);
@@ -230,7 +232,7 @@ fn metadata(id: CatalogId, input: EntryMetadata, kind: u16, flags: u16) -> Metad
 			special: 0,
 		},
 		finder_info: input.finder_info,
-		encoding: MAC_ROMAN_ENCODING,
+		encoding: DEFAULT_ENCODING_HINT,
 	}
 }
 
@@ -311,20 +313,20 @@ fn tree_options(
 	}
 }
 
-struct Catalog<'a> {
+struct Catalog {
 	geometry: Geometry,
-	records: Vec<EncodedRecord<'a>>,
+	records: Vec<EncodedRecord>,
 	remaining_record_bytes: usize,
 }
 
-struct EncodedRecord<'a> {
-	id: CatalogId,
-	name: &'a str,
+struct EncodedRecord {
+	parent_or_thread: CatalogId,
+	child: Option<CatalogId>,
 	key_width: usize,
 	bytes: Box<[u8]>,
 }
 
-impl<'a> Catalog<'a> {
+impl Catalog {
 	fn new(geometry: Geometry, entries: usize, metadata_limit: usize) -> Result<Self, VolumeError> {
 		let record_count = entries
 			.checked_add(1)
@@ -343,37 +345,22 @@ impl<'a> Catalog<'a> {
 		&mut self,
 		parent: CatalogId,
 		id: CatalogId,
-		name: &'a str,
+		name: &[u16],
 		value: EncodeValue<'_>,
 		kind: ThreadKind,
 	) -> Result<(), VolumeError> {
-		let mut units = [0; MAX_NAME_UNITS];
-		// The admitted name is ASCII, so each byte occupies one UTF-16 unit.
-		let encoded_name = &mut units[..name.len()];
-		for (unit, byte) in encoded_name.iter_mut().zip(name.bytes()) {
-			*unit = u16::from(byte);
-		}
-		self.push(parent, name, encoded_name, value)?;
-		self.push(
-			id,
-			"",
-			&[],
-			EncodeValue::Thread {
-				kind,
-				parent,
-				name: encoded_name,
-			},
-		)
+		self.push(parent, Some(id), name, value)?;
+		self.push(id, None, &[], EncodeValue::Thread { kind, parent, name })
 	}
 
 	fn push(
 		&mut self,
-		id: CatalogId,
-		name: &'a str,
-		encoded_name: &[u16],
+		parent_or_thread: CatalogId,
+		child: Option<CatalogId>,
+		name: &[u16],
 		value: EncodeValue<'_>,
 	) -> Result<(), VolumeError> {
-		let size = CatalogRecord::encoded_len(encoded_name, value)?;
+		let size = CatalogRecord::encoded_len(name, value)?;
 		self.remaining_record_bytes = self
 			.remaining_record_bytes
 			.checked_sub(size)
@@ -381,22 +368,21 @@ impl<'a> Catalog<'a> {
 		let mut bytes = Vec::new();
 		bytes.try_reserve_exact(size)?;
 		bytes.resize(size, 0);
-		CatalogRecord::encode(id, encoded_name, value, self.geometry, &mut bytes)?;
+		CatalogRecord::encode(parent_or_thread, name, value, self.geometry, &mut bytes)?;
 		self.records.push(EncodedRecord {
-			id,
-			name,
-			key_width: Key::encoded_len(encoded_name)?,
+			parent_or_thread,
+			child,
+			key_width: Key::encoded_len(name)?,
 			bytes: bytes.into_boxed_slice(),
 		});
 		Ok(())
 	}
 
 	fn pack(mut self, options: TreeOptions) -> Result<PackedTree, VolumeError> {
-		self.records.sort_unstable_by(|left, right| {
-			left.id
-				.cmp(&right.id)
-				.then_with(|| compare_names(left.name, right.name))
-		});
+		// Sibling IDs were assigned in HFS+ collation order. A thread has the
+		// empty key, which sorts before all admitted child names.
+		self.records
+			.sort_unstable_by_key(|record| (record.parent_or_thread, record.child));
 		let mut records = Vec::new();
 		records.try_reserve_exact(self.records.len())?;
 		records.extend(

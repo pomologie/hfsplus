@@ -1,35 +1,35 @@
-use std::cmp::Ordering;
-
-use hfsplus_core::ReadAt;
-use hfsplus_format::{catalog::MAX_NAME_UNITS, volume::CatalogId};
+use hfsplus_core::{ReadAt, names::NormalizedName};
+use hfsplus_format::volume::CatalogId;
 
 use crate::SealedPlan;
 
 use super::{
 	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, MAX_SYMLINK_TARGET_BYTES,
-	ManifestEntry, SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError, VolumeOptions, emit,
+	ManifestEntry, SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError, VolumeOptions,
+	catalog_path::{NameProfile, NormalizedPath, compare_paths},
+	emit,
 };
 
 pub(super) const ROOT_PARENT_ID: CatalogId = CatalogId(1);
 pub(super) const ROOT_ID: CatalogId = CatalogId(2);
-const PATH_SEPARATOR: char = '/';
-const FORBIDDEN_NAME_BYTE: u8 = b':';
-const PRINTABLE_ASCII: std::ops::RangeInclusive<u8> = b' '..=b'~';
 const POSIX_PERMISSION_MASK: u16 = 0o7777;
 const INDIRECT_NODE_FINDER_CODES: &[[u8; 8]] = &[*b"hlnkhfs+", *b"fdrpMACS"];
 
 #[derive(Debug)]
 pub(super) struct PlannedEntry<'a, S> {
 	pub(super) input: ManifestEntry<'a, S>,
+	pub(super) path: NormalizedPath,
 	pub(super) id: CatalogId,
 	pub(super) parent: CatalogId,
 	pub(super) valence: u32,
 }
 
-/// An admitted ASCII manifest with frozen catalog IDs.
+/// An admitted manifest with frozen catalog IDs and stored UTF-16 names.
 #[derive(Debug)]
-pub struct AsciiVolumeDraft<'a, S> {
+pub struct VolumeDraft<'a, S> {
 	pub(super) options: VolumeOptions<'a>,
+	pub(super) label: NormalizedName,
+	profile: NameProfile,
 	pub(super) entries: Vec<PlannedEntry<'a, S>>,
 	pub(super) root_valence: u32,
 	pub(super) folder_count: u32,
@@ -37,16 +37,28 @@ pub struct AsciiVolumeDraft<'a, S> {
 	pub(super) next_id: CatalogId,
 }
 
-impl<S: ReadAt> AsciiVolumeDraft<'_, S> {
-	/// Gets the frozen catalog ID of a path, using the admitted ASCII comparison.
-	/// The empty path denotes the root folder.
+/// An admitted manifest returned by the printable-ASCII planning entry point.
+pub type AsciiVolumeDraft<'a, S> = VolumeDraft<'a, S>;
+
+impl<S: ReadAt> VolumeDraft<'_, S> {
+	/// Gets the frozen catalog ID of a path. The empty path denotes the root
+	/// folder. An inadmissible path or failed normalization returns `None`.
 	#[must_use]
 	pub fn catalog_id(&self, path: &str) -> Option<CatalogId> {
+		self.try_catalog_id(path).ok().flatten()
+	}
+
+	/// Gets the frozen catalog ID, sharing the name rules used during planning.
+	/// The empty path denotes the root folder.
+	///
+	/// # Errors
+	/// Returns an error for an inadmissible path or failed normalization.
+	pub fn try_catalog_id(&self, path: &str) -> Result<Option<CatalogId>, VolumeError> {
 		if path.is_empty() {
-			return Some(ROOT_ID);
+			return Ok(Some(ROOT_ID));
 		}
-		let index = find_path(&self.entries, path).ok()?;
-		Some(self.entries[index].id)
+		let normalized = NormalizedPath::new(path, self.profile)?;
+		Ok(find_path(&self.entries, normalized.units()).map(|index| self.entries[index].id))
 	}
 
 	/// Supplies the data fork for a reserved generated file without changing its ID.
@@ -58,8 +70,15 @@ impl<S: ReadAt> AsciiVolumeDraft<'_, S> {
 		path: &str,
 		data: ForkSource<S>,
 	) -> Result<(), VolumeError> {
-		let index =
-			find_path(&self.entries, path).map_err(|_| VolumeError::NotAwaitingGeneratedData)?;
+		let normalized = NormalizedPath::new(path, self.profile).map_err(|error| {
+			if self.profile == NameProfile::Ascii {
+				VolumeError::NotAwaitingGeneratedData
+			} else {
+				error
+			}
+		})?;
+		let index = find_path(&self.entries, normalized.units())
+			.ok_or(VolumeError::NotAwaitingGeneratedData)?;
 		let kind = &mut self.entries[index].input.kind;
 		let EntryKind::GeneratedFile { resource } = kind else {
 			return Err(VolumeError::NotAwaitingGeneratedData);
@@ -92,9 +111,35 @@ impl<S: ReadAt> AsciiVolumeDraft<'_, S> {
 /// case-equivalent paths and manifests that exhaust the entry or CNID budget.
 pub fn plan_ascii<'a, S: ReadAt>(
 	options: VolumeOptions<'a>,
-	mut entries: Vec<ManifestEntry<'a, S>>,
+	entries: Vec<ManifestEntry<'a, S>>,
 ) -> Result<AsciiVolumeDraft<'a, S>, VolumeError> {
-	validate_name(options.label)?;
+	prepare(options, entries, NameProfile::Ascii)
+}
+
+/// Validates a Unicode manifest and freezes its catalog IDs.
+///
+/// Paths are relative and every parent directory must be a separate entry.
+/// Display units retain case and ignorable characters after canonical
+/// decomposition. Lookup and collision checks use historical HFS+ collation.
+/// Native access can require the stored spelling for supplementary
+/// decompositions that macOS does not apply during path lookup.
+///
+/// # Errors
+/// Rejects inadmissible names, normalization failures, equivalent paths,
+/// invalid parents and metadata, and exhausted resource limits.
+pub fn plan<'a, S: ReadAt>(
+	options: VolumeOptions<'a>,
+	entries: Vec<ManifestEntry<'a, S>>,
+) -> Result<VolumeDraft<'a, S>, VolumeError> {
+	prepare(options, entries, NameProfile::Unicode)
+}
+
+fn prepare<'a, S: ReadAt>(
+	options: VolumeOptions<'a>,
+	entries: Vec<ManifestEntry<'a, S>>,
+	profile: NameProfile,
+) -> Result<VolumeDraft<'a, S>, VolumeError> {
+	let label = profile.volume_label(options.label)?;
 	validate_metadata(options.root)?;
 	if entries.len() > options.max_entries {
 		return Err(VolumeError::Limit);
@@ -106,30 +151,41 @@ pub fn plan_ascii<'a, S: ReadAt>(
 			.checked_add(count)
 			.ok_or(VolumeError::Limit)?,
 	);
-	for entry in &entries {
-		validate_path(entry.path)?;
-		validate_entry(entry)?;
+	let mut canonical = Vec::new();
+	canonical.try_reserve_exact(entries.len())?;
+	for entry in entries {
+		let path = NormalizedPath::new(entry.path, profile)?;
+		validate_entry(&entry)?;
+		canonical.push((path, entry));
 	}
-	entries.sort_unstable_by(|left, right| compare_paths(left.path, right.path));
-	if entries
-		.windows(2)
-		.any(|pair| compare_paths(pair[0].path, pair[1].path).is_eq())
-	{
-		return Err(VolumeError::DuplicatePath);
+	canonical.sort_unstable_by(|(left, a), (right, b)| {
+		compare_paths(left.units(), right.units()).then_with(|| a.path.cmp(b.path))
+	});
+	for pair in canonical.windows(2) {
+		let ((left, a), (right, b)) = (&pair[0], &pair[1]);
+		if compare_paths(left.units(), right.units()).is_eq() {
+			return match profile {
+				NameProfile::Ascii => Err(VolumeError::DuplicatePath),
+				NameProfile::Unicode => Err(VolumeError::PathCollision {
+					first: copy_path(a.path)?,
+					second: copy_path(b.path)?,
+				}),
+			};
+		}
 	}
 
 	let mut planned = Vec::new();
-	planned.try_reserve_exact(entries.len())?;
+	planned.try_reserve_exact(canonical.len())?;
 	let mut root_valence = 0;
 	let mut folder_count = 0;
-	for (ordinal, input) in (CatalogId::FIRST_USER.0..next_id.0).zip(entries) {
-		let parent = match input.path.rsplit_once(PATH_SEPARATOR) {
+	for (ordinal, (path, input)) in (CatalogId::FIRST_USER.0..next_id.0).zip(canonical) {
+		let parent = match path.parent() {
 			None => {
 				root_valence += 1;
 				ROOT_ID
 			}
-			Some((path, _)) => {
-				let index = find_path(&planned, path).map_err(|_| VolumeError::InvalidParent)?;
+			Some(parent_path) => {
+				let index = find_path(&planned, parent_path).ok_or(VolumeError::InvalidParent)?;
 				let parent = &mut planned[index];
 				if !matches!(parent.input.kind, EntryKind::Folder) {
 					return Err(VolumeError::InvalidParent);
@@ -141,13 +197,16 @@ pub fn plan_ascii<'a, S: ReadAt>(
 		folder_count += u32::from(matches!(input.kind, EntryKind::Folder));
 		planned.push(PlannedEntry {
 			input,
+			path,
 			parent,
 			id: CatalogId(ordinal),
 			valence: 0,
 		});
 	}
-	Ok(AsciiVolumeDraft {
+	Ok(VolumeDraft {
 		options,
+		label,
+		profile,
 		entries: planned,
 		root_valence,
 		folder_count,
@@ -156,27 +215,11 @@ pub fn plan_ascii<'a, S: ReadAt>(
 	})
 }
 
-fn validate_name(name: &str) -> Result<(), VolumeError> {
-	if name.is_empty()
-		|| name.len() > MAX_NAME_UNITS
-		|| !name.bytes().all(|byte| {
-			PRINTABLE_ASCII.contains(&byte)
-				&& byte != FORBIDDEN_NAME_BYTE
-				&& byte != PATH_SEPARATOR as u8
-		}) {
-		return Err(VolumeError::UnsupportedName);
-	}
-	Ok(())
-}
-
-fn validate_path(path: &str) -> Result<(), VolumeError> {
-	for name in path.split(PATH_SEPARATOR) {
-		if name.is_empty() || matches!(name, "." | "..") {
-			return Err(VolumeError::InvalidPath);
-		}
-		validate_name(name)?;
-	}
-	Ok(())
+fn copy_path(path: &str) -> Result<String, VolumeError> {
+	let mut copied = String::new();
+	copied.try_reserve_exact(path.len())?;
+	copied.push_str(path);
+	Ok(copied)
 }
 
 fn validate_metadata(metadata: EntryMetadata) -> Result<(), VolumeError> {
@@ -213,35 +256,8 @@ fn validate_entry<S>(entry: &ManifestEntry<'_, S>) -> Result<(), VolumeError> {
 	Ok(())
 }
 
-pub(super) fn basename(path: &str) -> &str {
-	path.rsplit_once(PATH_SEPARATOR)
-		.map_or(path, |(_, name)| name)
-}
-
-pub(super) fn compare_names(left: &str, right: &str) -> Ordering {
-	left.bytes()
-		.map(|byte| byte.to_ascii_lowercase())
-		.cmp(right.bytes().map(|byte| byte.to_ascii_lowercase()))
-}
-
-fn find_path<S>(entries: &[PlannedEntry<'_, S>], path: &str) -> Result<usize, usize> {
-	entries.binary_search_by(|entry| compare_paths(entry.input.path, path))
-}
-
-fn compare_paths(left: &str, right: &str) -> Ordering {
-	let mut right = right.split(PATH_SEPARATOR);
-	for left in left.split(PATH_SEPARATOR) {
-		let Some(right) = right.next() else {
-			return Ordering::Greater;
-		};
-		let order = compare_names(left, right);
-		if !order.is_eq() {
-			return order;
-		}
-	}
-	if right.next().is_some() {
-		Ordering::Less
-	} else {
-		Ordering::Equal
-	}
+fn find_path<S>(entries: &[PlannedEntry<'_, S>], path: &[u16]) -> Option<usize> {
+	entries
+		.binary_search_by(|entry| compare_paths(entry.path.units(), path))
+		.ok()
 }

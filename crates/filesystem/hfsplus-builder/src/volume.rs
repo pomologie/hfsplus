@@ -1,21 +1,21 @@
-//! Write-once, clean nonjournaled HFS+ images from an ASCII manifest.
+//! Write-once, clean nonjournaled HFS+ images from a logical manifest.
 //!
-//! This profile admits printable ASCII catalog names, ordinary files and
-//! folders, and symbolic links. It preserves data and resource forks and
-//! exact link target bytes. Catalog names outside this profile are rejected
-//! until the historical HFS+ comparator is qualified.
+//! This profile admits Unicode catalog names, ordinary files and folders,
+//! and symbolic links. It preserves data and resource forks and exact link
+//! target bytes.
 
 use std::{error::Error, fmt};
 
-use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt};
+use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt, names::NameError};
 use hfsplus_format::volume::{CatalogId, Geometry};
 
 use crate::{Limits, PlanError, allocation::AllocationError, tree::TreeError};
 
+mod catalog_path;
 mod emit;
 mod manifest;
 
-pub use manifest::{AsciiVolumeDraft, plan_ascii};
+pub use manifest::{AsciiVolumeDraft, VolumeDraft, plan, plan_ascii};
 
 const FINDER_INFO_BYTES: usize = 32;
 const ENTRY_DATE_COUNT: usize = 5;
@@ -31,7 +31,7 @@ pub const MAX_SYMLINK_TARGET_BYTES: usize = 1024;
 /// Volume geometry, root metadata, and resource limits.
 #[derive(Debug)]
 pub struct VolumeOptions<'a> {
-	/// The printable ASCII volume label.
+	/// The volume label, stored in HFS+ canonical Unicode form.
 	pub label: &'a str,
 	/// Checked raw-image geometry.
 	pub geometry: Geometry,
@@ -165,12 +165,23 @@ pub enum EntryKind<S> {
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum VolumeError {
-	/// A component or volume label is outside the printable ASCII profile.
+	/// A component or volume label is outside the selected name profile.
 	UnsupportedName,
-	/// A path has a leading or trailing slash, empty component, or dot component.
+	/// A component exceeded the decomposed UTF-16 limit or could not be normalized.
+	Normalization(NameError),
+	/// A path has a leading or trailing slash, or a component equivalent to empty or dot.
 	InvalidPath,
 	/// Paths are equivalent under the ASCII HFS+ comparator.
 	DuplicatePath,
+	/// Both supplied paths denote the same object under historical HFS+ collation.
+	PathCollision {
+		/// The first colliding path as supplied.
+		first: String,
+		/// The second colliding path as supplied.
+		second: String,
+	},
+	/// A path addresses a private filesystem namespace.
+	ReservedPath,
 	/// A path's parent was absent or not a folder.
 	InvalidParent,
 	/// The entry mode included bits outside the POSIX permission field.
@@ -200,9 +211,19 @@ pub enum VolumeError {
 impl fmt::Display for VolumeError {
 	fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
 		match self {
-			Self::UnsupportedName => formatter.write_str("name is outside the HFS+ ASCII profile"),
+			Self::UnsupportedName => {
+				formatter.write_str("name is outside the selected HFS+ profile")
+			}
+			Self::Normalization(error) => error.fmt(formatter),
 			Self::InvalidPath => formatter.write_str("invalid relative HFS+ catalog path"),
 			Self::DuplicatePath => formatter.write_str("case-equivalent HFS+ catalog paths"),
+			Self::PathCollision { first, second } => {
+				write!(
+					formatter,
+					"equivalent HFS+ catalog paths {first:?} and {second:?}"
+				)
+			}
+			Self::ReservedPath => formatter.write_str("path is reserved by the HFS+ filesystem"),
 			Self::InvalidParent => {
 				formatter.write_str("HFS+ catalog parent is missing or not a folder")
 			}
@@ -240,6 +261,7 @@ impl fmt::Display for VolumeError {
 impl Error for VolumeError {
 	fn source(&self) -> Option<&(dyn Error + 'static)> {
 		match self {
+			Self::Normalization(error) => Some(error),
 			Self::Memory(error) => Some(error),
 			Self::Allocation(error) => Some(error),
 			Self::Format(error) => Some(error),
