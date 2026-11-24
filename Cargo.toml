@@ -1,0 +1,12 @@
+[workspace]
+resolver = "3"
+members = ["crates/formats/hfsplus-format"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.98"
+license = "Apache-2.0"
+repository = "https://github.com/pomologie/hfsplus"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
