@@ -3,6 +3,8 @@
 
 use core::fmt;
 
+pub mod names;
+
 /// A zero-based byte offset relative to a source or window.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct ByteOffset(pub u64);
