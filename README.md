@@ -4,7 +4,7 @@ An independent Rust implementation of the HFS+ and HFSX filesystems.
 
 The initial `hfsplus-format` crate decodes volume headers, embedded fork extents, B-tree nodes and headers, and catalog folder, file and thread records. It preserves raw UTF-16 name units and catalog metadata. It builds without `std` or an allocator.
 
-Native fixtures from macOS 14.7.2 cover a clean partitionless volume and a regular file in an Apple-generated optical HFS+ volume. [Fixture provenance](tests/fixtures)
+Native fixtures from macOS 14.7.2 cover a clean partitionless volume and a regular file in an Apple-generated optical HFS+ volume. [Fixture provenance](crates/formats/hfsplus-format/tests/fixtures)
 
 `hfsplus-builder` can stream clean, nonjournaled HFS+ volumes from Unicode manifests of folders, symbolic links, and files with data and resource forks. `volume::plan` writes Unicode 3.2 canonical names and uses historical HFS+ collation for catalog order and collisions. `volume::plan_ascii` limits inputs to printable ASCII.
 

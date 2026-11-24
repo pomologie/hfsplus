@@ -4,8 +4,8 @@ use hfsplus_format::btree::{
 	VARIABLE_INDEX_KEYS_MASK,
 };
 
-const NATIVE_HEADER: &[u8] = include_bytes!("../../../../tests/fixtures/native-catalog-header.bin");
-const NATIVE_LEAF: &[u8] = include_bytes!("../../../../tests/fixtures/native-catalog-leaf.bin");
+const NATIVE_HEADER: &[u8] = include_bytes!("fixtures/native-catalog-header.bin");
+const NATIVE_LEAF: &[u8] = include_bytes!("fixtures/native-catalog-leaf.bin");
 const SMALL_NODE_BYTES: u16 = 512;
 const KEY_LENGTH_BYTES: usize = size_of::<u16>();
 const POINTER_BYTES: usize = size_of::<u32>();

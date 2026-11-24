@@ -1,0 +1,45 @@
+{
+  "source": "macOS hdiutil create of an empty synthetic partitionless volume, followed by native raw export",
+  "license": "Apache-2.0; synthetic data only",
+  "os": "14.7.2",
+  "build": "23H311",
+  "architecture": "arm64",
+  "commands": [
+    [
+      "/usr/bin/hdiutil",
+      "create",
+      "-size",
+      "8m",
+      "-fs",
+      "HFS+",
+      "-volname",
+      "Pomologie Fixture",
+      "-layout",
+      "NONE",
+      "apple-hfs.dmg"
+    ],
+    [
+      "/usr/bin/hdiutil",
+      "convert",
+      "apple-hfs.dmg",
+      "-format",
+      "UDTO",
+      "-o",
+      "apple-hfs.raw",
+      "-quiet"
+    ]
+  ],
+  "raw_sha256": "12dcc17982b9fe9a6fc2fd3f5f5736ae03e646b146b9ce83d71752fa2b909d2e",
+  "raw_length": 8388608,
+  "fixtures": {
+    "native-primary.bin": {
+      "offset": 1024,
+      "bytes": 512,
+      "sha256": "5fc29ecc501444d8ca9a6a0bd6d8f758ca52a9d9254c0a69109d7d92d8f2ad49"
+    }
+  },
+  "allocation_block_bytes": 4096,
+  "allocation_blocks": 2048,
+  "catalog_node_bytes": 4096,
+  "catalog_root_node": 1
+}

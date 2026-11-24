@@ -181,7 +181,7 @@ fn rejects_input_containing_whole_blocks_beyond_the_bounded_volume() {
 #[test]
 fn reports_unsupported_volume_state_before_exposing_forks() {
 	const NATIVE_ATTRS: usize = 4;
-	let native_header = include_bytes!("../../../../tests/fixtures/native-primary.bin");
+	let native_header = include_bytes!("fixtures/native-primary.bin");
 	let mut image = OPTICAL.to_vec();
 	let journal_block = 1u32;
 	image[JOURNAL_BLOCK_OFFSET..][..size_of::<u32>()].copy_from_slice(&journal_block.to_be_bytes());

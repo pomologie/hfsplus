@@ -4,11 +4,10 @@ use hfsplus_format::{
 	volume::{AllocationBlock, Header, Signature},
 };
 
-const PRIMARY: &[u8] = include_bytes!("../../../../tests/fixtures/native-primary.bin");
-const ALTERNATE: &[u8] = include_bytes!("../../../../tests/fixtures/native-alternate.bin");
-const CATALOG_HEADER: &[u8] =
-	include_bytes!("../../../../tests/fixtures/native-catalog-header.bin");
-const CATALOG_LEAF: &[u8] = include_bytes!("../../../../tests/fixtures/native-catalog-leaf.bin");
+const PRIMARY: &[u8] = include_bytes!("fixtures/native-primary.bin");
+const ALTERNATE: &[u8] = include_bytes!("fixtures/native-alternate.bin");
+const CATALOG_HEADER: &[u8] = include_bytes!("fixtures/native-catalog-header.bin");
+const CATALOG_LEAF: &[u8] = include_bytes!("fixtures/native-catalog-leaf.bin");
 const RAW_SIZE: u64 = 8 * 1024 * 1024;
 
 #[test]
@@ -114,15 +113,8 @@ fn reads_native_tree_header_and_matches_root_thread_to_directory_key() {
 fn reads_native_regular_file_and_matches_its_thread() {
 	use hfsplus_format::catalog::{Record, ThreadKind, Value};
 
-	let header = Header::decode(
-		include_bytes!("../../../../tests/fixtures/optical-primary.bin"),
-		20_480,
-	)
-	.unwrap();
-	let leaf = Node::decode(include_bytes!(
-		"../../../../tests/fixtures/optical-catalog-leaf.bin"
-	))
-	.unwrap();
+	let header = Header::decode(include_bytes!("fixtures/optical-primary.bin"), 20_480).unwrap();
+	let leaf = Node::decode(include_bytes!("fixtures/optical-catalog-leaf.bin")).unwrap();
 	let records: Vec<_> = leaf
 		.records()
 		.map(|raw| Record::decode(raw, header.geometry).unwrap())

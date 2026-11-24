@@ -10,11 +10,11 @@ use hfsplus_format::{
 	volume::{AllocationBlock, CatalogId, Extent, Fork, Header},
 };
 
-const NATIVE_PRIMARY: &[u8] = include_bytes!("../../../../tests/fixtures/native-primary.bin");
-const NATIVE_LEAF: &[u8] = include_bytes!("../../../../tests/fixtures/native-catalog-leaf.bin");
+const NATIVE_PRIMARY: &[u8] = include_bytes!("fixtures/native-primary.bin");
+const NATIVE_LEAF: &[u8] = include_bytes!("fixtures/native-catalog-leaf.bin");
 const NATIVE_IMAGE_BYTES: u64 = 8 * 1024 * 1024;
-const OPTICAL_PRIMARY: &[u8] = include_bytes!("../../../../tests/fixtures/optical-primary.bin");
-const OPTICAL_LEAF: &[u8] = include_bytes!("../../../../tests/fixtures/optical-catalog-leaf.bin");
+const OPTICAL_PRIMARY: &[u8] = include_bytes!("fixtures/optical-primary.bin");
+const OPTICAL_LEAF: &[u8] = include_bytes!("fixtures/optical-catalog-leaf.bin");
 const OPTICAL_IMAGE_BYTES: u64 = 20_480;
 const UNWRITTEN: u8 = 0xaa;
 const TEST_NAME: &[u16] = &[b'A' as u16];

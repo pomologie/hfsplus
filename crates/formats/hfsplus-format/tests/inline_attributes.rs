@@ -8,7 +8,7 @@ use hfsplus_format::{
 	volume::CatalogId,
 };
 
-const NATIVE_RECORDS: &[u8] = include_bytes!("../../../../tests/fixtures/native-inline-attrs.bin");
+const NATIVE_RECORDS: &[u8] = include_bytes!("fixtures/native-inline-attrs.bin");
 const FIRST_RECORD_END: usize = 66;
 const REGULAR_RECORDS_END: usize = 264;
 const BOUNDARY_INLINE_END: usize = 4266;

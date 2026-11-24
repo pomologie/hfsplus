@@ -3,9 +3,9 @@ use hfsplus_format::{
 	volume::{AllocationBlock, CatalogId, Extent, Fork, Geometry, Header, Signature, SpecialFiles},
 };
 
-const NATIVE_PRIMARY: &[u8] = include_bytes!("../../../../tests/fixtures/native-primary.bin");
-const NATIVE_ALTERNATE: &[u8] = include_bytes!("../../../../tests/fixtures/native-alternate.bin");
-const OPTICAL_PRIMARY: &[u8] = include_bytes!("../../../../tests/fixtures/optical-primary.bin");
+const NATIVE_PRIMARY: &[u8] = include_bytes!("fixtures/native-primary.bin");
+const NATIVE_ALTERNATE: &[u8] = include_bytes!("fixtures/native-alternate.bin");
+const OPTICAL_PRIMARY: &[u8] = include_bytes!("fixtures/optical-primary.bin");
 const NATIVE_VOLUME_BYTES: u64 = 8 * 1024 * 1024;
 const OPTICAL_VOLUME_BYTES: u64 = 20_480;
 const NATIVE_BLOCK_BYTES: u32 = 4096;

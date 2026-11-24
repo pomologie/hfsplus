@@ -7,12 +7,9 @@ use hfsplus_format::{
 	},
 };
 
-const NATIVE_CATALOG_HEADER: &[u8] =
-	include_bytes!("../../../../tests/fixtures/native-catalog-header.bin");
-const NATIVE_CATALOG_LEAF: &[u8] =
-	include_bytes!("../../../../tests/fixtures/native-catalog-leaf.bin");
-const OPTICAL_CATALOG_LEAF: &[u8] =
-	include_bytes!("../../../../tests/fixtures/optical-catalog-leaf.bin");
+const NATIVE_CATALOG_HEADER: &[u8] = include_bytes!("fixtures/native-catalog-header.bin");
+const NATIVE_CATALOG_LEAF: &[u8] = include_bytes!("fixtures/native-catalog-leaf.bin");
+const OPTICAL_CATALOG_LEAF: &[u8] = include_bytes!("fixtures/optical-catalog-leaf.bin");
 const TREE_FORK_BYTES: u64 = 65_536;
 const SMALL_NODE_BYTES: usize = 512;
 const HEADER_ALLOCATED_BIT: u8 = 0x80;
