@@ -1,6 +1,7 @@
 //! Checked HFS+ and HFSX binary format codecs. This crate does not perform I/O.
 #![no_std]
 
+pub mod attributes;
 mod binary;
 pub mod btree;
 pub mod catalog;
@@ -26,6 +27,14 @@ pub enum Error {
 	InvalidCatalog,
 	/// An unknown catalog record type.
 	UnsupportedCatalogRecord(u16),
+	/// An attribute key or inline value is structurally invalid.
+	InvalidAttribute,
+	/// An attribute uses a non-inline or unknown record tag.
+	UnsupportedAttributeRecord(u32),
+	/// An inline attribute exceeds the qualified native size limit.
+	UnsupportedAttributeSize(usize),
+	/// Interpreting a compressed file attribute requires a separate profile.
+	UnsupportedCompressedAttribute,
 }
 
 impl core::fmt::Display for Error {
@@ -40,6 +49,16 @@ impl core::fmt::Display for Error {
 			Self::InvalidCatalog => f.write_str("invalid HFS+ catalog record"),
 			Self::UnsupportedCatalogRecord(kind) => {
 				write!(f, "unsupported HFS+ catalog record {kind:#06x}")
+			}
+			Self::InvalidAttribute => f.write_str("invalid HFS+ attribute record"),
+			Self::UnsupportedAttributeRecord(kind) => {
+				write!(f, "unsupported HFS+ attribute record {kind:#010x}")
+			}
+			Self::UnsupportedAttributeSize(bytes) => {
+				write!(f, "unsupported HFS+ inline attribute size {bytes} bytes")
+			}
+			Self::UnsupportedCompressedAttribute => {
+				f.write_str("unsupported HFS+ compressed file attribute")
 			}
 		}
 	}

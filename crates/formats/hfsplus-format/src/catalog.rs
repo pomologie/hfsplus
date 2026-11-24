@@ -28,6 +28,8 @@ const FOLDER_THREAD_RECORD: u16 = 0x0003;
 const FILE_THREAD_RECORD: u16 = 0x0004;
 /// Records that name a file must carry this flag because a thread is required.
 pub const FLAG_THREAD_EXISTS: u16 = 0x0002;
+/// Records that own entries in the attributes tree carry this flag.
+pub const FLAG_HAS_ATTRIBUTES: u16 = 0x0004;
 
 const RECORD_FLAGS_OFFSET: usize = 2;
 const RECORD_CATALOG_ID_OFFSET: usize = 8;
@@ -55,12 +57,16 @@ const THREAD_PARENT_ID_OFFSET: usize = 4;
 const THREAD_NAME_UNIT_COUNT_OFFSET: usize = 8;
 const THREAD_NAME_OFFSET: usize = THREAD_NAME_UNIT_COUNT_OFFSET + UTF16_UNIT_BYTES;
 
-/// Raw UTF-16 code units stored in a catalog key or thread. This view preserves
-/// even ill-formed UTF-16 and does not implement filesystem collation.
+/// Raw UTF-16 code units stored in a catalog or attribute record. This view
+/// preserves even ill-formed UTF-16 and does not implement filesystem collation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RawName<'bytes>(&'bytes [[u8; UTF16_UNIT_BYTES]]);
 
 impl<'bytes> RawName<'bytes> {
+	pub(crate) const fn from_be_units(units: &'bytes [[u8; UTF16_UNIT_BYTES]]) -> Self {
+		Self(units)
+	}
+
 	/// Length in UTF-16 code units.
 	#[must_use]
 	pub fn len(self) -> usize {
@@ -474,7 +480,7 @@ fn write_key(parent_or_thread: CatalogId, name: &[u16], key: &mut [u8]) -> Resul
 	Ok(())
 }
 
-fn write_name(name: &[u16], bytes: &mut [u8]) {
+pub(crate) fn write_name(name: &[u16], bytes: &mut [u8]) {
 	for (output, unit) in bytes
 		.as_chunks_mut::<UTF16_UNIT_BYTES>()
 		.0
