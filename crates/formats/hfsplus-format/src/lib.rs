@@ -5,6 +5,7 @@ pub mod attributes;
 mod binary;
 pub mod btree;
 pub mod catalog;
+pub mod hard_links;
 pub mod volume;
 
 /// A failed HFS+ format admission check.

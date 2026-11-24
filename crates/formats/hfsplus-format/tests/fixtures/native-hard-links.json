@@ -1,0 +1,257 @@
+{
+  "source": "Synthetic project-owned regular-file hard links generated on a disposable HFS+ image. Unrelated native objects and host provenance xattrs are excluded from the fixture.",
+  "license": "Apache-2.0; synthetic data only",
+  "requirement": "H-BUILD-04, H-READ-01, H-V04",
+  "os": "macOS 14.7.2 (23H311) arm64",
+  "checker": "fsck_hfs 650.140.2",
+  "specification": "https://developer.apple.com/library/archive/technotes/tn/tn1150.html#HardLinks",
+  "geometry": {
+    "bytes": 16777216,
+    "allocation_block_bytes": 4096,
+    "catalog_node_bytes": 4096,
+    "volume_attributes": "0x80000100"
+  },
+  "fixture": {
+    "file": "native-hard-links.bin",
+    "length": 2874,
+    "sha256": "de7ea1132da1aaa4ebfe0a82e09f0a1ce152cd66b0053845051b18e4d536b9f6"
+  },
+  "sources": [
+    {
+      "name": "native",
+      "raw_sha256": "d17d38025e8fa43ec6951859676af1c89d6f9ed8691f104704d5489fdc000f6a"
+    },
+    {
+      "name": "chain-free variant",
+      "raw_sha256": "ab38d43a3a4ccd7c6286562ebd2d36af9b3df1fe80fc40d5b2a93dd2553c65aa"
+    },
+    {
+      "name": "minimal chain-free",
+      "raw_sha256": "6bdd7f1210dffb7f422a7621cb34eab0d1636a56e44cc9f2ba61fd2ebd27dd2c"
+    },
+    {
+      "name": "minimal chain-free with zero creation",
+      "raw_sha256": "65faf0d70d86f9dfc5e501a0d2fd3f94503078c02d694a364e0703babf5a2b69"
+    }
+  ],
+  "records": [
+    {
+      "role": "private directory",
+      "source": "native",
+      "raw_offset": 1586422,
+      "fixture_offset": 0,
+      "length": 138,
+      "sha256": "1c318885e081ae859cbcfd62082a36d2de9e4bc623f75d5635278bb3c98fabec"
+    },
+    {
+      "role": "one",
+      "source": "native",
+      "raw_offset": 1585898,
+      "fixture_offset": 138,
+      "length": 262,
+      "sha256": "26c127264f3dd9201470a14cc554179aafef847e5e2882dd433d66355899e36e"
+    },
+    {
+      "role": "two",
+      "source": "native",
+      "raw_offset": 1586160,
+      "fixture_offset": 400,
+      "length": 262,
+      "sha256": "68c073b8ec7d213f6600cd9327106944d4d31ebb58ed6909c65dd8bb286d68b4"
+    },
+    {
+      "role": "three",
+      "source": "native",
+      "raw_offset": 1587530,
+      "fixture_offset": 662,
+      "length": 266,
+      "sha256": "60f97ec2d4bc96ca231fd8ecf386c30e37c8d923d8da181c759522e197e08743"
+    },
+    {
+      "role": "iNode19",
+      "source": "native",
+      "raw_offset": 1586620,
+      "fixture_offset": 928,
+      "length": 270,
+      "sha256": "c6adcba599ea3008f5682dcd40c880d6e4026a9a0c2354463a38085f4f471ea8"
+    },
+    {
+      "role": "four",
+      "source": "native",
+      "raw_offset": 1585526,
+      "fixture_offset": 1198,
+      "length": 264,
+      "sha256": "0697c13575a0f7bf99d0f0eba32e77eaa456e8cc36289753794a94d7fe8546b4"
+    },
+    {
+      "role": "five",
+      "source": "native",
+      "raw_offset": 1587266,
+      "fixture_offset": 1462,
+      "length": 264,
+      "sha256": "da04cee70cd640f773612b4e1deda009e18642fb6fc7b9491144edcd74224efc"
+    },
+    {
+      "role": "iNode23",
+      "source": "native",
+      "raw_offset": 1586890,
+      "fixture_offset": 1726,
+      "length": 270,
+      "sha256": "865055fdca5ecd0f81e07a523fbb82d9612a7ca8919c01110870e9557e45f4e2"
+    },
+    {
+      "role": "thread 16",
+      "source": "native",
+      "raw_offset": 1586560,
+      "fixture_offset": 1996,
+      "length": 60,
+      "sha256": "5e4f1a6466ec60b4ae40b2bc54abe5e3cd5a634255fb0ce7850dff5dc1232c6f"
+    },
+    {
+      "role": "thread 19",
+      "source": "native",
+      "raw_offset": 1587796,
+      "fixture_offset": 2056,
+      "length": 32,
+      "sha256": "c773639920fffa73ad5f7a1b27a6f40ee2c7e14c894cee39eed056a10e86e56d"
+    },
+    {
+      "role": "thread 20",
+      "source": "native",
+      "raw_offset": 1587828,
+      "fixture_offset": 2088,
+      "length": 24,
+      "sha256": "afc1e5a658fc85103c30ec705963b20b182a12db8b6db7c5e4110e9e54a65576"
+    },
+    {
+      "role": "thread 21",
+      "source": "native",
+      "raw_offset": 1587852,
+      "fixture_offset": 2112,
+      "length": 24,
+      "sha256": "f427b76c748beac9bd3298f0dc1855cc137d079fc24b3652a53ad8d1e203c14b"
+    },
+    {
+      "role": "thread 22",
+      "source": "native",
+      "raw_offset": 1587876,
+      "fixture_offset": 2136,
+      "length": 28,
+      "sha256": "0db2e5dd22cc42c08406cf8093b3f70b9bbbecea40a3194fb987f5136125b76d"
+    },
+    {
+      "role": "thread 23",
+      "source": "native",
+      "raw_offset": 1587904,
+      "fixture_offset": 2164,
+      "length": 32,
+      "sha256": "a534335549adae7be80122cffd640330658d76a6972234ab87f1ee7aeadd4ab0"
+    },
+    {
+      "role": "thread 24",
+      "source": "native",
+      "raw_offset": 1587936,
+      "fixture_offset": 2196,
+      "length": 26,
+      "sha256": "a7988bcbc6bb1fa08ae91404499b1eed8925adc7a44fe50110b742f20cdd0a4c"
+    },
+    {
+      "role": "thread 25",
+      "source": "native",
+      "raw_offset": 1587962,
+      "fixture_offset": 2222,
+      "length": 26,
+      "sha256": "1c70d348387b27c8fa1829f0d7992ae1f9bec377f938b02c0058c080d64a8680"
+    },
+    {
+      "role": "inode 19 extended attribute",
+      "source": "native",
+      "raw_offset": 147634,
+      "fixture_offset": 2248,
+      "length": 92,
+      "sha256": "fb1ddc8d7197ad7868eb85dfe4a1d33710a03c05032ae36077c12d220120e96a"
+    },
+    {
+      "role": "one chain free",
+      "source": "minimal chain-free",
+      "raw_offset": 1585744,
+      "fixture_offset": 2340,
+      "length": 262,
+      "sha256": "6d6bbef6b78dae0550cd17382cbfafdb8f0d8d802332550e475ea3fc1fcda117"
+    },
+    {
+      "role": "iNode100 chain free",
+      "source": "minimal chain-free",
+      "raw_offset": 1586466,
+      "fixture_offset": 2602,
+      "length": 272,
+      "sha256": "618de8f309f86786fbfcd3cbe67115c5c0a52f53ab0d8f268a41f62e074d6c72"
+    }
+  ],
+  "native_groups": [
+    {
+      "paths": [
+        "one",
+        "two",
+        "nested/three"
+      ],
+      "reference": 19,
+      "inode_catalog_id": 19,
+      "visible_catalog_ids": [
+        20,
+        21,
+        22
+      ],
+      "mode": "0751",
+      "link_count": 3,
+      "forward_chain_catalog_ids": [
+        22,
+        21,
+        20
+      ],
+      "mnt_modified_unix": 1704195296,
+      "payload_utf8": "pomologie linked file\n",
+      "resource_hex": "706f6d6f6c6f676965207265736f7572636500666f726b0a",
+      "extended_attribute": {
+        "name": "org.pomologie.hardlink.sample",
+        "value_hex": "001122ff",
+        "owner_catalog_id": 19
+      }
+    },
+    {
+      "paths": [
+        "four",
+        "nested/five"
+      ],
+      "reference": 23,
+      "inode_catalog_id": 23,
+      "visible_catalog_ids": [
+        24,
+        25
+      ],
+      "mode": "0640",
+      "link_count": 2,
+      "forward_chain_catalog_ids": [
+        25,
+        24
+      ],
+      "payload_utf8": "pomologie second group\n"
+    }
+  ],
+  "recipe": [
+    "Create a new 16 MiB nonjournaled HFS+ image with hdiutil create -size 16m -fs HFS+ -volname \"Hard Link Qualification\" -layout NONE -nospotlight linked.dmg.",
+    "Attach only the disposable image read-write with -nobrowse -noautoopen and a private scratch mountpoint.",
+    "Create the nested directory, files and aliases with mkdir, write, chmod and link in group order as shown in native_groups. Set the first group resource fork and xattr through its first alias and set file modification time to Unix 1704195296 with utime.",
+    "Detach the image, then run hdiutil convert linked.dmg -format UDTO -o linked.raw.",
+    "Catalog leaf traversal used the leaf-chain/node offset rules in TN1150. Record source offsets and digests above identify exact native bytes.",
+    "For the chain-free variant only, clear flag 0x20 on stubs and payloads, clear stub UID/GID chain fields and payload head at file body offset 4, rename iNode19 and iNode23 to iNode100 and iNode101 with matching threads, and set visible stub BSD special references to 100 and 101. Keep all CNIDs, payloads, timestamps, modes, and allocation unchanged. Repack the single catalog leaf for the longer names.",
+    "For the minimal variants, remove the unused directory-hard-link namespace and thread, update root valence and both volume folder counts, set stub text encoding hints to zero, and repack the leaf with adjusted record counts. The second minimal variant also clears the volume header, root, private directory and stub creation dates."
+  ],
+  "verification": {
+    "read_only_filesystem_check": "All four source images clean with fsck_hfs -fn on a disposable no-mount read-only attachment.",
+    "read_only_mount": "All four source images verified with stat and exact data/resource fork and inline xattr reads. Link counts, inode IDs, modes and first-group modification time matched. Normal listing hid the private directories.",
+    "native_creation_clock": "The four leading dates on each native stub match the private directory and root catalog creation date. The volume-header creation word differs and is not used as the locator date.",
+    "format_scope": "Regular file group encoding. Global chain and link-count consistency are checked by the consuming catalog code, not by an individual record codec.",
+    "modern_link_chain": "For regular files, the native payload stores its head CNID at file value offset 4. The stub owner field points backward and its group field points forward from that head."
+  }
+}
