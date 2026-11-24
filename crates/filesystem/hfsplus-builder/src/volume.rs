@@ -12,12 +12,15 @@ use hfsplus_format::volume::{CatalogId, Geometry};
 use crate::{Limits, PlanError, allocation::AllocationError, tree::TreeError};
 
 mod attributes;
+mod capacity;
 mod catalog;
 mod catalog_path;
 mod emit;
+mod layout;
 mod manifest;
 
 pub use attributes::validate_inline_attribute;
+pub use capacity::{CapacityError, CapacityPolicy, PlannedCapacity};
 pub use manifest::{AsciiVolumeDraft, VolumeDraft, plan, plan_ascii};
 
 const FINDER_INFO_BYTES: usize = 32;
