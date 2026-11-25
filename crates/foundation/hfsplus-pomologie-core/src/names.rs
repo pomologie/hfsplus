@@ -10,9 +10,11 @@ use alloc::{collections::TryReserveError, vec::Vec};
 use core::{char, error::Error, fmt};
 
 mod collation;
+mod fragment;
 mod unicode32;
 
 pub use collation::NameCollation;
+pub use fragment::NameFragment;
 
 /// Maximum number of UTF-16 code units in an on-disk HFS+ name.
 pub const MAX_NAME_UNITS: usize = 255;

@@ -1,6 +1,8 @@
 use std::cmp::Ordering;
 
-use hfsplus_core::names::{MAX_NAME_UNITS, NameCollation, NameError, normalize, normalize_utf16};
+use hfsplus_core::names::{
+	MAX_NAME_UNITS, NameCollation, NameError, NameFragment, normalize, normalize_utf16,
+};
 
 const NATIVE_NAMES: &str = include_str!("fixtures/native-normalization.tsv");
 const NATIVE_COLLATION: &str = include_str!("fixtures/native-collation.tsv");
@@ -80,6 +82,50 @@ fn counts_utf16_after_expansion() {
 	assert_eq!(normalize(&valid).unwrap().as_units().len(), MAX_NAME_UNITS);
 	let too_long = supplementary.to_string().repeat(available_scalars) + decomposable;
 	assert!(matches!(normalize(&too_long), Err(NameError::TooLong)));
+}
+
+#[test]
+fn fragments_use_admitted_case_rules_on_native_stored_names() {
+	let original: Vec<_> = "00-Å".encode_utf16().collect();
+	let (_, _, observed) = native_names()
+		.find(|(_, input, _)| *input == original)
+		.expect("native composed-name fixture");
+	for (collation, expected) in [
+		(NameCollation::CaseFolded, true),
+		(NameCollation::Binary, false),
+	] {
+		let fragment = NameFragment::new(collation, "å").unwrap().unwrap();
+		assert_eq!(fragment.matches(&observed).unwrap(), expected);
+		let fragment = NameFragment::new(collation, "Å").unwrap().unwrap();
+		assert!(fragment.matches(&observed).unwrap());
+	}
+}
+
+#[test]
+fn rejects_fragments_and_stored_names_outside_the_name_profile() {
+	const IGNORABLE: &str = "\u{200c}";
+	assert!(
+		NameFragment::new(NameCollation::CaseFolded, IGNORABLE)
+			.unwrap()
+			.is_none()
+	);
+	let binary = NameFragment::new(NameCollation::Binary, IGNORABLE)
+		.unwrap()
+		.unwrap();
+	assert!(
+		binary
+			.matches(&IGNORABLE.encode_utf16().collect::<Vec<_>>())
+			.unwrap()
+	);
+	assert!(matches!(
+		binary.matches(&[0; MAX_NAME_UNITS + 1]),
+		Err(NameError::TooLong)
+	));
+	let too_long = "å".repeat(MAX_NAME_UNITS);
+	assert!(matches!(
+		NameFragment::new(NameCollation::CaseFolded, &too_long),
+		Err(NameError::TooLong)
+	));
 }
 
 #[test]
