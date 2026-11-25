@@ -6,6 +6,7 @@ mod binary;
 pub mod btree;
 pub mod catalog;
 pub mod hard_links;
+pub mod journal;
 pub mod volume;
 
 /// A failed HFS+ format admission check.
@@ -36,6 +37,10 @@ pub enum Error {
 	UnsupportedAttributeSize(usize),
 	/// Interpreting a compressed file attribute requires a separate profile.
 	UnsupportedCompressedAttribute,
+	/// The journal header's signature, checksum or geometry is invalid.
+	InvalidJournalHeader,
+	/// The journal is uninitialized, is external, or uses unknown flags.
+	UnsupportedJournalFlags(u32),
 }
 
 impl core::fmt::Display for Error {
@@ -60,6 +65,10 @@ impl core::fmt::Display for Error {
 			}
 			Self::UnsupportedCompressedAttribute => {
 				f.write_str("unsupported HFS+ compressed file attribute")
+			}
+			Self::InvalidJournalHeader => f.write_str("invalid HFS+ journal header"),
+			Self::UnsupportedJournalFlags(flags) => {
+				write!(f, "unsupported HFS+ journal flags {flags:#010x}")
 			}
 		}
 	}
