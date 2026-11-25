@@ -1,6 +1,6 @@
 # Development guidance for hfsplus
 
-Read ARCHITECTURE.md, ROADMAP.md, TECH_STACK.md, TESTING.md, VERIFICATION.md and the owning feature specification before changing code. Treat the documentation as a design target, not an assertion of existing implementation. Check the actual workspace and current tests; preserve working behavior unless explicitly changing it. Feature-specific rules belong in the owning spec, not this file.
+Read [architecture](docs/architecture/ARCHITECTURE.md), [roadmap](docs/architecture/ROADMAP.md), [technology stack](docs/architecture/TECH_STACK.md), [testing](docs/architecture/TESTING.md), [verification](docs/architecture/VERIFICATION.md) and the owning feature specification before changing code. Treat the documentation as a design target, not an assertion of existing implementation. Check the actual workspace and current tests; preserve working behavior unless explicitly changing it. Feature-specific rules belong in the owning spec, not this file.
 
 - Use tabs for Rust indentation, name protocol and policy literals, and keep commits small and focused using Conventional Commits.
 - Use Rust, clear domain boundaries, fully prefixed crate names grouped under crates/<domain>/, and executables under apps/. Create crates only for real boundaries. Keep dependencies acyclic and foundational code free from application concerns.

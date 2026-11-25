@@ -2,7 +2,7 @@
 
 Treat the standalone immutable constructor and later mutable filesystem as different assurance profiles. A formatter can ship without journal mutation. The first release proves/checks geometry, packing and allocation bounds, verifies a real Apple-compatible raw image, and supports dmgez streaming. The future Charles profile needs real kernel and persistence qualification, not just no_std.
 
-Read the shared ecosystem verification standard EVS-1 (`docs/architecture/ECOSYSTEM_VERIFICATION.md` after handoff). The following summarizes the repository-wide planning index at `verification/obligations.json`, which defines properties, assumptions, bounds, negative witnesses and required evidence methods. Implemented proof artifacts live in the owning crate’s `verification/` directory. All obligations are planned. Gate applies only to the activated supported profile; required proofs/tests must pass before that capability ships. Nonblocking advanced capabilities remain disabled if not qualified.
+Read the [shared ecosystem verification standard EVS-1](ECOSYSTEM_VERIFICATION.md). The following summarizes the repository-wide planning index at [`verification/obligations.json`](../../verification/obligations.json), which defines properties, assumptions, bounds, negative witnesses and required evidence methods. Implemented proof artifacts live in the owning crate’s `verification/` directory. All obligations are planned. Gate applies only to the activated supported profile; required proofs/tests must pass before that capability ships. Nonblocking advanced capabilities remain disabled if not qualified.
 
 | ID | Activation | Scope | Required evidence |
 |---|---|---|---|
@@ -144,4 +144,4 @@ Read the shared ecosystem verification standard EVS-1 (`docs/architecture/ECOSYS
 - Evidence is committed to the CI release report, never to a prefilled pass status. The present architecture pack does not contain a tested Rust implementation.
 
 ## Kernel portability release evidence
-H-PORT-01 is an additional mandatory acceptance gate for every active kernel-facing crate, not a new claim of formal proof. Retain existing proof obligations. See TESTING.md and EES-1 §3a for exact profile compilation, feature graph, parity and negative leakage checks; actual kernel qualification remains separate.
+H-PORT-01 is an additional mandatory acceptance gate for every active kernel-facing crate, not a new claim of formal proof. Retain existing proof obligations. See the [testing guide](TESTING.md) and EES-1 §3a for exact profile compilation, feature graph, parity and negative leakage checks; actual kernel qualification remains separate.

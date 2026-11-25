@@ -2,7 +2,7 @@
 
 ## Import
 
-The three project directories are merge-ready documentation trees, not generated Rust repositories. Copy each into the corresponding existing repo after inspecting its README, licensing, AGENTS and CI. Do not overwrite existing source, history, licenses, or user changes. Shared contracts and references are maintained in this pack; copy `shared/CONTRACTS.md` and `shared/REFERENCES.md` into each repository as `docs/architecture/ECOSYSTEM_CONTRACTS.md` and `docs/reference/ECOSYSTEM_REFERENCES.md` (record the same revision). Also copy `shared/VERIFICATION.md` into each repo as `docs/architecture/ECOSYSTEM_VERIFICATION.md`. Each repo has its own `VERIFICATION.md`, repository-wide `verification/obligations.json` and evidence schema. Retain the obligation IDs when wiring crate-owned verification. Copy `shared/HANDOFF.md` and `shared/REVIEW.md` if useful. Keep the pack-level validator and abstract models as documentation validation examples, not shipped runtime code. Relative links in pack-level docs are navigation within the pack. Repo-level docs cite contract IDs and source IDs to remain readable after copying. Keep requirements/test IDs stable; no cross-repo Git submodules required. Do not add a fourth library just to share a two-method trait.
+The three project directories are merge-ready documentation trees, not generated Rust repositories. Copy each into the corresponding existing repo after inspecting its README, licensing, AGENTS and CI. Do not overwrite existing source, history, licenses, or user changes. Shared contracts and references are maintained in this pack; copy `shared/CONTRACTS.md` and `shared/REFERENCES.md` into each repository as `docs/architecture/ECOSYSTEM_CONTRACTS.md` and `docs/reference/ECOSYSTEM_REFERENCES.md` (record the same revision). Also copy `shared/VERIFICATION.md` into each repo as `docs/architecture/ECOSYSTEM_VERIFICATION.md`. Each repo has its own `docs/architecture/VERIFICATION.md`, repository-wide `verification/obligations.json` and evidence schema. Retain the obligation IDs when wiring crate-owned verification. Copy `shared/HANDOFF.md` and `shared/REVIEW.md` if useful. Keep the pack-level validator and abstract models as documentation validation examples, not shipped runtime code. Relative links in pack-level docs are navigation within the pack. Repo-level docs cite contract IDs and source IDs to remain readable after copying. Keep requirements/test IDs stable; no cross-repo Git submodules required. Do not add a fourth library just to share a two-method trait.
 
 ## Bootstrap order and first work packages
 
@@ -32,7 +32,7 @@ First build integration must not wait for APFS, full HFS mutable operations, GUI
 
 ## Policy for agents
 
-General coding rules belong in `AGENTS.md`; specific feature behavior belongs in the appropriate feature spec. Read `ARCHITECTURE.md`, current roadmap and owning feature document before implementation. For ambiguous binary fields, produce a minimal fixture and resolve against independent evidence; document the result rather than making an unsupported assumption. A proposed plan is never evidence of current code. When adapting to existing source, compare actual repository state first and preserve working implementations unless an explicit change is warranted.
+General coding rules belong in `AGENTS.md`; specific feature behavior belongs in the appropriate feature spec. Read `docs/architecture/ARCHITECTURE.md`, current roadmap and owning feature document before implementation. For ambiguous binary fields, produce a minimal fixture and resolve against independent evidence; document the result rather than making an unsupported assumption. A proposed plan is never evidence of current code. When adapting to existing source, compare actual repository state first and preserve working implementations unless an explicit change is warranted.
 
 ## Verification bootstrap
 
@@ -40,7 +40,7 @@ Before format code: install pinned nextest/property/fuzz/coverage/dependency lan
 
 ## Mandatory coordinated development
 
-Apply [EES-1](ENGINEERING.md) (repo copy: `docs/architecture/ECOSYSTEM_ENGINEERING.md`) in all three repositories. Import that file alongside EVS-1. All tasks start with discovery and impact assessment of dmgez, hfsplus and apfs regardless of editor workspace. Keep separate releases and validate local and released dependency combinations.
+Apply [EES-1](ECOSYSTEM_ENGINEERING.md) (repo copy: `docs/architecture/ECOSYSTEM_ENGINEERING.md`) in all three repositories. Import that file alongside EVS-1. All tasks start with discovery and impact assessment of dmgez, hfsplus and apfs regardless of editor workspace. Keep separate releases and validate local and released dependency combinations.
 
 ## Revision 3 kernel portability bootstrap
 Before implementing filesystem crates, read EES-1 §3a, establish each no_std engine profile and add the pinned bare-metal target matrix. Apply gates from the first release of each affected crate. Test hosted adapters independently; do not wait for Charles kernel or full APFS to deliver dmgez. The master pack includes repository-local copies of shared policies, so merge each project directory directly after reviewing existing files.

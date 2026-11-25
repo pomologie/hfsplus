@@ -28,4 +28,4 @@ cargo build --locked -p hfsplus-format --no-default-features --target aarch64-un
 cargo build --locked -p hfsplus-format --no-default-features --target x86_64-unknown-none
 ```
 
-The [architecture](ARCHITECTURE.md) and [roadmap](ROADMAP.md) track the complete raw reader and broader image construction profiles for dmgez.
+The [architecture](docs/architecture/ARCHITECTURE.md) and [roadmap](docs/architecture/ROADMAP.md) track the complete raw reader and broader image construction profiles for dmgez.

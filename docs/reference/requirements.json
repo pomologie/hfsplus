@@ -275,7 +275,7 @@
     {
       "id": "H-VER-01",
       "milestone": "0.1.0",
-      "owner": "VERIFICATION.md",
+      "owner": "docs/architecture/VERIFICATION.md",
       "requirement": "Maintain independent test, fault, fuzz, coverage and architecture apparatus from bootstrap.",
       "source_ids": [
         "V04",
@@ -291,7 +291,7 @@
     {
       "id": "H-VER-02",
       "milestone": "0.1.0",
-      "owner": "VERIFICATION.md",
+      "owner": "docs/architecture/VERIFICATION.md",
       "requirement": "Track all activated proof obligations and evidence; run critical bounded Rust safety gates.",
       "source_ids": [
         "V04",
@@ -307,7 +307,7 @@
     {
       "id": "H-VER-03",
       "milestone": "1.0.0",
-      "owner": "VERIFICATION.md",
+      "owner": "docs/architecture/VERIFICATION.md",
       "requirement": "Qualify activated Lean, protocol and fault gates; retain source-linked evidence and reviewed assumptions.",
       "source_ids": [
         "V01",
@@ -325,7 +325,7 @@
     {
       "id": "H-PORT-01",
       "milestone": "0.1.0",
-      "owner": "ARCHITECTURE.md",
+      "owner": "docs/architecture/ARCHITECTURE.md",
       "requirement": "Mandatory no_std + alloc kernel-facing engine profiles from first crate release; both provisional bare-metal targets; std permitted in bulk builders and host adapters; actual kernel qualification separate.",
       "source_ids": [],
       "acceptance_tests": [
