@@ -107,6 +107,14 @@ fn folded_comparison_matches_native_equivalence_and_order() {
 		let collation = NameCollation::CaseFolded;
 		assert_eq!(collation.compare(&left, &right), expected, "{line}");
 		assert_eq!(
+			collation
+				.key(&left)
+				.unwrap()
+				.cmp(&collation.key(&right).unwrap()),
+			expected,
+			"{line}"
+		);
+		assert_eq!(
 			collation.compare(&right, &left),
 			expected.reverse(),
 			"{line}"
@@ -144,6 +152,16 @@ fn binary_comparison_uses_unsigned_stored_units() {
 	assert_eq!(collation.compare(&uppercase, &lowercase), Ordering::Less);
 	assert_eq!(collation.compare(&ignorable, &[]), Ordering::Greater);
 	assert_eq!(collation.compare(&[NUL], &lowercase), Ordering::Less);
+	for stored in [
+		&uppercase[..],
+		&lowercase,
+		&ignorable,
+		&supplementary,
+		&[NUL],
+		&[],
+	] {
+		assert_eq!(collation.key(stored).unwrap(), stored);
+	}
 	assert_eq!(
 		collation.compare(&supplementary, &[ABOVE_SURROGATES]),
 		Ordering::Less
@@ -162,4 +180,22 @@ fn folding_composes_with_canonical_decomposition() {
 		NameCollation::Binary.compare(composed.as_units(), decomposed.as_units()),
 		Ordering::Less
 	);
+}
+
+#[test]
+fn keys_bound_input_and_preserve_stored_forms() {
+	const STORED_UNIT: u16 = b'A' as u16;
+	for collation in [NameCollation::CaseFolded, NameCollation::Binary] {
+		let allowed = [STORED_UNIT; MAX_NAME_UNITS];
+		let excessive = [STORED_UNIT; MAX_NAME_UNITS + 1];
+		assert_eq!(collation.key(&allowed).unwrap().len(), MAX_NAME_UNITS);
+		assert!(matches!(collation.key(&excessive), Err(NameError::TooLong)));
+
+		let composed: Vec<u16> = "é".encode_utf16().collect();
+		let stored = normalize_utf16(&composed).unwrap();
+		assert_ne!(
+			collation.key(&composed).unwrap(),
+			collation.key(stored.as_units()).unwrap()
+		);
+	}
 }

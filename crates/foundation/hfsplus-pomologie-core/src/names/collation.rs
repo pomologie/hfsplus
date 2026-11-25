@@ -1,4 +1,9 @@
+extern crate alloc;
+
+use alloc::vec::Vec;
 use core::cmp::Ordering;
+
+use super::{MAX_NAME_UNITS, NameError};
 
 mod ordinal_overrides;
 
@@ -28,6 +33,29 @@ impl NameCollation {
 			Self::CaseFolded => folded_ordinals(left).cmp(folded_ordinals(right)),
 			Self::Binary => left.cmp(right),
 		}
+	}
+
+	/// Produces an owned comparison key for a stored name or empty thread key.
+	///
+	/// Comparing two keys made with the same mode gives the same result as
+	/// [`Self::compare`]. Keys contain collation weights. Use the original
+	/// units to display a name and normalize host text before making a key.
+	///
+	/// # Errors
+	/// Returns an error for input exceeding the on-disk name length limit or if
+	/// the bounded key cannot be allocated.
+	pub fn key(self, stored: &[u16]) -> Result<Vec<u16>, NameError> {
+		if stored.len() > MAX_NAME_UNITS {
+			return Err(NameError::TooLong);
+		}
+		let mut key = Vec::new();
+		key.try_reserve_exact(stored.len())
+			.map_err(NameError::Allocation)?;
+		match self {
+			Self::CaseFolded => key.extend(folded_ordinals(stored)),
+			Self::Binary => key.extend_from_slice(stored),
+		}
+		Ok(key)
 	}
 }
 
