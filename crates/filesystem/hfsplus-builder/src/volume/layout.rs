@@ -3,12 +3,13 @@ use hfsplus_format::{
 	attributes::NATIVE_NODE_BYTES as ATTRIBUTE_NODE_BYTES,
 	bsd,
 	btree::{
-		BIG_KEYS_MASK, CASE_FOLDING_COMPARE, HFS_BTREE_TYPE, TreeMetadata, VARIABLE_INDEX_KEYS_MASK,
+		BIG_KEYS_MASK, BINARY_COMPARE, CASE_FOLDING_COMPARE, HFS_BTREE_TYPE, TreeMetadata,
+		VARIABLE_INDEX_KEYS_MASK,
 	},
 	catalog::{MAX_KEY_LENGTH, ThreadKind},
 	hard_links::{Inode, PRIVATE_DIRECTORY_NAME, Stub, private_directory_value},
 	symlink::FINDER_TYPE_AND_CREATOR,
-	volume::{Extent, Fork, Geometry, HEADER_BYTES},
+	volume::{CatalogId, Extent, Fork, Geometry, HEADER_BYTES},
 };
 
 use crate::{
@@ -17,7 +18,7 @@ use crate::{
 };
 
 use super::{
-	EntryKind, ForkSource, VolumeError,
+	EntryKind, ForkSource, VolumeError, VolumeFormat,
 	attributes::Attributes,
 	capacity::Footprint,
 	catalog::{Catalog, file, folder, metadata},
@@ -90,6 +91,7 @@ fn place<S>(
 	mut record_payload: impl FnMut(EntryExtents),
 ) -> Result<Layout, VolumeError> {
 	let options = &draft.options;
+	let hfsx = options.format == VolumeFormat::HfsX;
 	let metadata_limit = usize::try_from(options.limits.max_metadata_bytes.0).unwrap_or(usize::MAX);
 	let hidden = draft
 		.hard_links
@@ -107,6 +109,7 @@ fn place<S>(
 			ROOT_ID,
 			options.root,
 			draft.root_valence,
+			hfsx.then_some(draft.root_subfolders),
 			draft.attributes.owner_flags(ROOT_ID),
 		),
 		ThreadKind::Folder,
@@ -138,7 +141,13 @@ fn place<S>(
 		let mut extents = EntryExtents::default();
 		let (value, kind) = match &input.kind {
 			EntryKind::Folder => (
-				folder(entry.id, input.metadata, entry.valence, flags),
+				folder(
+					entry.id,
+					input.metadata,
+					entry.valence,
+					hfsx.then_some(entry.subfolders),
+					flags,
+				),
 				ThreadKind::Folder,
 			),
 			EntryKind::File { data, resource } => {
@@ -231,6 +240,12 @@ fn place<S>(
 		options.max_tree_nodes,
 		tree_budget,
 		geometry,
+		options.format,
+		draft
+			.hard_links
+			.as_ref()
+			.filter(|_| hfsx)
+			.map(|links| links.directory),
 	)?;
 	let catalog = allocate_tree(&mut allocation, trees.catalog)?;
 	let extents = allocate_tree(&mut allocation, trees.extents)?;
@@ -259,6 +274,8 @@ fn pack_trees(
 	max_nodes: u32,
 	byte_budget: usize,
 	geometry: Geometry,
+	format: VolumeFormat,
+	first_child: Option<CatalogId>,
 ) -> Result<(MetadataTrees, usize), VolumeError> {
 	let extents = PackedTree::build(
 		&[],
@@ -267,12 +284,15 @@ fn pack_trees(
 	let after_extents = byte_budget
 		.checked_sub(extents.as_bytes().len())
 		.ok_or(VolumeError::Limit)?;
-	let catalog = records.pack(tree_options(
-		max_nodes,
-		after_extents,
-		geometry,
-		TreeKind::Catalog,
-	))?;
+	let catalog = records.pack(
+		tree_options(
+			max_nodes,
+			after_extents,
+			geometry,
+			TreeKind::Catalog(format),
+		),
+		first_child,
+	)?;
 	let after_catalog = after_extents
 		.checked_sub(catalog.as_bytes().len())
 		.ok_or(VolumeError::Limit)?;
@@ -345,7 +365,7 @@ fn allocate_tree(allocation: &mut Allocation, tree: PackedTree) -> Result<Placed
 }
 
 enum TreeKind {
-	Catalog,
+	Catalog(VolumeFormat),
 	Extents,
 }
 
@@ -356,9 +376,12 @@ fn tree_options(
 	kind: TreeKind,
 ) -> TreeOptions {
 	let (max_key_bytes, key_compare_type, attributes) = match kind {
-		TreeKind::Catalog => (
+		TreeKind::Catalog(format) => (
 			MAX_KEY_LENGTH as u16,
-			CASE_FOLDING_COMPARE,
+			match format {
+				VolumeFormat::HfsPlus => CASE_FOLDING_COMPARE,
+				VolumeFormat::HfsX => BINARY_COMPARE,
+			},
 			BIG_KEYS_MASK | VARIABLE_INDEX_KEYS_MASK,
 		),
 		TreeKind::Extents => (EXTENTS_MAX_KEY_BYTES, EXTENTS_KEY_COMPARE, BIG_KEYS_MASK),

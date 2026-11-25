@@ -6,7 +6,10 @@
 
 use std::{error::Error, fmt};
 
-use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt, names::NameError};
+use hfsplus_core::{
+	ByteLen, ByteOffset, ByteRange, RangeError, ReadAt,
+	names::{NameCollation, NameError},
+};
 use hfsplus_format::volume::{CatalogId, Geometry};
 
 use crate::{Limits, PlanError, allocation::AllocationError, tree::TreeError};
@@ -31,9 +34,32 @@ const VOLUME_DATE_COUNT: usize = 4;
 const DEFAULT_ENTRY_LIMIT: usize = 262_144;
 const DEFAULT_TREE_NODE_LIMIT: u32 = 8192;
 
+/// On-disk volume format and catalog comparison policy.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum VolumeFormat {
+	/// HFS+ version 4 with historical Unicode case folding.
+	#[default]
+	HfsPlus,
+	/// HFSX version 5 with binary comparison of canonically decomposed names.
+	HfsX,
+}
+
+impl VolumeFormat {
+	/// Returns the collation used for catalog names and path lookup.
+	#[must_use]
+	pub const fn name_collation(self) -> NameCollation {
+		match self {
+			Self::HfsPlus => NameCollation::CaseFolded,
+			Self::HfsX => NameCollation::Binary,
+		}
+	}
+}
+
 /// Volume geometry, root metadata, and resource limits.
 #[derive(Debug)]
 pub struct VolumeOptions<'a> {
+	/// Volume format. New options default to case-folded HFS+.
+	pub format: VolumeFormat,
 	/// The volume label, stored in HFS+ canonical Unicode form.
 	pub label: &'a str,
 	/// Checked raw-image geometry.
@@ -57,6 +83,7 @@ impl<'a> VolumeOptions<'a> {
 	#[must_use]
 	pub fn new(label: &'a str, geometry: Geometry) -> Self {
 		Self {
+			format: VolumeFormat::HfsPlus,
 			label,
 			geometry,
 			root: EntryMetadata::new(0o755),
@@ -189,7 +216,7 @@ pub enum VolumeError {
 	InvalidPath,
 	/// Paths are equivalent under the ASCII HFS+ comparator.
 	DuplicatePath,
-	/// Both supplied paths denote the same object under historical HFS+ collation.
+	/// Both supplied paths denote the same object under the selected catalog collation.
 	PathCollision {
 		/// The first colliding path as supplied.
 		first: String,

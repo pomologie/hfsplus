@@ -15,7 +15,6 @@ const DOT: u16 = '.' as u16;
 const EXCLUDED_PATH_COMPONENTS: &[&[u16]] = &[&[], &[DOT], &[DOT, DOT]];
 // The file hard-link namespace begins with NULs and is already excluded above.
 const DIRECTORY_LINK_ROOT_KEY: &[u16] = &ascii_units(b".HFS+ Private Directory Data\r");
-const COLLATION: NameCollation = NameCollation::CaseFolded;
 
 const fn ascii_units<const N: usize>(bytes: &[u8; N]) -> [u16; N] {
 	let mut units = [0; N];
@@ -34,9 +33,13 @@ pub(super) enum NameProfile {
 }
 
 impl NameProfile {
-	pub(super) fn volume_label(self, label: &str) -> Result<NormalizedName, VolumeError> {
+	pub(super) fn volume_label(
+		self,
+		label: &str,
+		collation: NameCollation,
+	) -> Result<NormalizedName, VolumeError> {
 		let name = self.component(label)?;
-		if COLLATION.compare(name.as_units(), &[]).is_eq() {
+		if collation.compare(name.as_units(), &[]).is_eq() {
 			return Err(VolumeError::UnsupportedName);
 		}
 		Ok(name)
@@ -62,7 +65,11 @@ impl NameProfile {
 pub(super) struct NormalizedPath(Vec<u16>);
 
 impl NormalizedPath {
-	pub(super) fn new(path: &str, profile: NameProfile) -> Result<Self, VolumeError> {
+	pub(super) fn new(
+		path: &str,
+		profile: NameProfile,
+		collation: NameCollation,
+	) -> Result<Self, VolumeError> {
 		let mut units = Vec::new();
 		for component in path.split(PATH_SEPARATOR) {
 			if component.is_empty() {
@@ -72,12 +79,12 @@ impl NormalizedPath {
 			let name = normalized.as_units();
 			if EXCLUDED_PATH_COMPONENTS
 				.iter()
-				.any(|excluded| COLLATION.compare(name, excluded).is_eq())
+				.any(|excluded| collation.compare(name, excluded).is_eq())
 			{
 				return Err(VolumeError::InvalidPath);
 			}
 			let first = units.is_empty();
-			if first && COLLATION.compare(name, DIRECTORY_LINK_ROOT_KEY).is_eq() {
+			if first && collation.compare(name, DIRECTORY_LINK_ROOT_KEY).is_eq() {
 				return Err(VolumeError::ReservedPath);
 			}
 			units.try_reserve(name.len() + usize::from(!first))?;
@@ -108,13 +115,13 @@ impl NormalizedPath {
 	}
 }
 
-pub(super) fn compare_paths(left: &[u16], right: &[u16]) -> Ordering {
+pub(super) fn compare_paths(left: &[u16], right: &[u16], collation: NameCollation) -> Ordering {
 	let mut right = right.split(|unit| *unit == SEPARATOR_UNIT);
 	for left in left.split(|unit| *unit == SEPARATOR_UNIT) {
 		let Some(right) = right.next() else {
 			return Ordering::Greater;
 		};
-		let order = COLLATION.compare(left, right);
+		let order = collation.compare(left, right);
 		if !order.is_eq() {
 			return order;
 		}

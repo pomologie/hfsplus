@@ -1,8 +1,8 @@
 use hfsplus_format::{
 	bsd,
 	catalog::{
-		EncodeValue, FLAG_THREAD_EXISTS, Key, Metadata, Permissions, Record as CatalogRecord,
-		ThreadKind,
+		EncodeValue, FLAG_HAS_FOLDER_COUNT, FLAG_THREAD_EXISTS, Key, Metadata, Permissions,
+		Record as CatalogRecord, ThreadKind,
 	},
 	volume::{CatalogId, Fork, Geometry},
 };
@@ -19,12 +19,14 @@ pub(super) fn folder(
 	id: CatalogId,
 	input: EntryMetadata,
 	valence: u32,
+	subfolders: Option<u32>,
 	flags: u16,
 ) -> EncodeValue<'static> {
+	let flags = flags | subfolders.map_or(0, |_| FLAG_HAS_FOLDER_COUNT);
 	EncodeValue::Folder {
 		metadata: metadata(id, input, bsd::DIRECTORY, flags),
 		valence,
-		tail_word: 0,
+		tail_word: subfolders.unwrap_or(0),
 	}
 }
 
@@ -130,11 +132,18 @@ impl Catalog {
 		Ok(())
 	}
 
-	pub(super) fn pack(mut self, options: TreeOptions) -> Result<PackedTree, VolumeError> {
-		// Sibling IDs were assigned in HFS+ collation order. A thread has the
-		// empty key, which sorts before all admitted child names.
-		self.records
-			.sort_unstable_by_key(|record| (record.parent_or_thread, record.child));
+	pub(super) fn pack(
+		mut self,
+		options: TreeOptions,
+		first_child: Option<CatalogId>,
+	) -> Result<PackedTree, VolumeError> {
+		// A thread has the empty key. In HFSX, the private directory follows
+		// the root thread because its name starts with NUL. Remaining sibling
+		// IDs are assigned in catalog order.
+		self.records.sort_unstable_by_key(|record| {
+			let ordinary = record.child.is_some_and(|child| Some(child) != first_child);
+			(record.parent_or_thread, ordinary, record.child)
+		});
 		let mut records = Vec::new();
 		records.try_reserve_exact(self.records.len())?;
 		records.extend(

@@ -6,8 +6,8 @@ use crate::{
 	binary::{put, u32_at},
 	bsd,
 	catalog::{
-		EncodeValue, FLAG_HAS_ATTRIBUTES, FLAG_THREAD_EXISTS, Key, Metadata, Permissions, Record,
-		Value,
+		EncodeValue, FLAG_HAS_ATTRIBUTES, FLAG_HAS_FOLDER_COUNT, FLAG_THREAD_EXISTS, Key, Metadata,
+		Permissions, Record, Value,
 	},
 	volume::{CatalogId, Fork, Geometry},
 };
@@ -21,7 +21,6 @@ const PRIVATE_NAME_NULL_UNITS: usize = 4;
 const PRIVATE_NAME_SUFFIX: &[u8] = b"HFS+ Private Data";
 const NO_LINK: CatalogId = CatalogId(0);
 const STUB_PERMISSIONS: u16 = 0o444;
-const PRIVATE_DIRECTORY_FLAGS: u16 = 0x0010;
 const OWNER_IMMUTABLE_FLAG: u8 = 0x02;
 const PRIVATE_DIRECTORY_LINK_COUNT: u32 = 1;
 const HAS_LINK_CHAIN: u16 = 0x0020;
@@ -341,7 +340,7 @@ pub fn private_directory_value(
 	Ok(EncodeValue::Folder {
 		metadata: Metadata {
 			id,
-			flags: PRIVATE_DIRECTORY_FLAGS,
+			flags: FLAG_HAS_FOLDER_COUNT,
 			dates: [root_created, 0, 0, 0, 0],
 			permissions: Permissions {
 				mode: bsd::DIRECTORY,

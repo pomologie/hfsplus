@@ -1,10 +1,12 @@
 use hfsplus_core::{ByteLen, ByteOffset, ReadAt};
-use hfsplus_format::volume::{Extent, Fork, Geometry, Header, PRIMARY_HEADER_OFFSET, SpecialFiles};
+use hfsplus_format::volume::{
+	Extent, Fork, Geometry, Header, PRIMARY_HEADER_OFFSET, Signature, SpecialFiles,
+};
 
 use crate::{Limits, PlanBuilder, PlanError, SealedPlan};
 
 use super::{
-	EntryKind, ForkSource, VolumeError,
+	EntryKind, ForkSource, VolumeError, VolumeFormat,
 	catalog::DEFAULT_ENCODING_HINT,
 	layout::{self, EntryExtents, Layout, allocated_fork, attributes_clump_bytes},
 	manifest::{Input, VolumeDraft},
@@ -59,6 +61,10 @@ pub(super) fn seal<S: ReadAt>(mut draft: VolumeDraft<'_, S>) -> Result<SealedPla
 			startup: Fork::empty(),
 		},
 	)?;
+	header.signature = match options.format {
+		VolumeFormat::HfsPlus => Signature::HfsPlus,
+		VolumeFormat::HfsX => Signature::HfsX,
+	};
 	header.files = draft.file_count;
 	header.folders = draft.folder_count;
 	header.free_blocks = allocation.free_blocks();

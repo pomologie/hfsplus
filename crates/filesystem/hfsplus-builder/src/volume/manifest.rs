@@ -1,4 +1,7 @@
-use hfsplus_core::{ReadAt, names::NormalizedName};
+use hfsplus_core::{
+	ReadAt,
+	names::{NameCollation, NormalizedName},
+};
 use hfsplus_format::{
 	symlink::{FINDER_TYPE_AND_CREATOR, validate_target},
 	volume::CatalogId,
@@ -45,6 +48,7 @@ pub(super) struct PlannedEntry<'a, S> {
 	pub(super) id: CatalogId,
 	pub(super) parent: CatalogId,
 	pub(super) valence: u32,
+	pub(super) subfolders: u32,
 }
 
 /// An admitted manifest with frozen catalog IDs and stored UTF-16 names.
@@ -55,6 +59,7 @@ pub struct VolumeDraft<'a, S> {
 	profile: NameProfile,
 	pub(super) entries: Vec<PlannedEntry<'a, S>>,
 	pub(super) root_valence: u32,
+	pub(super) root_subfolders: u32,
 	pub(super) folder_count: u32,
 	pub(super) file_count: u32,
 	pub(super) next_id: CatalogId,
@@ -114,8 +119,10 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 		if path.is_empty() {
 			return Ok(Some(ROOT_ID));
 		}
-		let normalized = NormalizedPath::new(path, self.profile)?;
-		Ok(find_path(&self.entries, normalized.units()).map(|index| id(&self.entries[index])))
+		let collation = self.options.format.name_collation();
+		let normalized = NormalizedPath::new(path, self.profile, collation)?;
+		Ok(find_path(&self.entries, normalized.units(), collation)
+			.map(|index| id(&self.entries[index])))
 	}
 
 	/// Supplies the data fork for a reserved generated file without changing its ID.
@@ -127,14 +134,15 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 		path: &str,
 		data: ForkSource<S>,
 	) -> Result<(), VolumeError> {
-		let normalized = NormalizedPath::new(path, self.profile).map_err(|error| {
+		let collation = self.options.format.name_collation();
+		let normalized = NormalizedPath::new(path, self.profile, collation).map_err(|error| {
 			if self.profile == NameProfile::Ascii {
 				VolumeError::NotAwaitingGeneratedData
 			} else {
 				error
 			}
 		})?;
-		let index = find_path(&self.entries, normalized.units())
+		let index = find_path(&self.entries, normalized.units(), collation)
 			.ok_or(VolumeError::NotAwaitingGeneratedData)?;
 		let Input::Ordinary(entry) = &mut self.entries[index].input else {
 			return Err(VolumeError::NotAwaitingGeneratedData);
@@ -171,7 +179,7 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 		self.attributes.add(owner, name, value, limit)
 	}
 
-	/// Allocates the forks and returns a sealed raw HFS+ image.
+	/// Allocates the forks and returns a sealed raw volume in the selected format.
 	///
 	/// # Errors
 	/// Rejects unbound generated data, invalid geometry, insufficient space,
@@ -184,12 +192,12 @@ impl<S: ReadAt> VolumeDraft<'_, S> {
 /// Validates a manifest and freezes catalog IDs for this printable ASCII profile.
 ///
 /// Directory parents must appear as manifest entries. Input order is ignored.
-/// Names preserve spelling but sibling comparisons fold ASCII letter case.
+/// Names preserve spelling. Sibling comparisons follow the volume format.
 /// Paths may not contain colon, empty components, or `.` and `..` components.
 ///
 /// # Errors
 /// Rejects names, kinds, metadata or hierarchy outside the profile, as well as
-/// case-equivalent paths and manifests that exhaust the entry or CNID budget.
+/// equivalent paths and manifests that exhaust the entry or CNID budget.
 pub fn plan_ascii<'a, S: ReadAt>(
 	options: VolumeOptions<'a>,
 	entries: Vec<ManifestEntry<'a, S>>,
@@ -201,7 +209,7 @@ pub fn plan_ascii<'a, S: ReadAt>(
 ///
 /// Paths are relative and every parent directory must be a separate entry.
 /// Display units retain case and ignorable characters after canonical
-/// decomposition. Lookup and collision checks use historical HFS+ collation.
+/// decomposition. Lookup and collision checks use the selected volume format's collation.
 /// Native access can require the stored spelling for supplementary
 /// decompositions that macOS does not apply during path lookup.
 ///
@@ -236,7 +244,8 @@ fn prepare<'a, S: ReadAt>(
 	groups: Vec<HardLinkGroup<'a, S>>,
 	profile: NameProfile,
 ) -> Result<VolumeDraft<'a, S>, VolumeError> {
-	let label = profile.volume_label(options.label)?;
+	let collation = options.format.name_collation();
+	let label = profile.volume_label(options.label, collation)?;
 	validate_metadata(options.root)?;
 	let visible_entries = groups.iter().try_fold(entries.len(), |count, group| {
 		if group.paths.len() < 2 {
@@ -259,7 +268,7 @@ fn prepare<'a, S: ReadAt>(
 	let mut canonical = Vec::new();
 	canonical.try_reserve_exact(visible_entries)?;
 	for entry in entries {
-		let path = NormalizedPath::new(entry.path, profile)?;
+		let path = NormalizedPath::new(entry.path, profile, collation)?;
 		validate_entry(&entry)?;
 		canonical.push((path, Input::Ordinary(entry)));
 	}
@@ -267,16 +276,16 @@ fn prepare<'a, S: ReadAt>(
 		validate_metadata(input.metadata)?;
 		validate_file_marker(input.metadata)?;
 		for &path in &input.paths {
-			let normalized = NormalizedPath::new(path, profile)?;
+			let normalized = NormalizedPath::new(path, profile, collation)?;
 			canonical.push((normalized, Input::Alias { path, group }));
 		}
 	}
 	canonical.sort_unstable_by(|(left, a), (right, b)| {
-		compare_paths(left.units(), right.units()).then_with(|| a.path().cmp(b.path()))
+		compare_paths(left.units(), right.units(), collation).then_with(|| a.path().cmp(b.path()))
 	});
 	for pair in canonical.windows(2) {
 		let ((left, a), (right, b)) = (&pair[0], &pair[1]);
-		if compare_paths(left.units(), right.units()).is_eq() {
+		if compare_paths(left.units(), right.units(), collation).is_eq() {
 			return match profile {
 				NameProfile::Ascii => Err(VolumeError::DuplicatePath),
 				NameProfile::Unicode => Err(VolumeError::PathCollision {
@@ -290,30 +299,36 @@ fn prepare<'a, S: ReadAt>(
 	let mut planned = Vec::new();
 	planned.try_reserve_exact(canonical.len())?;
 	let mut root_valence = 0;
+	let mut root_subfolders = 0;
 	let mut folder_count = 0;
 	for (ordinal, (path, input)) in (CatalogId::FIRST_USER.0..first_hidden_id.0).zip(canonical) {
+		let folder = u32::from(input.is_folder());
 		let parent = match path.parent() {
 			None => {
 				root_valence += 1;
+				root_subfolders += folder;
 				ROOT_ID
 			}
 			Some(parent_path) => {
-				let index = find_path(&planned, parent_path).ok_or(VolumeError::InvalidParent)?;
+				let index = find_path(&planned, parent_path, collation)
+					.ok_or(VolumeError::InvalidParent)?;
 				let parent = &mut planned[index];
 				if !parent.input.is_folder() {
 					return Err(VolumeError::InvalidParent);
 				}
 				parent.valence += 1;
+				parent.subfolders += folder;
 				parent.id
 			}
 		};
-		folder_count += u32::from(input.is_folder());
+		folder_count += folder;
 		planned.push(PlannedEntry {
 			input,
 			path,
 			parent,
 			id: CatalogId(ordinal),
 			valence: 0,
+			subfolders: 0,
 		});
 	}
 	let hidden_folders = u32::from(!groups.is_empty());
@@ -325,6 +340,7 @@ fn prepare<'a, S: ReadAt>(
 		profile,
 		entries: planned,
 		root_valence: root_valence + hidden_folders,
+		root_subfolders: root_subfolders + hidden_folders,
 		folder_count: folder_count + hidden_folders,
 		file_count: count - folder_count + hidden_files,
 		next_id,
@@ -380,8 +396,12 @@ fn validate_file_marker(metadata: EntryMetadata) -> Result<(), VolumeError> {
 	Ok(())
 }
 
-fn find_path<S>(entries: &[PlannedEntry<'_, S>], path: &[u16]) -> Option<usize> {
+fn find_path<S>(
+	entries: &[PlannedEntry<'_, S>],
+	path: &[u16],
+	collation: NameCollation,
+) -> Option<usize> {
 	entries
-		.binary_search_by(|entry| compare_paths(entry.path.units(), path))
+		.binary_search_by(|entry| compare_paths(entry.path.units(), path, collation))
 		.ok()
 }

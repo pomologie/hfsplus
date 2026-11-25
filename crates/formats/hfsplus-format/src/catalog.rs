@@ -28,6 +28,8 @@ const FOLDER_THREAD_RECORD: u16 = 0x0003;
 const FILE_THREAD_RECORD: u16 = 0x0004;
 /// Records that name a file must carry this flag because a thread is required.
 pub const FLAG_THREAD_EXISTS: u16 = 0x0002;
+/// The folder record's final word stores the number of direct child folders.
+pub const FLAG_HAS_FOLDER_COUNT: u16 = 0x0010;
 /// Records that own entries in the attributes tree carry this flag.
 pub const FLAG_HAS_ATTRIBUTES: u16 = 0x0004;
 
