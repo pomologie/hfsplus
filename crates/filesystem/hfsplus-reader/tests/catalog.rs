@@ -28,6 +28,14 @@ const NODE_BACK_LINK_OFFSET: usize = size_of::<u32>();
 const PAGE_SIZE: NonZeroUsize = NonZeroUsize::new(13).unwrap();
 
 #[test]
+fn catalog_retains_its_exact_volume_view_identity() {
+	let volume = Volume::open(NATIVE).unwrap();
+	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
+	assert!(catalog.belongs_to(&volume));
+	assert!(!catalog.belongs_to(&Volume::open(NATIVE).unwrap()));
+}
+
+#[test]
 fn resolves_native_multilevel_names_ids_and_payload() {
 	let volume = Volume::open(NATIVE).unwrap();
 	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();

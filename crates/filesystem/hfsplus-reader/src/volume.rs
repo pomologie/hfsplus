@@ -3,10 +3,13 @@ use core::fmt;
 use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt};
 use hfsplus_format::{
 	Error as FormatError,
-	volume::{HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET},
+	volume::{ALTERNATE_HEADER_FROM_END, HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET},
 };
 
 use crate::{ForkReadSupport, journal, profile};
+
+const BOOT_BYTES: usize = PRIMARY_HEADER_OFFSET as usize;
+const RESERVED_TRAILER_BYTES: usize = ALTERNATE_HEADER_FROM_END as usize - HEADER_BYTES;
 
 /// Volume discovery or fork I/O failed.
 #[derive(Debug)]
@@ -128,6 +131,24 @@ impl<S: ReadAt> Volume<S> {
 	#[must_use]
 	pub const fn header(&self) -> &Header {
 		&self.primary
+	}
+
+	/// Checks that the boot sectors before the primary header and the reserved
+	/// sector after the alternate header both contain only zero bytes.
+	/// This reads the fixed header-adjacent sectors, excluding allocation slack.
+	/// # Errors
+	/// Returns a source read error if either required range cannot be read.
+	pub fn reserved_sectors_are_clear(&self) -> Result<bool, Error<S::Error>> {
+		let mut boot = [0; BOOT_BYTES];
+		read_source(&self.source, ByteOffset(0), &mut boot)?;
+		if boot.iter().any(|&byte| byte != 0) {
+			return Ok(false);
+		}
+		let mut trailing = [0; RESERVED_TRAILER_BYTES];
+		let alternate_start = self.primary.geometry.alternate_header_offset();
+		let offset = ByteOffset(alternate_start + HEADER_BYTES as u64);
+		read_source(&self.source, offset, &mut trailing)?;
+		Ok(trailing.iter().all(|&byte| byte == 0))
 	}
 
 	/// Reports whether the alternate is identical, different, blank, or invalid.

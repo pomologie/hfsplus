@@ -145,6 +145,12 @@ impl<S: ReadAt> Volume<S> {
 }
 
 impl<S: ReadAt> Catalog<'_, S> {
+	/// Returns whether this catalog was opened from that exact volume view.
+	#[must_use]
+	pub fn belongs_to(&self, volume: &Volume<S>) -> bool {
+		core::ptr::eq(self.volume, volume)
+	}
+
 	/// The catalog's validated name comparison mode.
 	#[must_use]
 	pub const fn collation(&self) -> NameCollation {

@@ -26,6 +26,19 @@ const FIRST_TEST_DATA_BLOCK: AllocationBlock = AllocationBlock(5);
 const SECOND_TEST_DATA_BLOCK: AllocationBlock = AllocationBlock(1);
 
 #[test]
+fn observes_boot_and_trailing_reserved_sectors_independently() {
+	let volume = Volume::open(OPTICAL).unwrap();
+	assert!(volume.reserved_sectors_are_clear().unwrap());
+	let trailing = volume.header().geometry.alternate_header_offset() as usize + HEADER_BYTES;
+	for offset in [PRIMARY - 1, trailing] {
+		let mut image = OPTICAL.to_vec();
+		image[offset] = 1;
+		let changed = Volume::open(image.as_slice()).unwrap();
+		assert!(!changed.reserved_sectors_are_clear().unwrap());
+	}
+}
+
+#[test]
 fn reads_native_catalog_and_file_bytes() {
 	let volume = Volume::open(OPTICAL).unwrap();
 	assert_eq!(volume.header().signature, Signature::HfsPlus);
