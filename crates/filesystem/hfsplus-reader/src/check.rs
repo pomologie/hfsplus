@@ -1,6 +1,6 @@
 //! Bounded structural and allocation checks for supported HFS+ volumes.
 
-use hfsplus_core::ReadAt;
+use hfsplus_core::{ByteLen, ReadAt};
 use hfsplus_format::{Error as FormatError, catalog::FLAG_HAS_ATTRIBUTES, volume::CatalogId};
 
 use crate::{
@@ -12,8 +12,12 @@ use crate::{
 };
 
 mod error;
+mod payload;
 
 pub use error::{CatalogProblem, CheckError, CheckLimit};
+pub use payload::ReachableDataReport;
+
+use payload::PayloadAudit;
 
 const DEFAULT_CATALOG_ENTRIES: usize = 64 << 10;
 const DEFAULT_CATALOG_NODE_READS: u32 = 1 << 20;
@@ -154,6 +158,35 @@ impl<S: ReadAt> Volume<S> {
 		&self,
 		limits: CheckLimits,
 	) -> Result<StructuralReport, CheckError<S::Error>> {
+		self.check(limits, None)
+	}
+
+	/// Checks reachable structures and reads every supported stored file fork
+	/// and fork-backed attribute covered by the structural audit.
+	///
+	/// The byte budget covers the logical length of each stored fork, excluding
+	/// allocation slack and metadata reads. Hard-linked files are read once per
+	/// resolved inode. Compressed forks are read in their stored representation.
+	/// The report preserves the structural audit's coverage limits.
+	///
+	/// # Errors
+	/// Returns the same structural errors as [`Self::check_structure`], as
+	/// well as a payload read error or a payload byte limit error.
+	pub fn check_reachable_data(
+		&self,
+		limits: CheckLimits,
+		max_payload_bytes: ByteLen,
+	) -> Result<ReachableDataReport, CheckError<S::Error>> {
+		let mut payload = PayloadAudit::new(max_payload_bytes);
+		let structure = self.check(limits, Some(&mut payload))?;
+		Ok(payload.report(structure))
+	}
+
+	fn check(
+		&self,
+		limits: CheckLimits,
+		mut payload: Option<&mut PayloadAudit>,
+	) -> Result<StructuralReport, CheckError<S::Error>> {
 		let mut allocation = self.metadata_claims(limits.allocation)?;
 		let catalog = self.open_catalog(limits.catalog)?;
 		let audit = catalog.audit(limits)?;
@@ -170,6 +203,7 @@ impl<S: ReadAt> Volume<S> {
 				ForkKind::Data,
 				&data,
 				limits.allocation.overflow,
+				payload.as_deref_mut(),
 			)?;
 			self.claim_fork(
 				&mut allocation.claims,
@@ -177,6 +211,7 @@ impl<S: ReadAt> Volume<S> {
 				ForkKind::Resource,
 				&resource,
 				limits.allocation.overflow,
+				payload.as_deref_mut(),
 			)?;
 		}
 		let attributes = self.check_attributes(
@@ -187,6 +222,7 @@ impl<S: ReadAt> Volume<S> {
 				.filter(|member| member.entry.metadata.flags & FLAG_HAS_ATTRIBUTES != 0)
 				.map(|member| member.entry.metadata.id),
 			limits,
+			payload,
 		)?;
 		let checked = allocation.verify()?;
 		let free_blocks = checked.free_blocks;
@@ -230,6 +266,7 @@ impl<S: ReadAt> Volume<S> {
 		kind: ForkKind,
 		fork: &hfsplus_format::volume::Fork,
 		overflow: OverflowLimits,
+		payload: Option<&mut PayloadAudit>,
 	) -> Result<(), CheckError<S::Error>> {
 		let owner = AllocationOwner::FileFork { id, kind };
 		let fork = self
@@ -237,6 +274,9 @@ impl<S: ReadAt> Volume<S> {
 			.map_err(|error| CheckError::Fork { owner, error })?;
 		for extent in fork.extents() {
 			claims.push(extent.start.0, extent.blocks, owner)?;
+		}
+		if let Some(payload) = payload {
+			payload.read_file(owner, &fork)?;
 		}
 		Ok(())
 	}
@@ -246,6 +286,7 @@ impl<S: ReadAt> Volume<S> {
 		claims: &mut Claims<AllocationOwner>,
 		owners: impl Iterator<Item = CatalogId>,
 		limits: CheckLimits,
+		mut payload: Option<&mut PayloadAudit>,
 	) -> Result<AttributeCoverage, CheckError<S::Error>> {
 		if self.header().forks.attributes.logical_bytes == 0 {
 			let mut owners = owners;
@@ -277,6 +318,9 @@ impl<S: ReadAt> Volume<S> {
 					let owner = AllocationOwner::AttributeFork { id, ordinal };
 					for extent in fork.extents() {
 						claims.push(extent.start.0, extent.blocks, owner)?;
+					}
+					if let Some(payload) = payload.as_deref_mut() {
+						payload.read_attribute(owner, &fork)?;
 					}
 					fork_backed += 1;
 				} else if matches!(entry.encoding, AttributeEncoding::Inline(_)) {

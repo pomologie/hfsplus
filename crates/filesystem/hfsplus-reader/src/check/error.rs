@@ -1,23 +1,31 @@
 use crate::alloc::collections::TryReserveError;
 use core::fmt;
 
+use hfsplus_core::{ByteLen, ByteOffset};
 use hfsplus_format::{hard_links::LinkReference, volume::CatalogId};
 
 use super::AllocationOwner;
 use crate::{
+	Error as VolumeError,
 	allocation::AllocationError,
 	attributes::AttributeReadError,
 	catalog::{CatalogError, HardLinkError},
 	overflow::OverflowError,
 };
 
-/// Work bounds reached by the structural audit.
+/// Work bounds reached by a volume audit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CheckLimit {
 	CatalogEntries,
 	ParentDepth,
 	AttributeNames,
+	/// The remaining payload budget cannot cover the next stored fork.
+	PayloadBytes {
+		owner: AllocationOwner,
+		required: ByteLen,
+		remaining: ByteLen,
+	},
 }
 
 /// Inconsistent relationships among structurally readable catalog records.
@@ -61,7 +69,7 @@ pub enum CatalogProblem {
 	MissingAttributes(CatalogId),
 }
 
-/// A structural audit failed before producing a report.
+/// A structural or reachable-data audit failed before producing a report.
 #[derive(Debug)]
 #[non_exhaustive]
 pub enum CheckError<E> {
@@ -72,6 +80,12 @@ pub enum CheckError<E> {
 	Fork {
 		owner: AllocationOwner,
 		error: OverflowError<E>,
+	},
+	PayloadRead {
+		owner: AllocationOwner,
+		/// Start of the failed read, relative to the stored fork.
+		offset: ByteOffset,
+		error: VolumeError<E>,
 	},
 	Structure(CatalogProblem),
 	Limit(CheckLimit),
@@ -116,7 +130,27 @@ impl<E: fmt::Display> fmt::Display for CheckError<E> {
 			Self::HardLink(error) => error.fmt(f),
 			Self::Attributes(error) => error.fmt(f),
 			Self::Fork { owner, error } => write!(f, "fork for {owner:?} failed: {error}"),
+			Self::PayloadRead {
+				owner,
+				offset,
+				error,
+			} => {
+				write!(
+					f,
+					"payload for {owner:?} at byte {} failed: {error}",
+					offset.0
+				)
+			}
 			Self::Structure(problem) => write!(f, "catalog structure invalid: {problem:?}"),
+			Self::Limit(CheckLimit::PayloadBytes {
+				owner,
+				required,
+				remaining,
+			}) => write!(
+				f,
+				"payload for {owner:?} requires {} bytes with {} remaining",
+				required.0, remaining.0
+			),
 			Self::Limit(limit) => write!(f, "structural check reached the {limit:?} limit"),
 			Self::Memory(error) => write!(f, "cannot allocate structural check state: {error}"),
 		}
@@ -131,6 +165,7 @@ impl<E: core::error::Error + 'static> core::error::Error for CheckError<E> {
 			Self::HardLink(error) => Some(error),
 			Self::Attributes(error) => Some(error),
 			Self::Fork { error, .. } => Some(error),
+			Self::PayloadRead { error, .. } => Some(error),
 			Self::Memory(error) => Some(error),
 			_ => None,
 		}

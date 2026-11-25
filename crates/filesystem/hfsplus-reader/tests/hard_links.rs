@@ -240,7 +240,7 @@ fn configured_chain_budget_never_upgrades_chain_free_counts() {
 
 #[test]
 fn checks_shared_storage_once_and_reports_unqualified_attribute_layout() {
-	use hfsplus_reader::check::{AttributeCoverage, CheckLimits};
+	use hfsplus_reader::check::{AttributeCoverage, CheckError, CheckLimit, CheckLimits};
 
 	let volume = Volume::open(ownership_fixture(NATIVE)).unwrap();
 	let report = volume.check_structure(CheckLimits::default()).unwrap();
@@ -250,6 +250,62 @@ fn checks_shared_storage_once_and_reports_unqualified_attribute_layout() {
 	assert_eq!(report.free_blocks, 3994);
 	assert_eq!(report.unclaimed_allocated_blocks, 0);
 	assert_eq!(report.attributes, AttributeCoverage::UnsupportedTree);
+	assert!(matches!(
+		volume.check_reachable_data(CheckLimits::default(), ByteLen(0)),
+		Err(CheckError::Limit(CheckLimit::PayloadBytes {
+			remaining: ByteLen(0),
+			..
+		}))
+	));
+}
+
+#[test]
+fn reads_each_stored_hard_link_fork_once_and_reports_a_missing_resource_fork() {
+	use hfsplus_reader::{
+		Error as VolumeError,
+		check::{AllocationOwner, CheckError, CheckLimit, CheckLimits},
+	};
+
+	let mut fixture = ownership_fixture(NATIVE);
+	let payloads = [FIRST_PAYLOAD, FIRST_RESOURCE, SECOND_PAYLOAD];
+	fixture.slices.extend(
+		Fixture::decode(NATIVE)
+			.slices
+			.into_iter()
+			.filter(|(_, bytes)| payloads.contains(&bytes.as_slice())),
+	);
+	let volume = Volume::open(&fixture).unwrap();
+	let limits = CheckLimits::default();
+	let stored_bytes = ByteLen::from(payloads.into_iter().map(<[u8]>::len).sum::<usize>());
+	let report = volume.check_reachable_data(limits, stored_bytes).unwrap();
+	assert_eq!(report.stored_bytes, stored_bytes);
+	assert_eq!(report.structure.hard_link_groups, 2);
+	assert_eq!(report.structure, volume.check_structure(limits).unwrap());
+	assert_eq!(report.file_forks, payloads.len() as u64);
+	assert_eq!(report.attribute_forks, 0);
+	assert!(matches!(
+		volume.check_reachable_data(limits, ByteLen(stored_bytes.0 - 1)),
+		Err(CheckError::Limit(CheckLimit::PayloadBytes { required, remaining, .. }))
+			if required.0 == remaining.0 + 1
+	));
+
+	fixture.slices.retain(|(_, bytes)| bytes != FIRST_RESOURCE);
+	let gap = Volume::open(&fixture).unwrap();
+	assert_eq!(gap.check_structure(limits).unwrap(), report.structure);
+	assert!(matches!(
+		gap.check_reachable_data(limits, stored_bytes),
+		Err(CheckError::PayloadRead {
+			owner: AllocationOwner::FileFork {
+				id: FIRST_INODE,
+				kind: ForkKind::Resource
+			},
+			offset: ByteOffset(0),
+			error: VolumeError::Source {
+				error: RangeError::OutsideSource,
+				..
+			},
+		})
+	));
 }
 
 #[test]

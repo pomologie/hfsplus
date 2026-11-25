@@ -164,6 +164,56 @@ fn check_accounts_for_native_attribute_and_file_forks_without_reading_payloads()
 }
 
 #[test]
+fn reachable_check_reads_native_attribute_forks_and_reports_a_later_byte_fault() {
+	let mut source = Slices::new(IMAGE).with_structure();
+	let limits = CheckLimits::default();
+	let volume = Volume::open(&source).unwrap();
+	let structure = volume.check_structure(limits).unwrap();
+	let attributes = volume.attributes(AttributeReadLimits::default()).unwrap();
+	let value = attributes
+		.open_attribute(OWNER, &units(CONTIGUOUS))
+		.unwrap()
+		.unwrap();
+	let extent = value.extents().next().unwrap();
+	let base = volume
+		.header()
+		.geometry
+		.block_range(extent.start, extent.blocks)
+		.unwrap()
+		.start;
+
+	// Catalog and attribute metadata and both attributes are native bytes.
+	// The fixture omits ballast payloads, so give those bytes a readable backing.
+	source.fill_unrecorded = true;
+	let max_payload_bytes = source.len();
+	let volume = Volume::open(&source).unwrap();
+	let report = volume
+		.check_reachable_data(limits, max_payload_bytes)
+		.unwrap();
+	assert_eq!(report.structure, structure);
+	assert_eq!(report.attribute_forks, NATIVE_FORK_NAMES as u64);
+	assert!(report.stored_bytes.0 > (CONTIGUOUS_BYTES + fragmented_value().len()) as u64);
+	assert_eq!(
+		volume
+			.check_reachable_data(limits, report.stored_bytes)
+			.unwrap(),
+		report
+	);
+
+	source.fail_at = Some(base + BLOCK_BYTES as u64);
+	let volume = Volume::open(&source).unwrap();
+	assert_eq!(volume.check_structure(limits).unwrap(), structure);
+	assert!(matches!(
+		volume.check_reachable_data(limits, max_payload_bytes),
+		Err(CheckError::PayloadRead {
+			owner: AllocationOwner::AttributeFork { id: OWNER, ordinal: CONTIGUOUS_ORDINAL },
+			offset: ByteOffset(offset),
+			error: VolumeError::Source { error: RangeError::OutsideSource, .. },
+		}) if offset == BLOCK_BYTES as u64
+	));
+}
+
+#[test]
 fn check_rejects_an_attribute_fork_that_claims_a_file_data_block() {
 	let mut image = IMAGE.to_vec();
 	let at =
@@ -392,6 +442,7 @@ struct Slices<'fixture> {
 	ranges: Vec<(u64, &'fixture [u8])>,
 	payload_reads: Cell<usize>,
 	fail_at: Option<u64>,
+	fill_unrecorded: bool,
 }
 
 impl<'fixture> Slices<'fixture> {
@@ -418,6 +469,7 @@ impl<'fixture> Slices<'fixture> {
 			ranges,
 			payload_reads: Cell::new(0),
 			fail_at: None,
+			fill_unrecorded: false,
 		}
 	}
 
@@ -451,10 +503,13 @@ impl ReadAt for Slices<'_> {
 		if self.fail_at == Some(offset.0) {
 			return Err(RangeError::OutsideSource);
 		}
-		out.copy_from_slice(
-			self.segment(offset.0, out.len())
-				.ok_or(RangeError::OutsideSource)?,
-		);
+		if let Some(bytes) = self.segment(offset.0, out.len()) {
+			out.copy_from_slice(bytes);
+		} else if self.fill_unrecorded {
+			out.fill(0);
+		} else {
+			return Err(RangeError::OutsideSource);
+		}
 		Ok(())
 	}
 }
