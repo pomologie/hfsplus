@@ -22,6 +22,7 @@ mod manifest;
 
 pub use attributes::validate_inline_attribute;
 pub use capacity::{CapacityError, CapacityPolicy, PlannedCapacity};
+pub use hfsplus_format::symlink::MAX_SYMLINK_TARGET_BYTES;
 pub use manifest::{AsciiVolumeDraft, VolumeDraft, plan, plan_ascii, plan_with_hard_links};
 
 const FINDER_INFO_BYTES: usize = 32;
@@ -29,11 +30,6 @@ const ENTRY_DATE_COUNT: usize = 5;
 const VOLUME_DATE_COUNT: usize = 4;
 const DEFAULT_ENTRY_LIMIT: usize = 262_144;
 const DEFAULT_TREE_NODE_LIMIT: u32 = 8192;
-const FINDER_TYPE_AND_CREATOR_BYTES: usize = 8;
-const SYMLINK_FINDER_TYPE_AND_CREATOR: [u8; FINDER_TYPE_AND_CREATOR_BYTES] = *b"slnkrhap";
-
-/// Maximum symbolic link target size in the HFS+ compatibility profile.
-pub const MAX_SYMLINK_TARGET_BYTES: usize = 1024;
 
 /// Volume geometry, root metadata, and resource limits.
 #[derive(Debug)]

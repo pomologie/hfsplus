@@ -4,6 +4,7 @@ use core::{fmt, num::NonZeroU32};
 
 use crate::{
 	binary::{put, u32_at},
+	bsd,
 	catalog::{
 		EncodeValue, FLAG_HAS_ATTRIBUTES, FLAG_THREAD_EXISTS, Key, Metadata, Permissions, Record,
 		Value,
@@ -19,9 +20,6 @@ pub use reference::{InodeName, LinkReference};
 const PRIVATE_NAME_NULL_UNITS: usize = 4;
 const PRIVATE_NAME_SUFFIX: &[u8] = b"HFS+ Private Data";
 const NO_LINK: CatalogId = CatalogId(0);
-const MODE_TYPE_MASK: u16 = 0o170000;
-const REGULAR_FILE_MODE_TYPE: u16 = 0o100000;
-const DIRECTORY_MODE_TYPE: u16 = 0o040000;
 const STUB_PERMISSIONS: u16 = 0o444;
 const PRIVATE_DIRECTORY_FLAGS: u16 = 0x0010;
 const OWNER_IMMUTABLE_FLAG: u8 = 0x02;
@@ -135,7 +133,7 @@ impl Stub {
 		if metadata.id < CatalogId::FIRST_USER
 			|| metadata.flags & FLAG_THREAD_EXISTS == 0
 			|| metadata.flags & FLAG_HAS_ATTRIBUTES != 0
-			|| metadata.permissions.mode & MODE_TYPE_MASK != REGULAR_FILE_MODE_TYPE
+			|| metadata.permissions.mode & bsd::TYPE_MASK != bsd::REGULAR_FILE
 			|| data.total_blocks != 0
 			|| resource.total_blocks != 0
 		{
@@ -175,7 +173,7 @@ impl Stub {
 			flags: FLAG_THREAD_EXISTS,
 			dates: [created, created, created, created, 0],
 			permissions: Permissions {
-				mode: REGULAR_FILE_MODE_TYPE | STUB_PERMISSIONS,
+				mode: bsd::REGULAR_FILE | STUB_PERMISSIONS,
 				special: self.reference.get(),
 				owner_flags: OWNER_IMMUTABLE_FLAG,
 				..empty_permissions()
@@ -346,7 +344,7 @@ pub fn private_directory_value(
 			flags: PRIVATE_DIRECTORY_FLAGS,
 			dates: [root_created, 0, 0, 0, 0],
 			permissions: Permissions {
-				mode: DIRECTORY_MODE_TYPE,
+				mode: bsd::DIRECTORY,
 				special: PRIVATE_DIRECTORY_LINK_COUNT,
 				owner_flags: OWNER_IMMUTABLE_FLAG,
 				..empty_permissions()
@@ -391,7 +389,7 @@ fn validate_neighbors(neighbors: Neighbors, id: CatalogId) -> Result<Neighbors, 
 fn validate_inode(metadata: Metadata) -> Result<(), Error> {
 	if metadata.id < CatalogId::FIRST_USER
 		|| metadata.flags & FLAG_THREAD_EXISTS == 0
-		|| metadata.permissions.mode & MODE_TYPE_MASK != REGULAR_FILE_MODE_TYPE
+		|| metadata.permissions.mode & bsd::TYPE_MASK != bsd::REGULAR_FILE
 		|| metadata.finder_info.starts_with(STUB_FINDER_CODE)
 	{
 		return Err(Error::InvalidInode);

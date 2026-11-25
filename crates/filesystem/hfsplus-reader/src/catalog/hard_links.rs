@@ -5,6 +5,7 @@ use core::num::NonZeroU32;
 
 use hfsplus_core::ReadAt;
 use hfsplus_format::{
+	bsd,
 	catalog::{Metadata, Record},
 	hard_links::{Inode, LinkReference, PRIVATE_DIRECTORY_NAME, Stub},
 	volume::{CatalogId, Fork},
@@ -22,8 +23,6 @@ pub use error::{HardLinkError, LinkCorruption, LinkTarget};
 
 const DEFAULT_CHAIN_LINKS: u32 = 512;
 const CREATED_DATE_INDEX: usize = 0;
-const BSD_TYPE_MASK: u16 = 0o170000;
-const BSD_REGULAR_FILE: u16 = 0o100000;
 const DIRECTORY_LINK_FINDER_CODE: &[u8] = b"fdrpMACS";
 
 /// Bounded work for following an inode's linked-stub chain.
@@ -172,7 +171,7 @@ impl<'volume, S: ReadAt> Catalog<'volume, S> {
 			};
 			(inode.metadata, inode.data, inode.resource, Some(link))
 		} else {
-			if entry.metadata.permissions.mode & BSD_TYPE_MASK != BSD_REGULAR_FILE {
+			if entry.metadata.permissions.mode & bsd::TYPE_MASK != bsd::REGULAR_FILE {
 				return Err(HardLinkError::NotRegular(id));
 			}
 			(entry.metadata, data, resource, None)

@@ -3,11 +3,13 @@
 
 pub mod attributes;
 mod binary;
+pub mod bsd;
 pub mod btree;
 pub mod catalog;
 mod error;
 pub mod hard_links;
 pub mod journal;
+pub mod symlink;
 pub mod volume;
 
 pub use error::Error;

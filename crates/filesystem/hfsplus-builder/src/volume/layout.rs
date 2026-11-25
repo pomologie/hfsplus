@@ -1,11 +1,13 @@
 use hfsplus_core::ByteLen;
 use hfsplus_format::{
 	attributes::NATIVE_NODE_BYTES as ATTRIBUTE_NODE_BYTES,
+	bsd,
 	btree::{
 		BIG_KEYS_MASK, CASE_FOLDING_COMPARE, HFS_BTREE_TYPE, TreeMetadata, VARIABLE_INDEX_KEYS_MASK,
 	},
 	catalog::{MAX_KEY_LENGTH, ThreadKind},
 	hard_links::{Inode, PRIVATE_DIRECTORY_NAME, Stub, private_directory_value},
+	symlink::FINDER_TYPE_AND_CREATOR,
 	volume::{Extent, Fork, Geometry, HEADER_BYTES},
 };
 
@@ -15,8 +17,7 @@ use crate::{
 };
 
 use super::{
-	EntryKind, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, SYMLINK_FINDER_TYPE_AND_CREATOR,
-	VolumeError,
+	EntryKind, ForkSource, VolumeError,
 	attributes::Attributes,
 	capacity::Footprint,
 	catalog::{Catalog, file, folder, metadata},
@@ -26,8 +27,6 @@ use super::{
 const NODE_BYTES: u16 = 4096;
 const EXTENTS_MAX_KEY_BYTES: u16 = 10;
 const EXTENTS_KEY_COMPARE: u8 = 0;
-const FILE_TYPE: u16 = 0o100000;
-const SYMLINK_TYPE: u16 = 0o120000;
 const RESERVED_CATALOG_FORK_WORD: u32 = 0;
 
 #[derive(Default)]
@@ -147,7 +146,14 @@ fn place<S>(
 					allocate_file(&mut allocation, geometry, data, resource.as_ref())?;
 				extents = placement;
 				(
-					file(entry.id, input.metadata, FILE_TYPE, data, resource, flags),
+					file(
+						entry.id,
+						input.metadata,
+						bsd::REGULAR_FILE,
+						data,
+						resource,
+						flags,
+					),
 					ThreadKind::File,
 				)
 			}
@@ -159,10 +165,10 @@ fn place<S>(
 					allocate_fork(&mut allocation, geometry, ByteLen::from(target.len()).0)?;
 				extents.data = extent;
 				let mut input = input.metadata;
-				input.finder_info[..FINDER_TYPE_AND_CREATOR_BYTES]
-					.copy_from_slice(&SYMLINK_FINDER_TYPE_AND_CREATOR);
+				input.finder_info[..FINDER_TYPE_AND_CREATOR.len()]
+					.copy_from_slice(&FINDER_TYPE_AND_CREATOR);
 				(
-					file(entry.id, input, SYMLINK_TYPE, data, Fork::empty(), flags),
+					file(entry.id, input, bsd::SYMLINK, data, Fork::empty(), flags),
 					ThreadKind::File,
 				)
 			}
@@ -197,7 +203,7 @@ fn place<S>(
 				metadata: metadata(
 					file.id,
 					file.metadata,
-					FILE_TYPE,
+					bsd::REGULAR_FILE,
 					draft.attributes.owner_flags(file.id),
 				),
 				data,

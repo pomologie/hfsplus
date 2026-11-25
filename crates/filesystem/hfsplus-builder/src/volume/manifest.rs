@@ -1,12 +1,13 @@
 use hfsplus_core::{ReadAt, names::NormalizedName};
-use hfsplus_format::volume::CatalogId;
+use hfsplus_format::{
+	symlink::{FINDER_TYPE_AND_CREATOR, validate_target},
+	volume::CatalogId,
+};
 
 use crate::SealedPlan;
 
 use super::{
-	EntryKind, EntryMetadata, FINDER_TYPE_AND_CREATOR_BYTES, ForkSource, HardLinkGroup,
-	MAX_SYMLINK_TARGET_BYTES, ManifestEntry, SYMLINK_FINDER_TYPE_AND_CREATOR, VolumeError,
-	VolumeOptions,
+	EntryKind, EntryMetadata, ForkSource, HardLinkGroup, ManifestEntry, VolumeError, VolumeOptions,
 	attributes::Attributes,
 	catalog_path::{NameProfile, NormalizedPath, compare_paths},
 	emit,
@@ -354,14 +355,13 @@ fn validate_metadata(metadata: EntryMetadata) -> Result<(), VolumeError> {
 
 fn validate_entry<S>(entry: &ManifestEntry<'_, S>) -> Result<(), VolumeError> {
 	validate_metadata(entry.metadata)?;
-	let type_and_creator = &entry.metadata.finder_info[..FINDER_TYPE_AND_CREATOR_BYTES];
-	let has_link_marker = type_and_creator == SYMLINK_FINDER_TYPE_AND_CREATOR;
 	match &entry.kind {
 		EntryKind::Symlink { target } => {
-			if target.is_empty() || target.len() > MAX_SYMLINK_TARGET_BYTES || target.contains(&0) {
-				return Err(VolumeError::InvalidSymlinkTarget);
-			}
-			if !has_link_marker && type_and_creator != [0; FINDER_TYPE_AND_CREATOR_BYTES] {
+			validate_target(target).map_err(|_| VolumeError::InvalidSymlinkTarget)?;
+			let type_and_creator = &entry.metadata.finder_info[..FINDER_TYPE_AND_CREATOR.len()];
+			if type_and_creator != FINDER_TYPE_AND_CREATOR
+				&& type_and_creator != [0; FINDER_TYPE_AND_CREATOR.len()]
+			{
 				return Err(VolumeError::UnsupportedFinderInfo);
 			}
 		}
@@ -374,10 +374,7 @@ fn validate_entry<S>(entry: &ManifestEntry<'_, S>) -> Result<(), VolumeError> {
 }
 
 fn validate_file_marker(metadata: EntryMetadata) -> Result<(), VolumeError> {
-	if metadata
-		.finder_info
-		.starts_with(&SYMLINK_FINDER_TYPE_AND_CREATOR)
-	{
+	if metadata.finder_info.starts_with(&FINDER_TYPE_AND_CREATOR) {
 		return Err(VolumeError::UnsupportedFinderInfo);
 	}
 	Ok(())

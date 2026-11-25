@@ -1,4 +1,5 @@
 use hfsplus_format::{
+	bsd,
 	catalog::{
 		EncodeValue, FLAG_THREAD_EXISTS, Key, Metadata, Permissions, Record as CatalogRecord,
 		ThreadKind,
@@ -10,7 +11,6 @@ use crate::tree::{PackedTree, Record as TreeRecord, TreeOptions};
 
 use super::{EntryMetadata, VolumeError};
 
-const FOLDER_TYPE: u16 = 0o040000;
 const RECORDS_PER_ENTRY: usize = 2;
 // Catalog names are Unicode. The legacy Pascal-string encoding hint uses its default.
 pub(super) const DEFAULT_ENCODING_HINT: u32 = 0;
@@ -22,7 +22,7 @@ pub(super) fn folder(
 	flags: u16,
 ) -> EncodeValue<'static> {
 	EncodeValue::Folder {
-		metadata: metadata(id, input, FOLDER_TYPE, flags),
+		metadata: metadata(id, input, bsd::DIRECTORY, flags),
 		valence,
 		tail_word: 0,
 	}

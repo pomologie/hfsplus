@@ -17,6 +17,7 @@
 use core::fmt;
 
 use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt};
+use hfsplus_format::bsd;
 
 use crate::{
 	Error as VolumeError,
@@ -36,7 +37,6 @@ mod resource;
 #[cfg(feature = "decmpfs-zlib")]
 pub use codec::FrameError;
 
-const BSD_COMPRESSED: u8 = 1 << 5;
 const DEFAULT_MAX_EXPANDED_BYTES: u64 = 1 << 30;
 const DEFAULT_MAX_RESOURCE_CHUNKS: usize = 16_384;
 
@@ -211,7 +211,7 @@ impl<S: ReadAt> RegularFile<'_, S> {
 		&self,
 		limits: LogicalDataLimits,
 	) -> Result<LogicalData<'_, S>, LogicalDataError<S::Error>> {
-		let content = if self.metadata().permissions.owner_flags & BSD_COMPRESSED == 0 {
+		let content = if self.metadata().permissions.owner_flags & bsd::COMPRESSED == 0 {
 			Content::Stored(
 				self.open_stored_fork(ForkKind::Data, limits.overflow)
 					.map_err(LogicalDataError::Fork)?,

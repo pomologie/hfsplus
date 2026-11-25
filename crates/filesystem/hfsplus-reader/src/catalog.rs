@@ -19,6 +19,7 @@ mod audit;
 mod directory;
 mod error;
 mod hard_links;
+mod symlink;
 mod tree;
 
 pub use directory::{Directory, DirectoryPage};
@@ -27,6 +28,7 @@ pub use hard_links::{
 	HardLink, HardLinkError, HardLinkLimits, HardLinkProfile, LinkCorruption, LinkTarget,
 	RegularFile,
 };
+pub use symlink::{Symlink, SymlinkError};
 
 use tree::{Position, Query, Tree};
 
