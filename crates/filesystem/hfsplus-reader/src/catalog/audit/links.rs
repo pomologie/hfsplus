@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use crate::alloc::vec::Vec;
 
 use hfsplus_core::ReadAt;
 use hfsplus_format::hard_links::PRIVATE_DIRECTORY_NAME;

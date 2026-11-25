@@ -1,6 +1,6 @@
 //! Read-only allocation bitmap and special-file ownership checks.
 
-use alloc::{collections::TryReserveError, vec::Vec};
+use crate::alloc::{collections::TryReserveError, vec::Vec};
 use core::{fmt, ops::Range};
 
 use hfsplus_core::{ByteLen, ByteOffset, ReadAt};

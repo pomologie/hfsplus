@@ -1,4 +1,4 @@
-use alloc::collections::TryReserveError;
+use crate::alloc::collections::TryReserveError;
 use core::fmt;
 
 use hfsplus_format::{hard_links::LinkReference, volume::CatalogId};

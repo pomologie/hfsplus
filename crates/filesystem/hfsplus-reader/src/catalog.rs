@@ -1,6 +1,6 @@
 //! Bounded catalog lookup and paged directory reads for clean HFS-family volumes.
 
-use alloc::vec::Vec;
+use crate::alloc::vec::Vec;
 
 use hfsplus_core::{
 	ReadAt,

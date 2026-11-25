@@ -26,7 +26,7 @@ use crate::{
 };
 
 #[cfg(feature = "decmpfs-zlib")]
-use alloc::vec::Vec;
+use crate::alloc::{collections::TryReserveError, vec::Vec};
 
 #[cfg(feature = "decmpfs-zlib")]
 mod codec;
@@ -128,7 +128,7 @@ pub enum LogicalDataError<E> {
 	},
 	/// Working memory could not be reserved within the admitted limits.
 	#[cfg(feature = "decmpfs-zlib")]
-	Allocation(alloc::collections::TryReserveError),
+	Allocation(TryReserveError),
 }
 
 impl<E: fmt::Display> fmt::Display for LogicalDataError<E> {
@@ -178,8 +178,8 @@ impl<E: core::error::Error + 'static> core::error::Error for LogicalDataError<E>
 }
 
 #[cfg(feature = "decmpfs-zlib")]
-impl<E> From<alloc::collections::TryReserveError> for LogicalDataError<E> {
-	fn from(error: alloc::collections::TryReserveError) -> Self {
+impl<E> From<TryReserveError> for LogicalDataError<E> {
+	fn from(error: TryReserveError) -> Self {
 		Self::Allocation(error)
 	}
 }

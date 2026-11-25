@@ -1,6 +1,6 @@
 //! Resolve visible regular-file records to the catalog identities that own storage.
 
-use alloc::vec::Vec;
+use crate::alloc::vec::Vec;
 use core::num::NonZeroU32;
 
 use hfsplus_core::ReadAt;

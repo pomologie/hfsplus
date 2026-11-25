@@ -6,7 +6,7 @@ use hfsplus_format::{
 	volume::{ALTERNATE_HEADER_FROM_END, Fork, Geometry, HEADER_BYTES, PRIMARY_HEADER_OFFSET},
 };
 
-use crate::{Error, ForkReadSupport, Volume, read_source};
+use crate::{Error, ForkReadSupport, Volume, volume::read_source};
 
 const FIRST_RESERVED_END: u64 = PRIMARY_HEADER_OFFSET + HEADER_BYTES as u64;
 
@@ -34,7 +34,7 @@ impl<S: ReadAt> Volume<S> {
 		&self,
 		file: SpecialFile,
 	) -> Result<ForkReader<'_, S>, Error<S::Error>> {
-		let forks = &self.primary.forks;
+		let forks = &self.header().forks;
 		let fork = match file {
 			SpecialFile::Allocation => &forks.allocation,
 			SpecialFile::Extents => &forks.extents,
@@ -57,16 +57,16 @@ impl<S: ReadAt> Volume<S> {
 		if support != ForkReadSupport::Supported {
 			return Err(Error::UnsupportedVolume(support));
 		}
-		fork.validate_geometry(self.primary.geometry)
-			.map_err(Error::Format)?;
+		let geometry = self.header().geometry;
+		fork.validate_geometry(geometry).map_err(Error::Format)?;
 		if fork.has_overflow() {
 			return Err(Error::OverflowExtents);
 		}
-		validate_data_area(fork, self.primary.geometry).map_err(Error::Format)?;
+		validate_data_area(fork, geometry).map_err(Error::Format)?;
 		Ok(ForkReader {
 			source: &self.source,
 			fork: *fork,
-			geometry: self.primary.geometry,
+			geometry,
 		})
 	}
 }

@@ -1,4 +1,4 @@
-use alloc::{collections::TryReserveError, vec::Vec};
+use crate::alloc::{collections::TryReserveError, vec::Vec};
 use core::fmt;
 
 use miniz_oxide::inflate::{

@@ -23,11 +23,11 @@ where
 			.root
 			.ok_or(invalid(HEADER_ID, Corruption::MissingRoot))?;
 		let mut visited = node_buffer(self.map.len())?;
-		let mut pending = alloc::vec::Vec::new();
+		let mut pending = crate::alloc::vec::Vec::new();
 		pending
 			.try_reserve_exact(1)
 			.map_err(CatalogError::Allocation)?;
-		let mut previous = alloc::vec::Vec::new();
+		let mut previous = crate::alloc::vec::Vec::new();
 		let level_count = usize::from(self.header.depth) + 1;
 		previous
 			.try_reserve_exact(level_count)

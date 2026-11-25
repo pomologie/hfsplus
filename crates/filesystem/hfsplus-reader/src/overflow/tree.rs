@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use crate::alloc::vec::Vec;
 use hfsplus_core::{ByteOffset, ReadAt};
 use hfsplus_format::{
 	Error as FormatError,

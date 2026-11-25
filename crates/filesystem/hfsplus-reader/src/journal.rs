@@ -6,7 +6,7 @@ use hfsplus_format::{
 	volume::Header,
 };
 
-use crate::{Error, ForkReadSupport, fork::within_data_area, read_source};
+use crate::{Error, ForkReadSupport, fork::within_data_area, volume::read_source};
 
 const JOURNALED_MOUNT_VERSION: [u8; 4] = *b"HFSJ";
 

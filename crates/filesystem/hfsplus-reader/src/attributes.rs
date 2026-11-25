@@ -1,6 +1,6 @@
 //! Bounded stored-value reads of the native HFS+ attribute tree.
 
-use alloc::{collections::TryReserveError, vec::Vec};
+use crate::alloc::{collections::TryReserveError, vec::Vec};
 use core::{fmt, ops::ControlFlow};
 
 use hfsplus_core::{ByteLen, ByteOffset, ReadAt};

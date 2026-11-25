@@ -1,4 +1,4 @@
-use alloc::vec::Vec;
+use crate::alloc::vec::Vec;
 use core::{cmp::Ordering, num::NonZeroUsize};
 
 use hfsplus_core::ReadAt;
