@@ -13,6 +13,7 @@ use hfsplus_format::{
 
 use crate::{Error as VolumeError, SpecialFile, Volume, overflow::OverflowError};
 
+mod inventory;
 mod tree;
 mod value;
 
@@ -32,7 +33,7 @@ pub const MAX_OWNED_ATTRIBUTE_BYTES: ByteLen = ByteLen(1 << 20);
 pub struct AttributeReadLimits {
 	/// Maximum index and leaf nodes read per call, excluding the tree header.
 	pub max_nodes: usize,
-	/// Maximum distinct attribute names returned by one listing.
+	/// Maximum distinct attribute names in one listing or complete inventory.
 	pub max_entries: usize,
 }
 
@@ -87,6 +88,8 @@ pub enum AttributeReadError<E> {
 		/// The format error, including typed unsupported attribute representations.
 		error: FormatError,
 	},
+	/// A complete inline inventory encountered fork-backed attributes.
+	NonInline { node: NodeId },
 	/// A continuation begins at the wrong logical allocation block.
 	InvalidStart {
 		node: NodeId,
@@ -128,6 +131,13 @@ impl<E: fmt::Display> fmt::Display for AttributeReadError<E> {
 			Self::InvalidName => formatter.write_str("invalid attribute name length"),
 			Self::Format { node, error } => {
 				write!(formatter, "attribute tree node {}: {error}", node.0)
+			}
+			Self::NonInline { node } => {
+				write!(
+					formatter,
+					"attribute tree node {} contains a fork-backed value",
+					node.0
+				)
 			}
 			Self::InvalidStart {
 				node,

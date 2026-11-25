@@ -16,6 +16,8 @@ use crate::ForkReader;
 
 use super::{AttributeReadError as Error, FIRST_ATTRIBUTE_BLOCK};
 
+mod inventory;
+
 const HEADER_NODE: NodeId = NodeId(0);
 const HEADER_PREFIX_BYTES: usize = 34;
 const HEADER_MAP_ORDINAL: usize = 2;
@@ -234,6 +236,7 @@ struct Bounds {
 	upper: Option<OwnedKey>,
 }
 
+#[derive(Clone)]
 struct OwnedKey {
 	owner: CatalogId,
 	units: [u16; MAX_NAME_UNITS],

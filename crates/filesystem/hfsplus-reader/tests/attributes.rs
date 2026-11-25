@@ -14,6 +14,9 @@ use hfsplus_reader::{
 	attributes::{AttributeEncoding, AttributeReadError, AttributeReadLimits},
 };
 
+#[path = "attributes/inventory.rs"]
+mod inventory;
+
 const NATIVE: &[u8] = include_bytes!("fixtures/native-attribute-tree.bin");
 const OPTICAL: &[u8] = include_bytes!("fixtures/optical-volume.bin");
 const ORIGINAL_BYTES: u64 = 1 << 24;
