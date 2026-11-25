@@ -4,7 +4,7 @@ members = [
     "crates/filesystem/hfsplus-builder",
     "crates/filesystem/hfsplus-reader",
     "crates/formats/hfsplus-format",
-    "crates/foundation/hfsplus-core",
+    "crates/foundation/hfsplus-pomologie-core",
 ]
 
 [workspace.package]
@@ -14,7 +14,7 @@ license = "Apache-2.0"
 repository = "https://github.com/pomologie/hfsplus"
 
 [workspace.dependencies]
-hfsplus-core = { version = "0.1.0", path = "crates/foundation/hfsplus-core", default-features = false }
+hfsplus-core = { package = "hfsplus-pomologie-core", version = "0.1.0", path = "crates/foundation/hfsplus-pomologie-core", default-features = false }
 hfsplus-format = { version = "0.1.0", path = "crates/formats/hfsplus-format", default-features = false }
 miniz_oxide = { version = "=0.9.1", default-features = false }
 

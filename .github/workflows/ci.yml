@@ -33,7 +33,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [hfsplus-core, hfsplus-format, hfsplus-reader]
+        package: [hfsplus-pomologie-core, hfsplus-format, hfsplus-reader]
         target: [aarch64-unknown-none, x86_64-unknown-none]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
@@ -51,7 +51,7 @@ jobs:
           actual=$(awk '{print $1}' <<< "$tree" | LC_ALL=C sort -u)
           expected="$FS_PACKAGE"
           if [[ "$FS_PACKAGE" == hfsplus-reader ]]; then
-            expected=$(printf '%s\n' hfsplus-core hfsplus-format hfsplus-reader)
+            expected=$(printf '%s\n' hfsplus-format hfsplus-pomologie-core hfsplus-reader)
           fi
           test "$actual" = "$expected"
 

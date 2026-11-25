@@ -10,7 +10,7 @@ Own a native, portable HFS Plus/HFSX engine. Initial customer dmgez needs accura
 hfsplus/
   apps/hfsplus-cli/             # inspect/check/build raw images, later maintenance
   crates/
-    foundation/hfsplus-core/    # geometry, I/O, names, metadata, typed errors, budgets
+    foundation/hfsplus-pomologie-core/    # geometry, I/O, names, metadata, typed errors, budgets
     formats/hfsplus-format/     # on-disk codecs, volume/fork/B-tree record definitions
     filesystem/hfsplus-reader/  # immutable view and consistency inspection
     filesystem/hfsplus-builder/ # deterministic image plan and sector source
