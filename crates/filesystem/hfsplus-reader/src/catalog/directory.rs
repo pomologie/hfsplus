@@ -6,7 +6,7 @@ use hfsplus_format::{btree::NodeId, volume::CatalogId};
 
 use super::{
 	Catalog, CatalogError, Corruption, Entry, EntryKind, Limit, invalid,
-	tree::{OwnedKey, Position, Query, node_buffer, split_key},
+	tree::{OwnedKey, Position, Query, node_buffer},
 };
 
 /// Borrowed cursor over one directory in the catalog's immutable source.
@@ -105,21 +105,22 @@ impl<S: ReadAt> Directory<'_, '_, S> {
 		query: &mut Query,
 		scan: &mut [u8],
 	) -> Result<(), CatalogError<S::Error>> {
+		let tree = &self.catalog.tree;
 		let mut predecessor: Option<(NodeId, OwnedKey)> = None;
 		while let Some(position) = state.position {
 			let id = position.node;
-			let node = self.catalog.tree.read_leaf(id, scan, query)?;
+			let node = tree.read_leaf(id, scan, query)?;
 			if let Some((previous_node, previous_key)) = predecessor.take() {
 				let raw = node.record(0).ok_or(invalid(id, Corruption::RecordOrder))?;
-				let (first, _) = split_key(id, raw)?;
+				let (first, _) = tree.split_key(id, raw)?;
 				if node.backward() != Some(previous_node)
-					|| previous_key.compare(first) != Ordering::Less
+					|| previous_key.compare(first, tree.collation()) != Ordering::Less
 				{
 					return Err(invalid(id, Corruption::NodeLinks));
 				}
 			}
 			for (ordinal, raw) in node.records().enumerate().skip(position.ordinal) {
-				let (key, _) = split_key(id, raw)?;
+				let (key, _) = tree.split_key(id, raw)?;
 				match key.parent_or_thread.cmp(&self.parent) {
 					Ordering::Less => return Err(invalid(id, Corruption::RecordOrder)),
 					Ordering::Greater => return self.finish(id, state),
@@ -141,7 +142,7 @@ impl<S: ReadAt> Directory<'_, '_, S> {
 				.records()
 				.last()
 				.ok_or(invalid(id, Corruption::RecordOrder))?;
-			let (last, _) = split_key(id, last)?;
+			let (last, _) = tree.split_key(id, last)?;
 			predecessor = Some((id, OwnedKey::from_key(last)));
 			state.position = Some(Position {
 				node: next,

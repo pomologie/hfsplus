@@ -7,11 +7,11 @@ use hfsplus_core::{
 };
 use hfsplus_format::{
 	btree::{
-		BIG_KEYS_MASK, HEADER_USER_DATA_BYTES, HFS_BTREE_TYPE, Kind, LEAF_HEIGHT, Node, NodeId,
-		TreeHeader, VARIABLE_INDEX_KEYS_MASK,
+		BIG_KEYS_MASK, BINARY_COMPARE, HEADER_USER_DATA_BYTES, HFS_BTREE_TYPE, Kind, LEAF_HEIGHT,
+		Node, NodeId, TreeHeader, VARIABLE_INDEX_KEYS_MASK,
 	},
 	catalog::{Key, MAX_KEY_LENGTH},
-	volume::CatalogId,
+	volume::{CatalogId, Signature},
 };
 
 use super::{CatalogError, CatalogLimits, Corruption, Limit, format, invalid};
@@ -30,12 +30,12 @@ const HIGH_MAP_BIT: u8 = 1 << (u8::BITS - 1);
 const CATALOG_ATTRIBUTES: u32 = BIG_KEYS_MASK | VARIABLE_INDEX_KEYS_MASK;
 const FIRST_ORDINAL: usize = 0;
 const MIN_INDEX_CHILDREN: usize = 2;
-const COLLATION: NameCollation = NameCollation::CaseFolded;
 
 #[derive(Debug)]
 pub(super) struct Tree<R> {
 	fork: R,
 	header: TreeHeader,
+	collation: NameCollation,
 	map: Vec<u8>,
 	map_nodes: u32,
 }
@@ -104,7 +104,11 @@ impl<R, E> Tree<R>
 where
 	R: ReadAt<Error = Error<E>>,
 {
-	pub(super) fn open(fork: R, limits: CatalogLimits) -> Result<Self, CatalogError<E>> {
+	pub(super) fn open(
+		fork: R,
+		signature: Signature,
+		limits: CatalogLimits,
+	) -> Result<Self, CatalogError<E>> {
 		let mut prefix = [0; HEADER_PREFIX_BYTES];
 		fork.read_exact_at(ByteOffset(0), &mut prefix)
 			.map_err(CatalogError::Read)?;
@@ -123,6 +127,15 @@ where
 		{
 			return Err(CatalogError::UnsupportedTree);
 		}
+		let collation = match signature {
+			Signature::HfsPlus => NameCollation::CaseFolded,
+			Signature::HfsX if header.key_compare_type == BINARY_COMPARE => NameCollation::Binary,
+			Signature::HfsX => {
+				return Err(CatalogError::UnsupportedComparison {
+					key_compare_type: header.key_compare_type,
+				});
+			}
+		};
 		if header.depth > u16::from(limits.max_depth) {
 			return Err(CatalogError::Limit(Limit::Depth));
 		}
@@ -195,6 +208,7 @@ where
 		Ok(Self {
 			fork,
 			header,
+			collation,
 			map,
 			map_nodes,
 		})
@@ -202,6 +216,10 @@ where
 
 	pub(super) const fn header(&self) -> &TreeHeader {
 		&self.header
+	}
+
+	pub(super) const fn collation(&self) -> NameCollation {
+		self.collation
 	}
 
 	pub(super) fn node_bytes(&self) -> usize {
@@ -256,7 +274,7 @@ where
 		if node.kind() != Kind::Leaf {
 			return Err(invalid(id, Corruption::NodeKind));
 		}
-		validate_order(id, &node)?;
+		self.validate_order(id, &node)?;
 		Ok(node)
 	}
 
@@ -305,24 +323,24 @@ where
 		let mut selected = None;
 		let mut upper = None;
 		for (ordinal, raw) in node.records().enumerate() {
-			let (key, data) = split_key(id, raw)?;
-			if prior.is_some_and(|previous| compare_keys(previous, key) != Ordering::Less) {
+			let (key, data) = self.split_key(id, raw)?;
+			if prior.is_some_and(|previous| self.compare_keys(previous, key) != Ordering::Less) {
 				return Err(invalid(id, Corruption::RecordOrder));
 			}
 			if (ordinal == FIRST_ORDINAL
 				&& bounds
 					.lower
 					.as_ref()
-					.is_some_and(|lower| lower.compare(key) != Ordering::Equal))
+					.is_some_and(|lower| lower.compare(key, self.collation) != Ordering::Equal))
 				|| bounds
 					.upper
 					.as_ref()
-					.is_some_and(|upper| upper.compare(key) != Ordering::Greater)
+					.is_some_and(|upper| upper.compare(key, self.collation) != Ordering::Greater)
 			{
 				return Err(invalid(id, Corruption::IndexRoute));
 			}
 			prior = Some(key);
-			let order = target.compare(key);
+			let order = target.compare(key, self.collation);
 			if node.kind() == Kind::Index {
 				let pointer: [u8; size_of::<u32>()] = data
 					.try_into()
@@ -352,6 +370,40 @@ where
 		}
 		Ok(matched.map_or(NodeSearch::Absent, NodeSearch::Match))
 	}
+
+	pub(super) fn split_key<'bytes>(
+		&self,
+		id: NodeId,
+		raw: &'bytes [u8],
+	) -> Result<(Key<'bytes>, &'bytes [u8]), CatalogError<E>> {
+		let (key, data) = Key::split_leaf(raw).map_err(|error| format(id, error))?;
+		if !key.name.is_empty() && self.collates_empty(OwnedKey::from_key(key).name()) {
+			return Err(invalid(id, Corruption::RecordOrder));
+		}
+		Ok((key, data))
+	}
+
+	fn validate_order(&self, id: NodeId, node: &Node<'_>) -> Result<(), CatalogError<E>> {
+		let mut previous = None;
+		for record in node.records() {
+			let (key, _) = self.split_key(id, record)?;
+			if previous.is_some_and(|before| self.compare_keys(before, key) != Ordering::Less) {
+				return Err(invalid(id, Corruption::RecordOrder));
+			}
+			previous = Some(key);
+		}
+		Ok(())
+	}
+
+	pub(super) fn collates_empty(&self, name: &[u16]) -> bool {
+		self.collation.compare(name, &[]).is_eq()
+	}
+
+	fn compare_keys(&self, left: Key<'_>, right: Key<'_>) -> Ordering {
+		left.parent_or_thread
+			.cmp(&right.parent_or_thread)
+			.then_with(|| OwnedKey::from_key(left).compare(right, self.collation))
+	}
 }
 
 fn append_map(map: &mut Vec<u8>, record: &[u8], map_len: usize) {
@@ -373,36 +425,6 @@ fn map_count(map: &[u8], nodes: u32) -> u32 {
 		+ (last >> trailing_unused).count_ones()
 }
 
-pub(super) fn split_key<E>(id: NodeId, raw: &[u8]) -> Result<(Key<'_>, &[u8]), CatalogError<E>> {
-	let (key, data) = Key::split_leaf(raw).map_err(|error| format(id, error))?;
-	if !key.name.is_empty() && collates_empty(OwnedKey::from_key(key).name()) {
-		return Err(invalid(id, Corruption::RecordOrder));
-	}
-	Ok((key, data))
-}
-
-fn validate_order<E>(id: NodeId, node: &Node<'_>) -> Result<(), CatalogError<E>> {
-	let mut previous = None;
-	for record in node.records() {
-		let (key, _) = split_key(id, record)?;
-		if previous.is_some_and(|before| compare_keys(before, key) != Ordering::Less) {
-			return Err(invalid(id, Corruption::RecordOrder));
-		}
-		previous = Some(key);
-	}
-	Ok(())
-}
-
-pub(super) fn collates_empty(name: &[u16]) -> bool {
-	COLLATION.compare(name, &[]) == Ordering::Equal
-}
-
-fn compare_keys(left: Key<'_>, right: Key<'_>) -> Ordering {
-	left.parent_or_thread
-		.cmp(&right.parent_or_thread)
-		.then_with(|| OwnedKey::from_key(left).compare(right))
-}
-
 #[derive(Default)]
 struct KeyBounds {
 	lower: Option<OwnedKey>,
@@ -422,10 +444,10 @@ struct SearchKey<'name> {
 }
 
 impl SearchKey<'_> {
-	fn compare(&self, right: Key<'_>) -> Ordering {
+	fn compare(&self, right: Key<'_>, collation: NameCollation) -> Ordering {
 		self.id
 			.cmp(&right.parent_or_thread)
-			.then_with(|| COLLATION.compare(self.name, OwnedKey::from_key(right).name()))
+			.then_with(|| collation.compare(self.name, OwnedKey::from_key(right).name()))
 	}
 }
 
@@ -453,11 +475,11 @@ impl OwnedKey {
 		&self.name[..self.length]
 	}
 
-	pub(super) fn compare(&self, right: Key<'_>) -> Ordering {
+	pub(super) fn compare(&self, right: Key<'_>, collation: NameCollation) -> Ordering {
 		SearchKey {
 			id: self.id,
 			name: self.name(),
 		}
-		.compare(right)
+		.compare(right, collation)
 	}
 }

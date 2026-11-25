@@ -12,7 +12,7 @@ use hfsplus_format::{
 use super::{
 	Catalog, Corruption, Entry, EntryKind, HardLinkError, ROOT_ID, copy_name, format, invalid,
 	is_private,
-	tree::{OwnedKey, Position, Query, node_buffer, split_key},
+	tree::{OwnedKey, Position, Query, node_buffer},
 };
 use crate::check::{CatalogProblem, CheckError, CheckLimit, CheckLimits};
 
@@ -88,19 +88,22 @@ impl<S: ReadAt> Catalog<'_, S> {
 		limit: usize,
 		query: &mut Query,
 	) -> Result<Vec<Member>, CheckError<S::Error>> {
-		let header = self.tree.header();
+		let tree = &self.tree;
+		let header = tree.header();
 		let mut id = header.first_leaf.ok_or(CatalogProblem::MissingRoot)?;
 		let mut entries = Vec::new();
-		let mut scan = node_buffer(self.tree.node_bytes())?;
+		let mut scan = node_buffer(tree.node_bytes())?;
 		let mut predecessor: Option<(NodeId, OwnedKey)> = None;
 		let mut threads = 0;
 		let mut actual = 0u32;
 		loop {
-			let leaf = self.tree.read_leaf(id, &mut scan, query)?;
+			let leaf = tree.read_leaf(id, &mut scan, query)?;
 			if let Some((prev, key)) = predecessor.take() {
 				let first = leaf.record(0).ok_or(invalid(id, Corruption::RecordOrder))?;
-				let (first, _) = split_key(id, first)?;
-				if leaf.backward() != Some(prev) || key.compare(first) != Ordering::Less {
+				let (first, _) = tree.split_key(id, first)?;
+				if leaf.backward() != Some(prev)
+					|| key.compare(first, tree.collation()) != Ordering::Less
+				{
 					return Err(invalid(id, Corruption::NodeLinks).into());
 				}
 			}
@@ -116,10 +119,10 @@ impl<S: ReadAt> Catalog<'_, S> {
 					}
 					.into());
 				}
-				let (key, _) = split_key(id, raw)?;
+				let (key, _) = tree.split_key(id, raw)?;
 				let name = copy_name(key.name)?;
 				let position = Position { node: id, ordinal };
-				if self.tree.find(key.parent_or_thread, &name, query)? != Some(position) {
+				if tree.find(key.parent_or_thread, &name, query)? != Some(position) {
 					return Err(invalid(id, Corruption::IndexRoute).into());
 				}
 				if key.name.is_empty() {
@@ -159,7 +162,7 @@ impl<S: ReadAt> Catalog<'_, S> {
 				.records()
 				.last()
 				.ok_or(invalid(id, Corruption::RecordOrder))?;
-			let (last, _) = split_key(id, raw)?;
+			let (last, _) = tree.split_key(id, raw)?;
 			predecessor = Some((id, OwnedKey::from_key(last)));
 			id = next;
 		}

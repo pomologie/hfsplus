@@ -1,0 +1,130 @@
+{
+	"requirement": "H-READ-02 case-sensitive HFSX on clean journaled and nonjournaled volumes",
+	"license": "Apache-2.0; synthetic files only",
+	"native_environment": {
+		"os": "macOS 14.7.2 (23H311), arm64",
+		"fsck_hfs": "650.140.2",
+		"hdiutil": "System tool supplied by the same OS build"
+	},
+	"generation": {
+		"create_argv": [
+			"hdiutil",
+			"create",
+			"-size",
+			"24m",
+			"-fs",
+			"<filesystem_name>",
+			"-volname",
+			"HFSX Fixture",
+			"-layout",
+			"NONE",
+			"<temp>/native.dmg"
+		],
+		"attach_argv": [
+			"hdiutil",
+			"attach",
+			"-readwrite",
+			"-nobrowse",
+			"-noautoopen",
+			"-plist",
+			"-mountpoint",
+			"<temp>/mount",
+			"-mount",
+			"required",
+			"<temp>/native.dmg"
+		],
+		"directories": [
+			"Cases",
+			"cases"
+		],
+		"payload_path": "Cases/<name>",
+		"payloads_hex_in_creation_order": {
+			"Case.txt": "6361706974616c0001ff0a",
+			"case.txt": "6c6f776572636173650002fe0a",
+			"Å.txt": "75707065722072696e670a",
+			"å.txt": "6c6f7765722072696e670a",
+			"join.txt": "706c61696e0a",
+			"jo‍in.txt": "6a6f696e6572207369676e69666963616e740a",
+			"‌": "736f6c65206e6f6e2d6a6f696e65720a",
+			"😀.txt": "656d6f6a690a"
+		},
+		"empty_payloads": "Cases/middle-000.txt through Cases/middle-071.txt",
+		"write_note": "Created each directory and file exclusively on the detached-after-use disposable image. File metadata and volume identity come from macOS and vary across regenerations.",
+		"export_argv": [
+			"hdiutil",
+			"convert",
+			"<temp>/native.dmg",
+			"-format",
+			"UDTO",
+			"-o",
+			"<temp>/native.raw"
+		]
+	},
+	"read_only_oracles": {
+		"native_check_after_detach": "Read-only attach without mounting, then fsck_hfs -fn on the disposable whole-image device. Both images returned zero and reported a case-sensitive volume.",
+		"native_mount_after_check": "Read-only attach with the designated temporary mount path and no browsing. Python stat, directory iteration and file reads confirmed both distinct directory identities, all declared payloads including the 72 empty files, and the order below. Directories CASES and files CASE.txt and JOIN.txt were absent.",
+		"ordered_visible_root_entries": [
+			"Cases",
+			"cases"
+		],
+		"ordered_visible_children_prefix": [
+			"Å.txt",
+			"Case.txt",
+			"å.txt",
+			"case.txt",
+			"join.txt",
+			"jo‍in.txt"
+		],
+		"ordered_visible_children_middle": "middle-000.txt through middle-071.txt",
+		"ordered_visible_children_suffix": [
+			"‌",
+			"😀.txt"
+		],
+		"independent_7zip": "p7zip 17.05 on the journaled raw export listed the distinct case and Unicode spellings and extracted Case.txt, case.txt, A?.txt and a?.txt with -ssc. Their bytes matched the recorded payloads."
+	},
+	"sparse_fixture_format": "Big-endian raw length u64 and run count u16, then each run's byte offset u64, byte length u32, and exact data. Retains every nonzero 512-byte sector from the raw UDTO image and reconstructs remaining sectors as zeros.",
+	"fixtures": [
+		{
+			"fixture": "native-hfsx-journaled.bin",
+			"filesystem_name": "Case-sensitive Journaled HFS+",
+			"sparse_fixture_bytes": 120714,
+			"sparse_fixture_sha256": "f5a87c0f3c8af49ef99c12860fa86c95fbf7565989274503b3f3e10c0c034612",
+			"retained_runs": 32,
+			"original_raw_sha256": "3dff82d55d6e731c74455cd44255c7efd8472986a330b62b727033d7fb34b997",
+			"block_bytes": 4096,
+			"total_blocks": 6144,
+			"journal_info_block": 2,
+			"catalog": {
+				"volume_offset": 2895872,
+				"key_compare_type": "0xbc",
+				"node_bytes": 4096,
+				"depth": 2,
+				"root": 3,
+				"first_leaf": 2,
+				"last_leaf": 1,
+				"leaf_records": 174
+			}
+		},
+		{
+			"fixture": "native-hfsx.bin",
+			"filesystem_name": "Case-sensitive HFS+",
+			"sparse_fixture_bytes": 46830,
+			"sparse_fixture_sha256": "2b6c557b345ee4bc6a53001580f0c0bc11e238975a042c3f685d75a143bd3c60",
+			"retained_runs": 19,
+			"original_raw_sha256": "3a56cdb2099838f700b30eafd801e1f07c0512bf3ab027bbc26373c31f8a51e4",
+			"block_bytes": 4096,
+			"total_blocks": 6144,
+			"journal_info_block": 0,
+			"catalog": {
+				"volume_offset": 2367488,
+				"key_compare_type": "0xbc",
+				"node_bytes": 4096,
+				"depth": 2,
+				"root": 3,
+				"first_leaf": 2,
+				"last_leaf": 1,
+				"leaf_records": 170
+			}
+		}
+	]
+}

@@ -8,6 +8,8 @@ Native fixtures from macOS 14.7.2 cover a clean partitionless volume and a regul
 
 `hfsplus-reader` checks the allocation bitmap, catalog hierarchy, and reachable file forks. It counts shared regular-file inodes once and reports unclaimed allocations and unsupported record layouts. [Native structural-check fixtures](crates/filesystem/hfsplus-reader/tests/check.rs)
 
+The reader opens clean case-sensitive HFSX catalogs with binary UTF-16 ordering, including volumes with a verified empty journal. Native mounts and read-only Apple checks confirmed distinct case variants, significant ignorable characters, and exact payloads on both journaled and nonjournaled fixtures. Other HFSX comparison types report an unsupported profile. [Native HFSX evidence](crates/filesystem/hfsplus-reader/tests/fixtures/native-hfsx-case-sensitive.json)
+
 The reader opens inline and fork-backed attributes, including fragmented values with continuation records. Its optional `decmpfs-zlib` feature exposes logical bytes for native inline and resource-fork zlib profiles, including regular hard links. Stored forks remain separately accessible. [Native attribute evidence](crates/filesystem/hfsplus-reader/tests/fixtures/native-attribute-forks.json) · [Native compression evidence](crates/filesystem/hfsplus-reader/tests/fixtures/native-decmpfs-zlib.json)
 
 `hfsplus-builder` can stream clean, nonjournaled HFS+ volumes from Unicode manifests of folders, symbolic links, and files with data and resource forks. `volume::plan` writes Unicode 3.2 canonical names and uses historical HFS+ collation for catalog order and collisions. `volume::plan_ascii` limits inputs to printable ASCII.

@@ -24,6 +24,8 @@ pub enum CatalogError<E> {
 	Corrupt { node: NodeId, reason: Corruption },
 	/// The volume uses a different filesystem profile.
 	UnsupportedVolume(Signature),
+	/// The HFSX header declares an unqualified catalog comparison type.
+	UnsupportedComparison { key_compare_type: u8 },
 	/// The tree uses an unqualified key layout or type.
 	UnsupportedTree,
 	/// An explicit operation budget was exceeded.
@@ -76,6 +78,12 @@ impl<E: fmt::Display> fmt::Display for CatalogError<E> {
 			}
 			Self::UnsupportedVolume(signature) => {
 				write!(f, "unsupported catalog volume profile {signature:?}")
+			}
+			Self::UnsupportedComparison { key_compare_type } => {
+				write!(
+					f,
+					"unsupported HFSX catalog comparison type {key_compare_type:#04x}"
+				)
 			}
 			Self::UnsupportedTree => f.write_str("unsupported catalog B-tree layout or type"),
 			Self::Limit(limit) => write!(f, "catalog operation exceeds the {limit:?} limit"),

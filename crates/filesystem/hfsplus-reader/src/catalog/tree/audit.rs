@@ -4,7 +4,7 @@ use hfsplus_core::ReadAt;
 
 use super::{
 	BITS_PER_BYTE, CatalogError, Corruption, HEADER_ID, HIGH_MAP_BIT, Kind, MIN_INDEX_CHILDREN,
-	NodeId, Query, Tree, compare_keys, invalid, node_buffer, split_key,
+	NodeId, Query, Tree, invalid, node_buffer,
 };
 use crate::Error;
 
@@ -63,8 +63,8 @@ where
 				let raw = node
 					.record(ordinal)
 					.ok_or(invalid(id, Corruption::IndexRoute))?;
-				let (key, pointer) = split_key(id, raw)?;
-				if successor.is_some_and(|next| compare_keys(key, next) != Ordering::Less) {
+				let (key, pointer) = self.split_key(id, raw)?;
+				if successor.is_some_and(|next| self.compare_keys(key, next) != Ordering::Less) {
 					return Err(invalid(id, Corruption::RecordOrder));
 				}
 				successor = Some(key);

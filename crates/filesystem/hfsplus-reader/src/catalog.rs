@@ -1,16 +1,16 @@
-//! Bounded catalog lookup and paged directory reads for clean HFS+ volumes.
+//! Bounded catalog lookup and paged directory reads for clean HFS-family volumes.
 
 use alloc::vec::Vec;
 
 use hfsplus_core::{
 	ReadAt,
-	names::{MAX_NAME_UNITS, normalize},
+	names::{MAX_NAME_UNITS, NameCollation, normalize},
 };
 use hfsplus_format::{
 	btree::NodeId,
 	catalog::{RawName, Record, ThreadKind, Value},
 	hard_links::PRIVATE_DIRECTORY_NAME,
-	volume::{CNID_REUSE_ATTRIBUTE, CatalogId, Fork, Geometry, Signature},
+	volume::{CNID_REUSE_ATTRIBUTE, CatalogId, Fork, Geometry},
 };
 
 use crate::{ForkReader, SpecialFile, Volume};
@@ -130,14 +130,11 @@ impl<S: ReadAt> Volume<S> {
 		limits: CatalogLimits,
 	) -> Result<Catalog<'_, S>, CatalogError<S::Error>> {
 		let header = self.header();
-		if header.signature != Signature::HfsPlus {
-			return Err(CatalogError::UnsupportedVolume(header.signature));
-		}
 		let fork = self
 			.open_special_fork(SpecialFile::Catalog)
 			.map_err(CatalogError::Read)?;
 		Ok(Catalog {
-			tree: Tree::open(fork, limits)?,
+			tree: Tree::open(fork, header.signature, limits)?,
 			volume: self,
 			geometry: header.geometry,
 			next_id: header.next_catalog_id,
@@ -148,6 +145,12 @@ impl<S: ReadAt> Volume<S> {
 }
 
 impl<S: ReadAt> Catalog<'_, S> {
+	/// The catalog's validated name comparison mode.
+	#[must_use]
+	pub const fn collation(&self) -> NameCollation {
+		self.tree.collation()
+	}
+
 	/// Resolves the root catalog directory and validates its forward record.
 	/// # Errors
 	/// Fails for a missing or inconsistent root or an invalid B-tree path.
@@ -179,7 +182,7 @@ impl<S: ReadAt> Catalog<'_, S> {
 		self.lookup_raw(parent, name.as_units())
 	}
 
-	/// Finds a child using stored UTF-16 units and historical HFS+ comparison.
+	/// Finds a child using stored UTF-16 units and the catalog's comparison mode.
 	/// The raw input must already be decomposed where applicable.
 	/// # Errors
 	/// Rejects empty or overlong child names and invalid parent or catalog data.
@@ -188,7 +191,7 @@ impl<S: ReadAt> Catalog<'_, S> {
 		parent: CatalogId,
 		name: &[u16],
 	) -> Result<Option<Entry>, CatalogError<S::Error>> {
-		if name.len() > MAX_NAME_UNITS || tree::collates_empty(name) {
+		if name.len() > MAX_NAME_UNITS || self.tree.collates_empty(name) {
 			return Err(CatalogError::InvalidName);
 		}
 		let mut query = self.query()?;
