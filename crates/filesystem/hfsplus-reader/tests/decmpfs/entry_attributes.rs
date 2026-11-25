@@ -9,7 +9,10 @@ use hfsplus_format::{
 use hfsplus_reader::{
 	Volume,
 	attributes::{AttributeReadError, AttributeReadLimits},
-	catalog::{CatalogAttributeError, CatalogLimits, HardLinkLimits, ROOT_ID},
+	catalog::{
+		AttributePresence, AttributeScope, CatalogAttributeError, CatalogError, CatalogLimits,
+		HardLinkLimits, Limit, ROOT_ID,
+	},
 };
 
 use super::{ATTR_LEAF, COMPRESSED, Fixture, INLINE_ID, SHARED};
@@ -19,6 +22,7 @@ const SHARED_ALIAS_PATH: &str = "inline";
 const INODE_ATTRIBUTE: &str = "com.apple.attrone";
 const VISIBLE_ATTRIBUTE: &str = "com.apple.attrtwo";
 const DUPLICATE_ATTRIBUTE: &str = "com.apple.provenance";
+const ANCESTOR_ATTRIBUTE: &str = "com.apple.rootdat";
 const OTHER_INODE: CatalogId = CatalogId(19);
 
 #[test]
@@ -100,6 +104,20 @@ fn lists_both_owners_and_rejects_ambiguous_reads_with_combined_limits() {
 		Err(CatalogAttributeError::AmbiguousOwner { visible: owner, inode: INLINE_ID })
 			if owner == visible
 	));
+	for name in [&inode_name, &visible_name, &duplicate_name] {
+		assert_eq!(
+			catalog
+				.observe_entry_attribute(
+					visible,
+					name,
+					AttributeScope::Entry,
+					hard_links,
+					attribute_limits,
+				)
+				.unwrap(),
+			AttributePresence::Present,
+		);
+	}
 	let alias = catalog.lookup(ROOT_ID, SHARED_ALIAS_PATH).unwrap().unwrap();
 	assert_eq!(
 		catalog
@@ -134,6 +152,91 @@ fn lists_both_owners_and_rejects_ambiguous_reads_with_combined_limits() {
 	assert!(matches!(
 		catalog.list_entry_attribute_names(INLINE_ID, hard_links, attribute_limits),
 		Err(CatalogAttributeError::MissingOwner(INLINE_ID))
+	));
+}
+
+#[test]
+fn observes_selected_ancestry_and_retains_missing_and_budget_evidence() {
+	let mut source = Fixture::new(COMPRESSED);
+	source.overlay(SHARED);
+	let name = utf16(ANCESTOR_ATTRIBUTE);
+	// Move the first value to the root with a non-compression name of the
+	// same width. Owner sorting and record boundaries remain valid.
+	let leaf = source.slice_mut(ATTR_LEAF);
+	let raw = Node::decode(leaf).unwrap().records().next().unwrap();
+	let at = raw.as_ptr() as usize - leaf.as_ptr() as usize;
+	let (key, remaining) = Key::split(raw).unwrap();
+	assert_eq!(key.file_id, INLINE_ID);
+	let width = raw.len() - remaining.len();
+	let start_block = key.start_block;
+	assert_eq!(
+		Key::encode(ROOT_ID, &name, start_block, &mut leaf[at..]).unwrap(),
+		width
+	);
+
+	let volume = Volume::open(source).unwrap();
+	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
+	let selected = catalog.lookup(ROOT_ID, VISIBLE_PATH).unwrap().unwrap();
+	let id = selected.metadata.id;
+	let hard_links = HardLinkLimits::default();
+	let attrs = AttributeReadLimits::default();
+	for (owner, scope, expected) in [
+		(id, AttributeScope::Entry, AttributePresence::Absent),
+		(
+			id,
+			AttributeScope::EntryAndAncestors,
+			AttributePresence::Present,
+		),
+		(
+			ROOT_ID,
+			AttributeScope::EntryAndAncestors,
+			AttributePresence::Present,
+		),
+		(
+			INLINE_ID,
+			AttributeScope::EntryAndAncestors,
+			AttributePresence::Incomplete,
+		),
+	] {
+		assert_eq!(
+			catalog
+				.observe_entry_attribute(owner, &name, scope, hard_links, attrs)
+				.unwrap(),
+			expected,
+		);
+	}
+	assert!(matches!(
+		catalog.observe_entry_attribute(
+			ROOT_ID,
+			&name,
+			AttributeScope::Entry,
+			hard_links,
+			AttributeReadLimits {
+				max_nodes: 0,
+				..attrs
+			},
+		),
+		Err(CatalogAttributeError::Attributes(
+			AttributeReadError::NodeLimit
+		))
+	));
+	let limited = volume
+		.open_catalog(CatalogLimits {
+			max_ancestors: 0,
+			..CatalogLimits::default()
+		})
+		.unwrap();
+	assert!(matches!(
+		limited.observe_entry_attribute(
+			id,
+			&name,
+			AttributeScope::EntryAndAncestors,
+			hard_links,
+			attrs
+		),
+		Err(CatalogAttributeError::Catalog(CatalogError::Limit(
+			Limit::Ancestors
+		)))
 	));
 }
 

@@ -1,13 +1,35 @@
 use core::fmt;
 
 use hfsplus_core::ReadAt;
-use hfsplus_format::{bsd, volume::CatalogId};
+use hfsplus_format::{attributes::Key, bsd, volume::CatalogId};
 
-use super::{Catalog, CatalogError, EntryKind, HardLinkError, HardLinkLimits};
+use super::{Catalog, CatalogError, Entry, EntryKind, HardLinkError, HardLinkLimits};
 use crate::{
 	alloc::vec::Vec,
 	attributes::{AttributeEntry, AttributeReadError, AttributeReadLimits, AttributeValue},
 };
+
+/// The catalog owners included in an attribute presence query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AttributeScope {
+	/// The selected entry and its validated storage inode, if distinct.
+	Entry,
+	/// Also include directories from the selected entry's parent to the root.
+	EntryAndAncestors,
+}
+
+/// Evidence obtained for an attribute name in the requested scope.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum AttributePresence {
+	/// One owner contains the requested attribute.
+	Present,
+	/// The attribute was absent from every owner in the scope.
+	Absent,
+	/// The requested catalog ID is absent or invisible.
+	Incomplete,
+}
 
 /// A catalog entry's attribute lookup or listing failed.
 #[derive(Debug)]
@@ -67,6 +89,60 @@ impl<E> From<AttributeReadError<E>> for CatalogAttributeError<E> {
 }
 
 impl<'volume, S: ReadAt> Catalog<'volume, S> {
+	/// Observes whether any owner in the scope has this exact stored name.
+	///
+	/// A volume with no attributes fork establishes absence directly. Otherwise
+	/// the catalog validates the selected entry and its visible ancestor chain.
+	/// A regular-file hard link can find a name on its stub or validated inode.
+	/// Ancestor lookup always uses the selected entry's path. The query does not
+	/// follow symlinks or read fork-backed attribute payloads.
+	///
+	/// # Errors
+	/// Returns errors for malformed names or records, failed reads, or limit exhaustion.
+	pub fn observe_entry_attribute(
+		&self,
+		visible: CatalogId,
+		name: &[u16],
+		scope: AttributeScope,
+		hard_links: HardLinkLimits,
+		limits: AttributeReadLimits,
+	) -> Result<AttributePresence, CatalogAttributeError<S::Error>> {
+		Key::encoded_len(name).map_err(|_| AttributeReadError::InvalidName)?;
+		let fork = self.volume.header().forks.attributes;
+		if fork.logical_bytes == 0 && fork.total_blocks == 0 {
+			return Ok(AttributePresence::Absent);
+		}
+		let mut query = self.query().map_err(CatalogAttributeError::Catalog)?;
+		let Some(selected) = self
+			.resolve_public_with_ancestors(visible, &mut query)
+			.map_err(CatalogAttributeError::Catalog)?
+		else {
+			return Ok(AttributePresence::Incomplete);
+		};
+		let attributes = self.volume.attributes(limits)?;
+		let present = |owner| {
+			attributes
+				.open_attribute(owner, name)
+				.map(|value| value.is_some())
+		};
+		if present(visible)? {
+			return Ok(AttributePresence::Present);
+		}
+		if let Some(inode) = self.attribute_inode_for_entry(&selected.entry, hard_links)?
+			&& present(inode)?
+		{
+			return Ok(AttributePresence::Present);
+		}
+		if scope == AttributeScope::EntryAndAncestors {
+			for ancestor in selected.ancestors {
+				if present(ancestor)? {
+					return Ok(AttributePresence::Present);
+				}
+			}
+		}
+		Ok(AttributePresence::Absent)
+	}
+
 	/// Lists distinct stored attribute names in binary UTF-16 order.
 	///
 	/// For a regular-file hard link this includes names from both the visible
@@ -142,11 +218,20 @@ impl<'volume, S: ReadAt> Catalog<'volume, S> {
 			.entry(visible)
 			.map_err(CatalogAttributeError::Catalog)?
 			.ok_or(CatalogAttributeError::MissingOwner(visible))?;
+		self.attribute_inode_for_entry(&entry, limits)
+	}
+
+	fn attribute_inode_for_entry(
+		&self,
+		entry: &Entry,
+		limits: HardLinkLimits,
+	) -> Result<Option<CatalogId>, CatalogAttributeError<S::Error>> {
 		if !matches!(entry.kind, EntryKind::File { .. })
 			|| entry.metadata.permissions.mode & bsd::TYPE_MASK != bsd::REGULAR_FILE
 		{
 			return Ok(None);
 		}
+		let visible = entry.metadata.id;
 		let file = self
 			.regular_file(visible, limits)
 			.map_err(CatalogAttributeError::HardLink)?

@@ -24,7 +24,7 @@ mod hard_links;
 mod symlink;
 mod tree;
 
-pub use attributes::CatalogAttributeError;
+pub use attributes::{AttributePresence, AttributeScope, CatalogAttributeError};
 pub use directory::{Directory, DirectoryPage};
 pub use error::{CatalogError, Corruption, Limit};
 pub use finder_info::FinderInfoError;
@@ -87,6 +87,11 @@ pub struct Entry {
 	pub metadata: hfsplus_format::catalog::Metadata,
 	/// Record kind and additional stored fields.
 	pub kind: EntryKind,
+}
+
+struct VisibleEntry {
+	entry: Entry,
+	ancestors: Vec<CatalogId>,
 }
 
 /// Stored catalog entry kind.
@@ -236,6 +241,16 @@ impl<S: ReadAt> Catalog<'_, S> {
 		id: CatalogId,
 		query: &mut Query,
 	) -> Result<Option<Entry>, CatalogError<S::Error>> {
+		Ok(self
+			.resolve_public_with_ancestors(id, query)?
+			.map(|visible| visible.entry))
+	}
+
+	fn resolve_public_with_ancestors(
+		&self,
+		id: CatalogId,
+		query: &mut Query,
+	) -> Result<Option<VisibleEntry>, CatalogError<S::Error>> {
 		if !self.valid_id(id) {
 			return Ok(None);
 		}
@@ -245,16 +260,15 @@ impl<S: ReadAt> Catalog<'_, S> {
 		if self.is_internal(&entry) {
 			return Ok(None);
 		}
-		let mut seen = Vec::new();
+		let mut ancestors = Vec::new();
 		let mut child = id;
 		let mut parent = entry.parent;
 		while child != ROOT_ID {
-			if seen.len() >= self.limits.max_ancestors {
+			if ancestors.len() >= self.limits.max_ancestors {
 				return Err(CatalogError::Limit(Limit::Ancestors));
 			}
-			seen.try_reserve(1).map_err(CatalogError::Allocation)?;
-			seen.push(child);
-			if seen.contains(&parent) {
+			ancestors.try_reserve(1).map_err(CatalogError::Allocation)?;
+			if parent == id || ancestors.contains(&parent) {
 				return Err(invalid(tree::HEADER_ID, Corruption::ParentCycle));
 			}
 			let ancestor = self
@@ -266,10 +280,11 @@ impl<S: ReadAt> Catalog<'_, S> {
 			if self.is_internal(&ancestor) {
 				return Ok(None);
 			}
+			ancestors.push(parent);
 			child = ancestor.metadata.id;
 			parent = ancestor.parent;
 		}
-		Ok(Some(entry))
+		Ok(Some(VisibleEntry { entry, ancestors }))
 	}
 
 	fn resolve(
