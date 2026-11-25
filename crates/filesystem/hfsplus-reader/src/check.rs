@@ -24,6 +24,12 @@ const DEFAULT_CATALOG_NODE_READS: u32 = 1 << 20;
 const DEFAULT_ALLOCATION_RANGES: usize = 1 << 18;
 const DEFAULT_ATTRIBUTE_NAMES: usize = 64 << 10;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum FolderCounts {
+	Ignore,
+	Require,
+}
+
 /// Work bounds for one structural check.
 #[derive(Debug, Clone, Copy)]
 pub struct CheckLimits {
@@ -158,7 +164,22 @@ impl<S: ReadAt> Volume<S> {
 		&self,
 		limits: CheckLimits,
 	) -> Result<StructuralReport, CheckError<S::Error>> {
-		self.check(limits, None)
+		self.check(limits, None, FolderCounts::Ignore)
+	}
+
+	/// Checks the structure and requires a declared, correct direct subfolder
+	/// count for every directory, including private hard-link metadata.
+	///
+	/// This check is for callers that need to regenerate the HFSX folder-count
+	/// field from the catalog relationships.
+	///
+	/// # Errors
+	/// Returns structural errors, missing folder-count flags and count mismatches.
+	pub fn check_structure_with_folder_counts(
+		&self,
+		limits: CheckLimits,
+	) -> Result<StructuralReport, CheckError<S::Error>> {
+		self.check(limits, None, FolderCounts::Require)
 	}
 
 	/// Checks reachable structures and reads every supported stored file fork
@@ -178,7 +199,7 @@ impl<S: ReadAt> Volume<S> {
 		max_payload_bytes: ByteLen,
 	) -> Result<ReachableDataReport, CheckError<S::Error>> {
 		let mut payload = PayloadAudit::new(max_payload_bytes);
-		let structure = self.check(limits, Some(&mut payload))?;
+		let structure = self.check(limits, Some(&mut payload), FolderCounts::Ignore)?;
 		Ok(payload.report(structure))
 	}
 
@@ -186,10 +207,11 @@ impl<S: ReadAt> Volume<S> {
 		&self,
 		limits: CheckLimits,
 		mut payload: Option<&mut PayloadAudit>,
+		folder_counts: FolderCounts,
 	) -> Result<StructuralReport, CheckError<S::Error>> {
 		let mut allocation = self.metadata_claims(limits.allocation)?;
 		let catalog = self.open_catalog(limits.catalog)?;
-		let audit = catalog.audit(limits)?;
+		let audit = catalog.audit(limits, folder_counts)?;
 		for member in &audit.entries {
 			if !member.owns_reachable_storage() {
 				continue;

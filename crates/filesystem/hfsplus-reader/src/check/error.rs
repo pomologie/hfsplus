@@ -44,6 +44,12 @@ pub enum CatalogProblem {
 		declared: u32,
 		actual: u32,
 	},
+	MissingFolderCount(CatalogId),
+	SubfolderCount {
+		id: CatalogId,
+		declared: u32,
+		actual: u32,
+	},
 	LeafRecords {
 		declared: u32,
 		actual: u32,

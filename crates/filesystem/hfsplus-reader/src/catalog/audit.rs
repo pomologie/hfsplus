@@ -4,7 +4,7 @@ use core::cmp::Ordering;
 use hfsplus_core::ReadAt;
 use hfsplus_format::{
 	btree::NodeId,
-	catalog::{Record, Value},
+	catalog::{FLAG_HAS_FOLDER_COUNT, Record, Value},
 	hard_links::Stub,
 	volume::CatalogId,
 };
@@ -14,7 +14,7 @@ use super::{
 	is_private,
 	tree::{OwnedKey, Position, Query, node_buffer},
 };
-use crate::check::{CatalogProblem, CheckError, CheckLimit, CheckLimits};
+use crate::check::{CatalogProblem, CheckError, CheckLimit, CheckLimits, FolderCounts};
 
 mod links;
 
@@ -33,6 +33,7 @@ pub(crate) struct Member {
 	state: State,
 	parent: Option<usize>,
 	children: u32,
+	child_folders: u32,
 	referenced_inode: bool,
 }
 
@@ -54,11 +55,15 @@ impl Member {
 }
 
 impl<S: ReadAt> Catalog<'_, S> {
-	pub(crate) fn audit(&self, limits: CheckLimits) -> Result<Audit, CheckError<S::Error>> {
+	pub(crate) fn audit(
+		&self,
+		limits: CheckLimits,
+		folder_counts: FolderCounts,
+	) -> Result<Audit, CheckError<S::Error>> {
 		let mut query = self.query()?;
 		self.tree.audit_index_graph(&mut query)?;
 		let mut entries = self.collect_records(limits.max_catalog_entries, &mut query)?;
-		let root = validate_hierarchy(&mut entries, limits.catalog.max_ancestors)?;
+		let root = validate_hierarchy(&mut entries, limits.catalog.max_ancestors, folder_counts)?;
 		let (files, folders) = self.check_catalog_counts(&entries)?;
 		let link_groups = self.check_links(&mut entries, root, limits.hard_links, &mut query)?;
 		let unexamined_private_files = entries
@@ -152,6 +157,7 @@ impl<S: ReadAt> Catalog<'_, S> {
 					state: State::Unseen,
 					parent: None,
 					children: 0,
+					child_folders: 0,
 					referenced_inode: false,
 				});
 			}
@@ -205,7 +211,11 @@ impl<S: ReadAt> Catalog<'_, S> {
 	}
 }
 
-fn validate_hierarchy<E>(entries: &mut [Member], max_depth: usize) -> Result<usize, CheckError<E>> {
+fn validate_hierarchy<E>(
+	entries: &mut [Member],
+	max_depth: usize,
+	folder_counts: FolderCounts,
+) -> Result<usize, CheckError<E>> {
 	entries.sort_unstable_by_key(|member| member.entry.metadata.id);
 	for pair in entries.windows(2) {
 		if pair[0].entry.metadata.id == pair[1].entry.metadata.id {
@@ -228,17 +238,36 @@ fn validate_hierarchy<E>(entries: &mut [Member], max_depth: usize) -> Result<usi
 			.ok_or(CatalogProblem::Parent { child, parent })?;
 		entries[index].parent = Some(parent_index);
 		entries[parent_index].children += 1;
+		entries[parent_index].child_folders += u32::from(matches!(
+			entries[index].entry.kind,
+			EntryKind::Directory { .. }
+		));
 	}
 	for member in entries.iter() {
-		if let EntryKind::Directory { valence, .. } = member.entry.kind
-			&& valence != member.children
-		{
+		let EntryKind::Directory { valence, tail_word } = member.entry.kind else {
+			continue;
+		};
+		let id = member.entry.metadata.id;
+		if valence != member.children {
 			return Err(CatalogProblem::Valence {
-				id: member.entry.metadata.id,
+				id,
 				declared: valence,
 				actual: member.children,
 			}
 			.into());
+		}
+		if folder_counts == FolderCounts::Require {
+			if member.entry.metadata.flags & FLAG_HAS_FOLDER_COUNT == 0 {
+				return Err(CatalogProblem::MissingFolderCount(id).into());
+			}
+			if tail_word != member.child_folders {
+				return Err(CatalogProblem::SubfolderCount {
+					id,
+					declared: tail_word,
+					actual: member.child_folders,
+				}
+				.into());
+			}
 		}
 	}
 

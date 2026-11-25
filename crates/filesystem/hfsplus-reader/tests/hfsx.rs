@@ -36,6 +36,19 @@ const PAYLOADS: &[(&str, &[u8])] = &[
 ];
 
 #[test]
+fn audits_declared_folder_counts_in_the_native_case_sensitive_catalogs() {
+	for fixture in [PLAIN, JOURNALED] {
+		let image = expand(fixture);
+		let volume = Volume::open(image.as_slice()).unwrap();
+		let limits = CheckLimits::default();
+		assert_eq!(
+			volume.check_structure_with_folder_counts(limits).unwrap(),
+			volume.check_structure(limits).unwrap(),
+		);
+	}
+}
+
+#[test]
 fn opens_both_clean_native_profiles_with_binary_lookup_and_exact_payloads() {
 	for (fixture, journaled) in [(PLAIN, false), (JOURNALED, true)] {
 		let image = expand(fixture);
