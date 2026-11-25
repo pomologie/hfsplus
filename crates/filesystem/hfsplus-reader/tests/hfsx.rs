@@ -1,4 +1,4 @@
-//! Native binary catalog fixtures for the case-sensitive half of H-READ-02.
+//! Native and native-derived catalog fixtures for both HFSX modes in H-READ-02.
 
 use std::num::NonZeroUsize;
 
@@ -6,10 +6,13 @@ use hfsplus_core::{ByteLen, ByteOffset, ReadAt, names::NameCollation};
 use hfsplus_format::{btree::CASE_FOLDING_COMPARE, volume::Signature};
 use hfsplus_reader::{
 	ForkReadSupport, Volume,
-	catalog::{CatalogError, CatalogLimits, HardLinkLimits, ROOT_ID},
-	check::CheckLimits,
+	catalog::{CatalogError, CatalogLimits, Corruption, HardLinkLimits, ROOT_ID},
+	check::{CheckError, CheckLimits},
 	decmpfs::LogicalDataLimits,
 };
+
+#[path = "hfsx/case_folded.rs"]
+mod case_folded;
 
 const PLAIN: &[u8] = include_bytes!("fixtures/native-hfsx.bin");
 const JOURNALED: &[u8] = include_bytes!("fixtures/native-hfsx-journaled.bin");
@@ -18,6 +21,9 @@ const FOLDER: &str = "Cases";
 const LOWER_FOLDER: &str = "cases";
 const EMPTY_COUNT: usize = 72;
 const PAGE_SIZE: NonZeroUsize = NonZeroUsize::new(13).unwrap();
+const BINARY_CATALOG_OFFSET: usize = 2_367_488;
+const CATALOG_KEY_COMPARE_OFFSET: usize = 51;
+const UNKNOWN_COMPARE: u8 = 0xff;
 const PAYLOADS: &[(&str, &[u8])] = &[
 	("Case.txt", b"capital\0\x01\xff\n"),
 	("case.txt", b"lowercase\0\x02\xfe\n"),
@@ -146,20 +152,31 @@ fn enumerates_and_audits_native_binary_order_across_leaves() {
 }
 
 #[test]
-fn reports_unqualified_hfsx_comparison_types() {
-	const PLAIN_CATALOG_OFFSET: usize = 2_367_488;
-	const KEY_COMPARE_OFFSET: usize = 51;
-	const UNKNOWN_COMPARE: u8 = 0xff;
-	for mode in [CASE_FOLDING_COMPARE, UNKNOWN_COMPARE] {
-		let mut image = expand(PLAIN);
-		image[PLAIN_CATALOG_OFFSET + KEY_COMPARE_OFFSET] = mode;
-		let volume = Volume::open(image.as_slice()).unwrap();
-		assert_eq!(volume.header().signature, Signature::HfsX);
-		assert!(matches!(
-			volume.open_catalog(CatalogLimits::default()),
-			Err(CatalogError::UnsupportedComparison { key_compare_type }) if key_compare_type == mode
-		));
-	}
+fn reports_an_unqualified_hfsx_comparison_type() {
+	let mut image = expand(PLAIN);
+	image[BINARY_CATALOG_OFFSET + CATALOG_KEY_COMPARE_OFFSET] = UNKNOWN_COMPARE;
+	let volume = Volume::open(image.as_slice()).unwrap();
+	assert_eq!(volume.header().signature, Signature::HfsX);
+	assert!(matches!(
+		volume.open_catalog(CatalogLimits::default()),
+		Err(CatalogError::UnsupportedComparison {
+			key_compare_type: UNKNOWN_COMPARE
+		})
+	));
+}
+
+#[test]
+fn rejects_a_binary_catalog_falsely_declaring_case_folding() {
+	let mut image = expand(PLAIN);
+	image[BINARY_CATALOG_OFFSET + CATALOG_KEY_COMPARE_OFFSET] = CASE_FOLDING_COMPARE;
+	let volume = Volume::open(image.as_slice()).unwrap();
+	assert!(matches!(
+		volume.check_structure(CheckLimits::default()),
+		Err(CheckError::Catalog(CatalogError::Corrupt {
+			reason: Corruption::RecordOrder,
+			..
+		}))
+	));
 }
 
 fn expand(mut data: &[u8]) -> Vec<u8> {

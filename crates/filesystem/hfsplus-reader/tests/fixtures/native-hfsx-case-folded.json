@@ -1,0 +1,48 @@
+{
+	"requirement": "H-READ-02-T01 case-insensitive HFSX",
+	"license": "Apache-2.0; synthetic data only",
+	"native_environment": {
+		"os": "macOS 14.7.2 (23H311), arm64",
+		"fsck_hfs": "650.140.2"
+	},
+	"base_fixture": "native-catalog-volume.bin",
+	"base_provenance": "native-catalog-volume.json",
+	"base_sha256": "49721704a091e42b68ed7241d44118a0189363269e7c4fe39a0c90a26e5a94cf",
+	"derivation": {
+		"test_source": "../hfsx/case_folded.rs",
+		"volume_bytes": 86016,
+		"primary_header_offset": 1024,
+		"alternate_header_offset": 84992,
+		"signature_and_version": "HX, big-endian 5 in both headers",
+		"catalog_key_compare_type_offset": 2099,
+		"catalog_key_compare_type": "0xcf",
+		"folder_record_offsets": [6200, 32114],
+		"folder_flag_mask": "0x0010 in both records",
+		"direct_folder_counts": [1, 0],
+		"byte_overlays": [
+			{"offset": 1025, "value": 88},
+			{"offset": 1027, "value": 5},
+			{"offset": 2099, "value": 207},
+			{"offset": 6203, "value": 16},
+			{"offset": 6287, "value": 1},
+			{"offset": 32117, "value": 16},
+			{"offset": 84993, "value": 88},
+			{"offset": 84995, "value": 5}
+		],
+		"note": "Preserves the native name order, B-tree record layout, and all payload bytes. Apple's checker rejected a preliminary derivative that omitted the HFSX folder flag and root subfolder count."
+	},
+	"raw_hfsx_sha256": "8c705b07c3a03bc75b63a428e8a0e01e635ebe25043b3fc384d87b5f8416fef4",
+	"oracles": {
+		"native_attach": "hdiutil attach -nobrowse -noautoopen -readonly -nomount -plist -imagekey diskimage-class=CRawDiskImage <volume>",
+		"native_fsck": "fsck_hfs -fn <attached-device>; exit 0; volume appears to be OK",
+		"native_mount": "hdiutil attach -nobrowse -noautoopen -readonly -mount required -mountpoint <temporary-directory> -plist -imagekey diskimage-class=CRawDiskImage <volume>",
+		"mount_observations": [
+			"Nested/Résumé.txt and nEsTeD/rÉSUMÉ.TXT resolved to the same inode and exact payload.",
+			"item-095 and Ite\u200dm-095 resolved to the same inode.",
+			"Directory enumeration preserved the stored decomposed spelling Re\u0301sume\u0301.txt and listed 96 item-* files.",
+			"Both attachments were detached and the raw image SHA-256 remained unchanged."
+		],
+		"independent_extraction": "p7zip 17.05 x -so <volume> 'Pomologie Catalog/Nested/*sume*.txt'",
+		"payload_sha256": "affadc0a0affa149d7b895f85b5ae77696c89f2bc6056e253ba94c333c481940"
+	}
+}

@@ -7,8 +7,8 @@ use hfsplus_core::{
 };
 use hfsplus_format::{
 	btree::{
-		BIG_KEYS_MASK, BINARY_COMPARE, HEADER_USER_DATA_BYTES, HFS_BTREE_TYPE, Kind, LEAF_HEIGHT,
-		Node, NodeId, TreeHeader, VARIABLE_INDEX_KEYS_MASK,
+		BIG_KEYS_MASK, BINARY_COMPARE, CASE_FOLDING_COMPARE, HEADER_USER_DATA_BYTES,
+		HFS_BTREE_TYPE, Kind, LEAF_HEIGHT, Node, NodeId, TreeHeader, VARIABLE_INDEX_KEYS_MASK,
 	},
 	catalog::{Key, MAX_KEY_LENGTH},
 	volume::{CatalogId, Signature},
@@ -127,13 +127,13 @@ where
 		{
 			return Err(CatalogError::UnsupportedTree);
 		}
-		let collation = match signature {
-			Signature::HfsPlus => NameCollation::CaseFolded,
-			Signature::HfsX if header.key_compare_type == BINARY_COMPARE => NameCollation::Binary,
-			Signature::HfsX => {
-				return Err(CatalogError::UnsupportedComparison {
-					key_compare_type: header.key_compare_type,
-				});
+		let collation = match (signature, header.key_compare_type) {
+			(Signature::HfsPlus, _) | (Signature::HfsX, CASE_FOLDING_COMPARE) => {
+				NameCollation::CaseFolded
+			}
+			(Signature::HfsX, BINARY_COMPARE) => NameCollation::Binary,
+			(Signature::HfsX, key_compare_type) => {
+				return Err(CatalogError::UnsupportedComparison { key_compare_type });
 			}
 		};
 		if header.depth > u16::from(limits.max_depth) {
