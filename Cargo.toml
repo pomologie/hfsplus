@@ -14,9 +14,11 @@ license = "Apache-2.0"
 repository = "https://github.com/pomologie/hfsplus"
 
 [workspace.dependencies]
-# Workspace crates
-hfsplus-core = { package = "hfsplus-pomologie-core", version = "0.1.0", path = "crates/foundation/hfsplus-pomologie-core", default-features = false }
+# Workspace formats
 hfsplus-format = { version = "0.1.0", path = "crates/formats/hfsplus-format", default-features = false }
+
+# Workspace foundation
+hfsplus-core = { package = "hfsplus-pomologie-core", version = "0.1.0", path = "crates/foundation/hfsplus-pomologie-core", default-features = false }
 
 # Compression
 miniz_oxide = { version = "=0.9.1", default-features = false }

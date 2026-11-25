@@ -8,8 +8,11 @@ repository.workspace = true
 description = "Deterministic streaming construction of HFS+ images"
 
 [dependencies]
-hfsplus-core.workspace = true
+# Workspace formats
 hfsplus-format.workspace = true
+
+# Workspace foundation
+hfsplus-core.workspace = true
 
 [lints]
 workspace = true
