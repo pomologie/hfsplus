@@ -18,12 +18,14 @@ use crate::{ForkReader, SpecialFile, Volume};
 mod audit;
 mod directory;
 mod error;
+mod finder_info;
 mod hard_links;
 mod symlink;
 mod tree;
 
 pub use directory::{Directory, DirectoryPage};
 pub use error::{CatalogError, Corruption, Limit};
+pub use finder_info::FinderInfoError;
 pub use hard_links::{
 	HardLink, HardLinkError, HardLinkLimits, HardLinkProfile, LinkCorruption, LinkTarget,
 	RegularFile,

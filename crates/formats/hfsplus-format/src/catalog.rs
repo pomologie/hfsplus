@@ -44,7 +44,8 @@ const BSD_FLAGS_OFFSET: usize = 40;
 const BSD_MODE_OFFSET: usize = 42;
 const BSD_SPECIAL_OFFSET: usize = 44;
 const FINDER_INFO_OFFSET: usize = 48;
-const FINDER_INFO_BYTES: usize = 32;
+/// Width of the catalog's raw Finder user and extended information fields.
+pub const FINDER_INFO_BYTES: usize = 32;
 const TEXT_ENCODING_OFFSET: usize = 80;
 
 const FOLDER_RECORD_BYTES: usize = 88;
