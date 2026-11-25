@@ -15,6 +15,7 @@ use hfsplus_format::{
 
 use crate::{ForkReader, SpecialFile, Volume};
 
+mod attributes;
 mod audit;
 mod directory;
 mod error;
@@ -23,6 +24,7 @@ mod hard_links;
 mod symlink;
 mod tree;
 
+pub use attributes::CatalogAttributeError;
 pub use directory::{Directory, DirectoryPage};
 pub use error::{CatalogError, Corruption, Limit};
 pub use finder_info::FinderInfoError;

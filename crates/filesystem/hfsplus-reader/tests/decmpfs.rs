@@ -14,6 +14,11 @@ use hfsplus_reader::{
 const OPTICAL: &[u8] = include_bytes!("fixtures/optical-volume.bin");
 const COMPRESSED: &[u8] = include_bytes!("fixtures/native-decmpfs-zlib.bin");
 const INLINE_ID: CatalogId = CatalogId(18);
+const SHARED: &[u8] = include_bytes!("fixtures/native-decmpfs-hardlinks.bin");
+const ATTR_LEAF: usize = 5;
+
+#[path = "decmpfs/entry_attributes.rs"]
+mod entry_attributes;
 
 #[test]
 fn ordinary_files_keep_their_logical_stored_data() {
@@ -56,7 +61,6 @@ mod enabled {
 	use hfsplus_reader::decmpfs::{CompressionLimit, FrameError};
 
 	const NATIVE_PARTIAL: &[u8] = include_bytes!("fixtures/native-decmpfs-tail.bin");
-	const SHARED: &[u8] = include_bytes!("fixtures/native-decmpfs-hardlinks.bin");
 	const RESOURCE_ID: CatalogId = CatalogId(19);
 	const CHUNK_BYTES: usize = 64 * 1024;
 	const INLINE_SAMPLE: &[u8] = b"portable-zlib-inline-fixture\n";
@@ -64,7 +68,6 @@ mod enabled {
 	const INLINE_EXPANSION: usize = INLINE_SAMPLE.len() * INLINE_REPETITIONS;
 	const RESOURCE_EXPANSION: usize = CHUNK_BYTES * 3 + NATIVE_PARTIAL.len();
 	const RESOURCE_RAW_BYTES: u64 = 1115;
-	const ATTR_LEAF: usize = 5;
 	const RESOURCE_FORK: usize = 6;
 	const CONTROL_MAGIC: &[u8; 4] = b"fpmc";
 	const INLINE_TYPE: u32 = 3;
@@ -344,7 +347,6 @@ impl Fixture {
 		fixture
 	}
 
-	#[cfg(feature = "decmpfs-zlib")]
 	fn overlay(&mut self, capture: &[u8]) {
 		self.append(capture);
 	}
@@ -371,7 +373,6 @@ impl Fixture {
 		assert!(unpacked.is_empty());
 	}
 
-	#[cfg(feature = "decmpfs-zlib")]
 	fn slice_mut(&mut self, ordinal: usize) -> &mut [u8] {
 		let (_, range) = &self.spans[ordinal];
 		&mut self.bytes[range.clone()]
