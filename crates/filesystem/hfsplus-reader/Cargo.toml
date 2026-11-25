@@ -11,8 +11,11 @@ description = "Portable read-only HFS+ volume and fork access"
 decmpfs-zlib = ["dep:miniz_oxide"]
 
 [dependencies]
+# Workspace crates
 hfsplus-core.workspace = true
 hfsplus-format.workspace = true
+
+# Compression
 miniz_oxide = { workspace = true, optional = true }
 
 [lints]
