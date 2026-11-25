@@ -6,6 +6,7 @@ mod binary;
 pub mod bsd;
 pub mod btree;
 pub mod catalog;
+pub mod date;
 mod error;
 pub mod hard_links;
 pub mod journal;
