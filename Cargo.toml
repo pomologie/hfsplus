@@ -1,9 +1,14 @@
 [workspace]
 resolver = "3"
 members = [
+	# Filesystem
 	"crates/filesystem/hfsplus-builder",
 	"crates/filesystem/hfsplus-reader",
+
+	# Formats
 	"crates/formats/hfsplus-format",
+
+	# Foundation
 	"crates/foundation/hfsplus-pomologie-core",
 ]
 
