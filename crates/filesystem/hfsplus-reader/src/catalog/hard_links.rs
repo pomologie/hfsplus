@@ -120,9 +120,10 @@ impl<S> RegularFile<'_, S> {
 	}
 }
 
-impl<S: ReadAt> RegularFile<'_, S> {
+impl<'volume, S: ReadAt> RegularFile<'volume, S> {
 	/// Opens the chosen stored fork using its real owner CNID for overflow
 	/// records. Compressed-file interpretation is separate from this API.
+	/// The returned reader borrows the volume and owns its extent mapping.
 	/// # Errors
 	/// Returns an error when the stored fork is corrupt or exceeds its read
 	/// limits, or the selected extents layout is unavailable.
@@ -130,7 +131,7 @@ impl<S: ReadAt> RegularFile<'_, S> {
 		&self,
 		kind: ForkKind,
 		limits: OverflowLimits,
-	) -> Result<ResolvedFork<'_, S>, OverflowError<S::Error>> {
+	) -> Result<ResolvedFork<'volume, S>, OverflowError<S::Error>> {
 		let fork = match kind {
 			ForkKind::Data => &self.data,
 			ForkKind::Resource => &self.resource,

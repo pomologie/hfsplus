@@ -45,12 +45,14 @@ fn opens_overflow_extents_keyed_by_the_inode_instead_of_the_visible_stub() {
 		})
 	));
 
-	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
-	let alias = catalog
-		.regular_file(FIRST_STUB, HardLinkLimits::default())
-		.unwrap()
-		.unwrap();
-	let data = alias.open_stored_fork(ForkKind::Data, limits).unwrap();
+	let data = {
+		let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
+		let alias = catalog
+			.regular_file(FIRST_STUB, HardLinkLimits::default())
+			.unwrap()
+			.unwrap();
+		alias.open_stored_fork(ForkKind::Data, limits).unwrap()
+	};
 	let mut observed = [0];
 	data.read_exact_at(ByteOffset(LOGICAL_CONTINUATION), &mut observed)
 		.unwrap();

@@ -45,6 +45,8 @@ const HAS_LINK_CHAIN: u16 = 0x0020;
 const TEST_MISSING_REFERENCE: u32 = 777;
 const ENTRY_LIMIT: NonZeroUsize = NonZeroUsize::new(6).unwrap();
 
+#[path = "hard_links/fork_lifetime.rs"]
+mod fork_lifetime;
 #[path = "hard_links/overflow_owner.rs"]
 mod overflow_owner;
 
@@ -377,6 +379,13 @@ where
 	let fork = file
 		.open_stored_fork(kind, OverflowLimits::default())
 		.unwrap();
+	assert_fork(&fork, expected);
+}
+
+fn assert_fork<F: ReadAt>(fork: &F, expected: &[u8])
+where
+	F::Error: std::fmt::Debug,
+{
 	assert_eq!(fork.len(), expected.len().into());
 	let mut observed = vec![0; expected.len()];
 	fork.read_exact_at(ByteOffset(0), &mut observed).unwrap();
