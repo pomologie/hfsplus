@@ -146,6 +146,27 @@ impl<E> From<TryReserveError> for OverflowError<E> {
 }
 
 impl<S: ReadAt> Volume<S> {
+	/// Establishes whether the volume has no allocated overflow records.
+	/// An absent fork has no records. An empty tree must account for every
+	/// allocated node as either its header or a linked allocation map node.
+	/// A tree with a root is conservatively reported as nonempty.
+	/// # Errors
+	/// Returns an error for an unreadable tree, inconsistent allocation map,
+	/// unsupported bootstrap, or exhausted metadata read limits.
+	pub fn overflow_tree_is_empty(
+		&self,
+		limits: OverflowLimits,
+	) -> Result<bool, OverflowError<S::Error>> {
+		if self.header().forks.extents.has_overflow() {
+			return Err(OverflowError::BootstrapOverflow);
+		}
+		let fork = self.open_special_fork(SpecialFile::Extents)?;
+		if fork.is_empty() {
+			return Ok(fork.descriptor().total_blocks == 0);
+		}
+		tree::OverflowTree::open(fork, limits)?.prove_empty()
+	}
+
 	/// Opens a stored fork using its embedded extents and any exact continuation
 	/// chain keyed by the supplied catalog ID and fork kind.
 	///

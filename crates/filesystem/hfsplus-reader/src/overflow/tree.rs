@@ -127,6 +127,58 @@ impl<'volume, S: ReadAt> OverflowTree<'volume, S> {
 		})
 	}
 
+	pub(super) fn prove_empty(mut self) -> Result<bool, OverflowError<S::Error>> {
+		if self.header.root.is_some() {
+			return Ok(false);
+		}
+		let map_bytes = self.header.total_nodes.div_ceil(u8::BITS) as usize;
+		let continuation_bytes = Node::continuation_map_bytes(self.bytes.len())?;
+		let extra_bytes = map_bytes.saturating_sub(self.header_map.len());
+		if extra_bytes.div_ceil(continuation_bytes) > self.reads_left {
+			return Err(OverflowError::Limit(OverflowLimit::MetadataReads));
+		}
+		self.header_map.try_reserve_exact(extra_bytes)?;
+		self.header_map.truncate(map_bytes);
+		let mut seen = Vec::new();
+		let mut next = self.first_map;
+		while let Some(id) = next {
+			if self.header_map.len() == map_bytes || seen.contains(&id) {
+				return Err(FormatError::InvalidNode.into());
+			}
+			self.read_raw_node(id)?;
+			let node = Node::decode(&self.bytes)?;
+			let record = node.record(MAP_RECORD).ok_or(FormatError::InvalidNode)?;
+			if node.kind() != Kind::Map
+				|| node.backward().is_some()
+				|| record.len() != continuation_bytes
+			{
+				return Err(FormatError::InvalidNode.into());
+			}
+			seen.try_reserve(1)?;
+			seen.push(id);
+			let remaining = map_bytes - self.header_map.len();
+			self.header_map
+				.extend_from_slice(&record[..record.len().min(remaining)]);
+			next = node.forward();
+		}
+		if self.header_map.len() != map_bytes
+			|| seen
+				.iter()
+				.any(|&id| !map_contains(&self.header_map, 0, id))
+		{
+			return Err(FormatError::InvalidNode.into());
+		}
+		let extra_bits = (u8::BITS - self.header.total_nodes % u8::BITS) % u8::BITS;
+		let last = self.header_map.last_mut().ok_or(FormatError::InvalidNode)?;
+		*last &= u8::MAX << extra_bits;
+		let allocated: u32 = self.header_map.iter().map(|byte| byte.count_ones()).sum();
+		let known = seen.len() as u32 + 1;
+		if allocated != self.header.total_nodes - self.header.free_nodes || allocated != known {
+			return Err(FormatError::InvalidNode.into());
+		}
+		Ok(true)
+	}
+
 	pub(super) fn walk(
 		&mut self,
 		id: CatalogId,

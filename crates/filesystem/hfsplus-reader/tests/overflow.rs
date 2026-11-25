@@ -17,6 +17,9 @@ use hfsplus_reader::{
 	overflow::{ForkKind, OverflowError, OverflowLimit, OverflowLimits},
 };
 
+#[path = "overflow/empty.rs"]
+mod empty;
+
 const OPTICAL: &[u8] = include_bytes!("fixtures/optical-volume.bin");
 const BLOCK_BYTES: usize = 512;
 const VOLUME_BLOCKS: u32 = 128;
