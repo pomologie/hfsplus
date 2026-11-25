@@ -5,7 +5,7 @@ use hfsplus_core::ReadAt;
 use hfsplus_format::{btree::NodeId, volume::CatalogId};
 
 use super::{
-	Catalog, CatalogError, Corruption, Entry, EntryKind, Limit, invalid, is_private,
+	Catalog, CatalogError, Corruption, Entry, EntryKind, Limit, invalid,
 	tree::{OwnedKey, Position, Query, node_buffer, split_key},
 };
 
@@ -70,7 +70,7 @@ impl<'volume, S: ReadAt> Catalog<'volume, S> {
 impl<S: ReadAt> Directory<'_, '_, S> {
 	/// Reads up to `size` entries. A successful page with `complete == false`
 	/// may need one more call to verify the directory end without entries.
-	/// Known private hard-link directories count toward valence and are omitted.
+	/// Internal catalog entries count toward valence and are omitted.
 	/// # Errors
 	/// Rejects requests above the configured page limit, malformed links,
 	/// incomplete or inconsistent entries, and source or resource failures.
@@ -172,7 +172,7 @@ impl<S: ReadAt> Directory<'_, '_, S> {
 			ordinal: position.ordinal + 1,
 			..position
 		});
-		Ok((!is_private(&entry)).then_some(entry))
+		Ok((!self.catalog.is_internal(&entry)).then_some(entry))
 	}
 
 	fn finish(&self, node: NodeId, state: &mut State) -> Result<(), CatalogError<S::Error>> {

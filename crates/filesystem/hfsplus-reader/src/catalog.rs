@@ -39,6 +39,8 @@ const DEFAULT_DEPTH: u8 = 16;
 const DEFAULT_ANCESTORS: usize = 64;
 const DEFAULT_PAGE_ENTRIES: usize = 128;
 const PRIVATE_DIRECTORY_LINK_DIRECTORY: &str = ".HFS+ Private Directory Data\r";
+const JOURNAL_FILE: &str = ".journal";
+const JOURNAL_INFO_FILE: &str = ".journal_info_block";
 
 /// Bound the work and allocations associated with an open catalog.
 #[derive(Debug, Clone, Copy)]
@@ -196,7 +198,7 @@ impl<S: ReadAt> Catalog<'_, S> {
 		};
 		let entry = self.decode_entry(position, query.record(position)?)?;
 		self.check_thread(&entry, &mut query)?;
-		Ok((!is_private(&entry)).then_some(entry))
+		Ok((!self.is_internal(&entry)).then_some(entry))
 	}
 
 	fn query(&self) -> Result<Query, CatalogError<S::Error>> {
@@ -225,7 +227,7 @@ impl<S: ReadAt> Catalog<'_, S> {
 		let Some(entry) = self.resolve(id, query)? else {
 			return Ok(None);
 		};
-		if is_private(&entry) {
+		if self.is_internal(&entry) {
 			return Ok(None);
 		}
 		let mut seen = Vec::new();
@@ -246,7 +248,7 @@ impl<S: ReadAt> Catalog<'_, S> {
 			if !matches!(ancestor.kind, EntryKind::Directory { .. }) {
 				return Err(invalid(tree::HEADER_ID, Corruption::Parent));
 			}
-			if is_private(&ancestor) {
+			if self.is_internal(&ancestor) {
 				return Ok(None);
 			}
 			child = ancestor.metadata.id;
@@ -353,6 +355,16 @@ impl<S: ReadAt> Catalog<'_, S> {
 
 	fn valid_id(&self, id: CatalogId) -> bool {
 		id == ROOT_ID || (id >= CatalogId::FIRST_USER && (self.reused_ids || id < self.next_id))
+	}
+
+	fn is_internal(&self, entry: &Entry) -> bool {
+		is_private(entry)
+			|| (self.volume.header().journal_info.is_some()
+				&& entry.parent == ROOT_ID
+				&& matches!(entry.kind, EntryKind::File { .. })
+				&& [JOURNAL_FILE, JOURNAL_INFO_FILE]
+					.into_iter()
+					.any(|name| name.encode_utf16().eq(entry.name.iter().copied())))
 	}
 }
 

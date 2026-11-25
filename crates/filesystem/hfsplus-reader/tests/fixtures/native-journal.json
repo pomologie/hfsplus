@@ -1,0 +1,103 @@
+{
+	"profile": "Clean HFS+ with an initialized internal journal and equal noninitial ring cursors",
+	"oracle": {
+		"host": "macOS 14.7.2 (23H311), arm64",
+		"native_result": "The readonly mounted directory listed only message.txt. Its bytes matched the synthetic input. fsck_hfs 650.140.2 -fn exited zero on the readonly attachment. Independent 7-Zip extraction also matched the input."
+	},
+	"generation": {
+		"create_argv": [
+			"hdiutil",
+			"create",
+			"-size",
+			"24m",
+			"-fs",
+			"Journaled HFS+",
+			"-volname",
+			"JournalFixture",
+			"-layout",
+			"NONE",
+			"-srcfolder",
+			"<temp>/content",
+			"-format",
+			"UDRW",
+			"<temp>/native.dmg"
+		],
+		"content": {
+			"message.txt": "journal admission fixture\n"
+		},
+		"export_argv": [
+			"hdiutil",
+			"convert",
+			"<temp>/native.dmg",
+			"-format",
+			"UDTO",
+			"-o",
+			"<temp>/native.raw"
+		]
+	},
+	"raw_image_bytes": 25165824,
+	"raw_image_sha256": "6c33aae39751d844a56c912dbe4154aa2e148a701408cb4e745b0df376b71607",
+	"sparse_fixture_sha256": "29eb5da709e0cee8171c5c0e48c9f334e4b012d7bd9b208fddbe92bd9058a037",
+	"sparse_fixture_format": "Big-endian volume length u64 and slice count u16, then slice offset u64, length u32, and exact original bytes.",
+	"journal": {
+		"info_flags": 1,
+		"header_byte_order": "little-endian",
+		"header_checksum": "0x0abea175",
+		"sector_bytes": 512,
+		"start_bytes": 63488,
+		"end_bytes": 63488,
+		"buffer_and_header_bytes": 524288,
+		"volume_last_mounted_version": "HFSJ"
+	},
+	"negative_cases": "Tests alter copies of captured ranges in memory. A pending header demonstrates cursor-based refusal without asserting transaction validity.",
+	"slices": [
+		{
+			"purpose": "primary volume header",
+			"volume_offset": 1024,
+			"bytes": 512,
+			"sha256": "d04e799fbfcdc825b8096292e12a70b278ce8ebaf1ad4f27704aabf501569bba"
+		},
+		{
+			"purpose": "alternate volume header",
+			"volume_offset": 25164800,
+			"bytes": 512,
+			"sha256": "f9c15b079617f24b2c2089cef2e9901584533426f5cc6e02e0f0f2e2fc78f573"
+		},
+		{
+			"purpose": "journal info block",
+			"volume_offset": 8192,
+			"bytes": 4096,
+			"sha256": "d69e7a18f246b9d190fd08c56d92731ab6931819b8e9a529f6ce51a527f776d7"
+		},
+		{
+			"purpose": "journal header sector",
+			"volume_offset": 12288,
+			"bytes": 512,
+			"sha256": "fc5c7a90ab2c69ce151a2dd36f64357fea0be00c334f7735caa0dcd173ffa1d0"
+		},
+		{
+			"purpose": "allocation bitmap",
+			"volume_offset": 4096,
+			"bytes": 4096,
+			"sha256": "2cce729d5d5777157646402551e468fa4dfd506487712c3fe1ab041170a1d99a"
+		},
+		{
+			"purpose": "catalog header and leaf nodes",
+			"volume_offset": 2895872,
+			"bytes": 8192,
+			"sha256": "e40672a24ffb5d59a431d74f2d7b79dced45a645f40c897f0cb4011c933e1ab1"
+		},
+		{
+			"purpose": "file data",
+			"volume_offset": 5058560,
+			"bytes": 26,
+			"sha256": "b94f4da1a69a806e5dd31d5693871472c1f2284a2bac8cc7b0ad9059546d5ac6"
+		},
+		{
+			"purpose": "attributes header and stored nodes",
+			"volume_offset": 733184,
+			"bytes": 16384,
+			"sha256": "c65e4d196575eadde965f3d8699f86adbe169b2711274554d3d46affa3e6881d"
+		}
+	]
+}

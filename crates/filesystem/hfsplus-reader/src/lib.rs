@@ -20,6 +20,7 @@ pub mod catalog;
 pub mod check;
 pub mod decmpfs;
 mod fork;
+mod journal;
 pub mod overflow;
 mod profile;
 
@@ -105,16 +106,18 @@ pub struct Volume<S> {
 	primary: Header,
 	alternate: Result<Header, MissingAlternate>,
 	matches_primary: bool,
+	fork_support: ForkReadSupport,
 }
 
 impl<S: ReadAt> Volume<S> {
 	/// Reads both fixed-size volume headers. The primary copy determines the
-	/// geometry and remains authoritative for this view. No other structures
-	/// are read, and a short or changed source is reported as an I/O failure.
+	/// geometry and remains authoritative for this view. For an otherwise
+	/// admissible journaled volume, also checks the journal's info block and
+	/// header. A short or changed source is reported as an I/O failure.
 	///
 	/// # Errors
 	/// Returns an error if the primary cannot be decoded, the source bounds
-	/// disagree with the primary allocation geometry, or either read fails.
+	/// disagree with the primary allocation geometry, or a source read fails.
 	/// A readable invalid alternate is reported by [`Self::alternate_header`].
 	pub fn open(source: S) -> Result<Self, Error<S::Error>> {
 		let source_len = source.len();
@@ -127,11 +130,16 @@ impl<S: ReadAt> Volume<S> {
 		} else {
 			Header::decode(&alternate_bytes, source_len.0).map_err(MissingAlternate::Invalid)
 		};
+		let fork_support = match profile::fork_read_support(&primary) {
+			ForkReadSupport::UnverifiedJournal => journal::probe(&source, &primary)?,
+			support => support,
+		};
 		Ok(Self {
 			source,
 			primary,
 			alternate,
 			matches_primary: primary_bytes == alternate_bytes,
+			fork_support,
 		})
 	}
 
@@ -155,8 +163,8 @@ impl<S: ReadAt> Volume<S> {
 
 	/// Reports whether fork reads are available under the current volume profile.
 	#[must_use]
-	pub fn fork_read_support(&self) -> ForkReadSupport {
-		profile::fork_read_support(&self.primary)
+	pub const fn fork_read_support(&self) -> ForkReadSupport {
+		self.fork_support
 	}
 }
 

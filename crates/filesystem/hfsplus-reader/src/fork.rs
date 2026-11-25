@@ -133,20 +133,24 @@ impl<S: ReadAt> ReadAt for ForkReader<'_, S> {
 }
 
 fn validate_data_area(fork: &Fork, geometry: Geometry) -> Result<(), FormatError> {
+	for extent in fork.extents() {
+		let range = geometry
+			.block_range(extent.start, extent.blocks)
+			.map_err(|_| FormatError::InvalidFork)?;
+		if !within_data_area(&range, geometry) {
+			return Err(FormatError::InvalidFork);
+		}
+	}
+	Ok(())
+}
+
+pub(crate) fn within_data_area(range: &Range<u64>, geometry: Geometry) -> bool {
 	let block_bytes = u64::from(geometry.block_size());
 	// TN1150 reserves the final allocation block even when the alternate header
 	// falls entirely in the unallocated tail past the last whole block.
 	let tail_blocks = ALTERNATE_HEADER_FROM_END.div_ceil(block_bytes);
 	let last_usable_byte = geometry.allocation_bytes() - tail_blocks * block_bytes;
-	for extent in fork.extents() {
-		let range = geometry
-			.block_range(extent.start, extent.blocks)
-			.map_err(|_| FormatError::InvalidFork)?;
-		if range.start < FIRST_RESERVED_END || range.end > last_usable_byte {
-			return Err(FormatError::InvalidFork);
-		}
-	}
-	Ok(())
+	range.start >= FIRST_RESERVED_END && range.end <= last_usable_byte
 }
 
 fn range_len(range: &Range<u64>) -> u64 {

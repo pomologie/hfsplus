@@ -21,13 +21,14 @@ const KNOWN_ATTRIBUTES: u32 = CLEAN_UNMOUNT_ATTRIBUTE
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ForkReadSupport {
-	/// The volume declares a clean, unjournaled state and recognized attributes.
+	/// The volume declares a clean state with recognized attributes and has
+	/// either no journal or a verified empty internal journal.
 	Supported,
 	/// A nonjournaled volume requires a consistency check before logical reads.
 	Dirty,
 	/// The journal may require replay before logical reads.
 	NeedsJournalReplay,
-	/// The journal must be independently checked for pending transactions.
+	/// The journal did not pass the read-only profile checks.
 	UnverifiedJournal,
 	/// Bad-block records must be checked before logical reads.
 	SparedBlocks,
@@ -55,20 +56,18 @@ impl fmt::Display for ForkReadSupport {
 
 pub(crate) fn fork_read_support(header: &Header) -> ForkReadSupport {
 	let dirty = !header.unmounted_cleanly() || header.attributes & INCONSISTENT_ATTRIBUTE != 0;
-	if header.journal_info.is_some() {
-		return if dirty {
+	if dirty {
+		return if header.journal_info.is_some() {
 			ForkReadSupport::NeedsJournalReplay
 		} else {
-			ForkReadSupport::UnverifiedJournal
+			ForkReadSupport::Dirty
 		};
-	}
-	if dirty {
-		return ForkReadSupport::Dirty;
 	}
 	if header.attributes & SPARED_BLOCKS_ATTRIBUTE != 0 {
 		return ForkReadSupport::SparedBlocks;
 	}
 	match header.attributes & !KNOWN_ATTRIBUTES {
+		0 if header.journal_info.is_some() => ForkReadSupport::UnverifiedJournal,
 		0 => ForkReadSupport::Supported,
 		bits => ForkReadSupport::UnqualifiedAttributes(bits),
 	}
