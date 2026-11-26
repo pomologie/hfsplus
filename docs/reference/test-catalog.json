@@ -95,8 +95,8 @@
       "scenario": "Write nonseekable sink, random concurrent ranges vs raw output, sparse zeros, short/changing source, cancellation. Verify exact geometry, no full image buffer and no implicit allocation.",
       "oracle": "instrumented source/sink; property",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-05-T01",

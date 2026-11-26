@@ -344,3 +344,38 @@ fn large_zero_range_requires_only_the_requested_window() {
 		.unwrap();
 	assert_eq!(bytes, [0; 16]);
 }
+
+#[test]
+fn streams_the_entire_sparse_plan_to_a_nonseekable_counting_sink() {
+	const IMAGE_BYTES: ByteLen = ByteLen((2 << 20) + 1);
+	const MAX_CHUNK_BYTES: usize = 32 << 10;
+	struct ZeroSink {
+		written: u64,
+	}
+	impl Write for ZeroSink {
+		fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+			assert!(bytes.len() <= MAX_CHUNK_BYTES);
+			assert!(bytes.iter().all(|byte| *byte == 0));
+			self.written += ByteLen::from(bytes.len()).0;
+			Ok(bytes.len())
+		}
+		fn flush(&mut self) -> io::Result<()> {
+			Ok(())
+		}
+	}
+
+	let mut draft = PlanBuilder::<&[u8]>::new(
+		IMAGE_BYTES,
+		Limits {
+			max_ranges: 1,
+			max_metadata_bytes: ByteLen(0),
+		},
+	);
+	draft.push_zero(ByteOffset(0), IMAGE_BYTES).unwrap();
+	let plan = draft.seal().unwrap();
+	assert_eq!(plan.image_len(), IMAGE_BYTES);
+	assert_eq!(plan.ranges().count(), 1);
+	let mut sink = ZeroSink { written: 0 };
+	plan.write_to(&mut sink).unwrap();
+	assert_eq!(sink.written, IMAGE_BYTES.0);
+}
