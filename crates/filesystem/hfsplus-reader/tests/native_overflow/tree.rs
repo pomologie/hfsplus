@@ -18,6 +18,8 @@ const EXPECTED_ENTRIES: usize = 5;
 const EXPECTED_LINKS: usize = 2;
 const SYMLINK_READ_LIMIT: usize = 64;
 const MODIFIED_DATE: usize = 1;
+const BSD_ADMIN_SHIFT: u32 = 16;
+const BSD_FLAGS_MASK: u32 = u8::MAX as u32 | ((u8::MAX as u32) << BSD_ADMIN_SHIFT);
 
 struct NativeEntry<'a> {
 	path: &'a str,
@@ -27,11 +29,12 @@ struct NativeEntry<'a> {
 	uid: u32,
 	gid: u32,
 	mtime: i64,
+	flags: u32,
 }
 
 impl<'a> NativeEntry<'a> {
 	fn parse(line: &'a str) -> Self {
-		let [path, inode, mode, links, uid, gid, mtime] =
+		let [path, inode, mode, links, uid, gid, mtime, flags] =
 			line.split('\t').collect::<Vec<_>>().try_into().unwrap();
 		Self {
 			path,
@@ -41,6 +44,7 @@ impl<'a> NativeEntry<'a> {
 			uid: uid.parse().unwrap(),
 			gid: gid.parse().unwrap(),
 			mtime: mtime.parse().unwrap(),
+			flags: flags.parse().unwrap(),
 		}
 	}
 
@@ -49,6 +53,14 @@ impl<'a> NativeEntry<'a> {
 		assert_eq!(metadata.permissions.mode, self.mode, "{} mode", self.path);
 		assert_eq!(metadata.permissions.uid, self.uid, "{} uid", self.path);
 		assert_eq!(metadata.permissions.gid, self.gid, "{} gid", self.path);
+		let flags = u32::from(metadata.permissions.owner_flags)
+			| (u32::from(metadata.permissions.admin_flags) << BSD_ADMIN_SHIFT);
+		assert_eq!(
+			flags,
+			self.flags & BSD_FLAGS_MASK,
+			"{} BSD flags",
+			self.path
+		);
 		assert_eq!(
 			metadata.dates[MODIFIED_DATE],
 			date::from_unix_seconds(self.mtime).unwrap().get(),

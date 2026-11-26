@@ -47,8 +47,8 @@
       "scenario": "Native attrs, resource fork, link groups, symlink, known/unavailable times and overflow; compare native metadata and exact raw/logical forks.",
       "oracle": "native stat/lstat/xattr; fstool overlap",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/FORMAT.md"
     },
     {
       "id": "H-BUILD-01-T01",

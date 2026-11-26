@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import stat
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -89,6 +90,7 @@ def populate(image, mount, *, tree):
 			os.symlink(os.fsdecode(SYMLINK_TARGET), mount / SYMLINK)
 			run(XATTR, "-wx", SHARED_ATTRIBUTE, SHARED_VALUE.hex(), path)
 			run(XATTR, "-wx", FOLDER_ATTRIBUTE, FOLDER_VALUE.hex(), mount / DOCUMENTS)
+			os.chflags(path, stat.UF_NODUMP)
 
 
 def capture_forks(image, mount, scratch, *, tree):
@@ -120,11 +122,14 @@ def capture_tree(mount, scratch):
 		for entry in entries:
 			metadata = entry.lstat()
 			row = (entry.relative_to(mount), metadata.st_ino, metadata.st_mode, metadata.st_nlink,
-				metadata.st_uid, metadata.st_gid, metadata.st_mtime_ns // NANOSECONDS_PER_SECOND)
+				metadata.st_uid, metadata.st_gid, metadata.st_mtime_ns // NANOSECONDS_PER_SECOND,
+				metadata.st_flags)
 			ledger.write("\t".join(map(str, row)) + "\n")
 	primary, alias = (mount / TREE_FILE).stat(), (mount / ALIAS).stat()
 	if primary.st_ino != alias.st_ino or primary.st_nlink != 2 or alias.st_nlink != 2:
 		raise ValueError("the two mounted names do not share one native inode")
+	if not (primary.st_flags & alias.st_flags & stat.UF_NODUMP):
+		raise ValueError("the shared native inode did not preserve UF_NODUMP")
 	for path, attribute, value, output in (
 		(TREE_FILE, SHARED_ATTRIBUTE, SHARED_VALUE, "shared.attr"),
 		(ALIAS, SHARED_ATTRIBUTE, SHARED_VALUE, "shared.attr"),
@@ -138,7 +143,7 @@ def capture_tree(mount, scratch):
 	if target != SYMLINK_TARGET:
 		raise ValueError("the mounted symbolic-link target differs from its literal input")
 	(scratch / "symlink.bin").write_bytes(target)
-	print(f"Native mount matched {len(entries)} stored names, shared inode {primary.st_ino}, and exact attributes and link target")
+	print(f"Native mount matched {len(entries)} stored names, shared inode {primary.st_ino}, UF_NODUMP, and exact attributes and link target")
 
 
 def compare(scratch, *, tree):
@@ -160,10 +165,25 @@ def compare(scratch, *, tree):
 	print(output.decode("utf-8").strip())
 
 
+def compare_fstool(scratch, command):
+	image = scratch / "native.cdr"
+	for relative in (TREE_FILE, ALIAS):
+		path = unicodedata.normalize("NFD", f"/{relative}")
+		for arguments, capture in (((), "data.bin"), (("--rsrc",), "resource.bin")):
+			observed = run(command, "cat", *arguments, image, path)
+			if observed != (scratch / capture).read_bytes():
+				raise ValueError(f"fstool readback differs for {path} {capture}")
+	version = run(command, "--version").decode("utf-8").strip()
+	print(f"{version} matched both complete forks through both names of the shared file")
+
+
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--tree", action="store_true", help="include nested paths, hard links, attributes and a symlink")
+	parser.add_argument("--fstool", metavar="COMMAND", help="independently read both forks of the tree witness")
 	options = parser.parse_args()
+	if options.fstool and not options.tree:
+		parser.error("--fstool requires --tree")
 	if sys.platform != "darwin":
 		raise ValueError("the native HFS+ reader comparison requires macOS")
 	with TemporaryDirectory(prefix="hfsplus-full-forks-") as temporary:
@@ -179,6 +199,8 @@ def main():
 		with (scratch / "native.cdr").open("rb") as source:
 			print(f"Native raw image SHA-256 {hashlib.file_digest(source, 'sha256').hexdigest()}")
 		compare(scratch, tree=options.tree)
+		if options.fstool:
+			compare_fstool(scratch, options.fstool)
 
 
 if __name__ == "__main__":
