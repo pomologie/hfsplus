@@ -21,6 +21,8 @@ use hfsplus_reader::{
 
 #[path = "catalog/hosted.rs"]
 mod hosted;
+#[path = "native_overflow/packed_wire.rs"]
+mod packed_wire;
 #[path = "native_overflow/tree.rs"]
 mod tree;
 

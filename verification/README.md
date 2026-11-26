@@ -20,6 +20,8 @@ Use `--profile btree-offset-kani` with a record of `bash crates/formats/hfsplus-
 
 Use `--profile btree-packed-native-property` with a record of `python3 -B crates/filesystem/hfsplus-reader/verification/check-packed-nodes.py`. The test compares 228 borrowed record ranges with the on-disk offset words in 21 retained leaf and index nodes. It decodes catalog, extent and attribute keys and compares all 3,517 within-node key pairs against the stored order.
 
+Use `--profile btree-packed-wire-differential` with a record of `python3 -B crates/filesystem/hfsplus-reader/verification/check-packed-wire.py`. An independent Python decoder compares 21 node descriptors and 228 record spans, keys and values with the production Rust output. It covers catalog folders, files and threads, resolved overflow extent groups, inline and fork-backed attributes, and index child IDs. Set `fixture_hash` to the combined ledger digest. The comparison reads the retained fixture files directly.
+
 The property profile passed at clean revision `e1618cfae53b0fd601cbddf7eb5bf16bab65db16` with Rust 1.99.1 on arm64 macOS. The Git archive SHA-256 was `c2eab850b9bdd478f1e039667047c35b0198e6bafef0973ad977700c338fc364`. The local evidence directory is `target/verification-evidence/v0.1.0/e1618cf-packed-property/`, with bundle SHA-256 `54b3466016a510a05260a2f29382ee950f5f68f52da8cf72622ffa7cd780f5e1`. H-V02 still requires separate differential, native and fuzz evidence.
 
 ### Historical name release evidence

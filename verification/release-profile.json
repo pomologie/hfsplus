@@ -108,6 +108,20 @@
         "retained_packed_nodes_match_record_ranges_and_key_order": 3745
       }
     },
+    "btree-packed-wire-differential": {
+      "obligation": "H-V02",
+      "method": "differential",
+      "features": [],
+      "command": ["python3", "-B", "crates/filesystem/hfsplus-reader/verification/check-packed-wire.py"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0"},
+      "bounds": {
+        "nodes": {"catalog": 17, "extents": 1, "attributes": 3},
+        "records": {"catalog": 214, "extents": 4, "attributes": 10},
+        "fixture_sha256": "e8b033456f975569b48b4f4747787dc42d592b60dd0864ea30765f5bd95ffa48",
+        "wire_rows_sha256": "31e8d46db5fdccd9ed1db54297dab08b42a90ddb8cb89fb1ce49a858d6cd6993"
+      },
+      "harnesses": {"retained-btree-wire": 249}
+    },
     "names-property": {
       "obligation": "H-V03",
       "method": "property",

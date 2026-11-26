@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
+from hfsplus_btree_evidence import verify_packed_wire_differential
 from hfsplus_evidence_transcript import (
     verify_differential, verify_interleaved_native, verify_native, verify_volume_wire_differential,
     verify_volume_wire_fuzz,
@@ -70,6 +71,27 @@ Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and bo
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_packed_wire_comparison_requires_exact_descriptor_and_record_rows(self):
+        rows = ("HFS+ node catalog|1|4096|leaf|1|0|0|1\n"
+                "HFS+ record catalog|1|0|14|46|2|[]|folder-thread|1|[65]")
+        digest = hashlib.sha256(rows.encode()).hexdigest()
+        ledger = "a" * 64
+        profile = {
+            "bounds": {"nodes": {"catalog": 1}, "records": {"catalog": 1},
+                       "fixture_sha256": ledger, "wire_rows_sha256": digest},
+            "harnesses": {"retained-btree-wire": 2},
+            "tool_versions": {"python": "3.14.0", "cargo": "1.99.1", "rustc": "1.99.1"},
+        }
+        transcript = ("Python 3.14.0\ncargo 1.99.1\nrustc 1.99.1\n"
+                      f"Verified packed fixture ledgers SHA-256 {ledger}\n{rows}\n"
+                      f"Compared 2 packed native wire rows SHA-256 {digest}\n")
+        verify_packed_wire_differential(transcript, profile)
+        for changed in (transcript.replace("leaf|1", "index|2"), transcript.replace("|46|2", "|48|2"),
+                        transcript.replace("folder-thread", "file-thread"),
+                        transcript.replace(ledger, "b" * 64), transcript.replace("Compared 2", "Compared 1")):
+            with self.assertRaises(EvidenceError):
+                verify_packed_wire_differential(changed, profile)
+
     def test_volume_wire_fuzz_requires_execution_and_an_empty_artifact_directory(self):
         profile = {"bounds": {"seed": 7, "inputs": 20000, "max_input_bytes": 512, "timeout_seconds": 5,
                               "rss_limit_mb": 1024, "initial_corpus_files": 4},
