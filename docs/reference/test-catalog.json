@@ -431,8 +431,8 @@
       "scenario": "Allocation overlap introduced in fixture, free counter incorrect",
       "oracle": "native fsck; set model",
       "expected": "Detect overlap and counter discrepancy",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-02-T04",

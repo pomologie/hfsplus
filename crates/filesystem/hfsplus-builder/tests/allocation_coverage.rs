@@ -17,6 +17,9 @@ use hfsplus_format::volume::{
 	ALTERNATE_HEADER_FROM_END, HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET,
 };
 
+#[path = "allocation_coverage/failures.rs"]
+mod failures;
+
 const BLOCK_BYTES: u64 = 4096;
 const RESERVED_BYTES: u64 = 8 << 20;
 const LARGE_FILE_BYTES: u64 = 3 << 30;
@@ -191,6 +194,17 @@ fn independent_block_set_matches_empty_small_large_and_many_file_layouts() {
 }
 
 #[test]
+fn the_reference_set_identifies_each_accounting_fault() {
+	let small = CASES
+		.iter()
+		.find(|case| case.name == SMALL_FIXTURE)
+		.unwrap();
+	let mut raw = Vec::new();
+	layout(*small).write_to(&mut raw).unwrap();
+	failures::fixtures(&raw);
+}
+
+#[test]
 #[ignore = "emits owned synthetic native fixtures when the verification runner supplies a directory"]
 fn emit_allocation_witnesses() {
 	const COPY_CHUNK: usize = 32 * 1024;
@@ -199,7 +213,7 @@ fn emit_allocation_witnesses() {
 	for case in CASES {
 		let image = layout(case);
 		let path = directory.join(case.name).with_extension("hfs");
-		let mut file = std::fs::File::create_new(path).unwrap();
+		let mut file = std::fs::File::create_new(&path).unwrap();
 		file.set_len(image.image_len().0).unwrap();
 		// These fixtures define every file payload to be zero, so only metadata
 		// needs backing storage in the disposable host image.
@@ -219,6 +233,15 @@ fn emit_allocation_witnesses() {
 					.unwrap();
 				file.write_all(&buffer[..count]).unwrap();
 				position += u64::try_from(count).unwrap();
+			}
+		}
+		drop(file);
+		if case.name == SMALL_FIXTURE {
+			for (name, bytes) in failures::fixtures(&std::fs::read(path).unwrap()) {
+				std::fs::File::create_new(directory.join(name).with_extension("hfs"))
+					.unwrap()
+					.write_all(&bytes)
+					.unwrap();
 			}
 		}
 	}
