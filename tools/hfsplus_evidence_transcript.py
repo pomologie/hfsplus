@@ -174,12 +174,30 @@ def verify_allocation_differential(transcript, profile):
     require(lines[DIFFERENTIAL_LINE_COUNT:] == [expected], "incorrect independent allocation comparison")
 
 
+def verify_frozen_identity(transcript, profile):
+    lines = transcript.splitlines()
+    versions = profile["tool_versions"]
+    for tool in ("Python", "cargo", "rustc"):
+        verify_tool_version(lines[:3], tool, versions[tool.lower()])
+    bounds = profile["bounds"]
+    generated, stubs = tuple(bounds["generated_cnids"]), tuple(bounds["stub_cnids"])
+    expected = [
+        f"Frozen draft image {bounds['image_bytes']} bytes SHA-256 {bounds['image_sha256']}",
+        f"Independent catalog matched {bounds['catalog_objects']} objects and {bounds['catalog_threads']} threads "
+        f"at depth {bounds['catalog_depth']}, with root CNID {bounds['root_cnid']} and next CNID {bounds['next_cnid']}",
+        f"Independent forks matched generated CNIDs {generated}, hard-link stubs {stubs}, "
+        f"and shared inode {bounds['shared_inode']} with reference {bounds['link_reference']}",
+    ]
+    require(lines[3:] == expected, "incorrect frozen-draft fixture, catalog or identity comparison")
+
+
 def verify_differential(transcript, profile):
     harnesses = profile["harnesses"]
     require(len(harnesses) == 1, "differential transcript requires one exact oracle")
     (name, count), = harnesses.items()
     oracles = {"interleaved-forks": verify_interleaved_differential,
-               "interleaved-allocation": verify_allocation_differential}
+               "interleaved-allocation": verify_allocation_differential,
+               "frozen-draft-catalog": verify_frozen_identity}
     require(count == 1 and name in oracles, "unknown differential oracle")
     oracles[name](transcript, profile)
 

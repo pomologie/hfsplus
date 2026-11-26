@@ -223,6 +223,30 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, "incorrect interleaved fixture"):
             verify_differential(transcript.rsplit("\n", 2)[0], profile)
 
+    def test_frozen_identity_differential_requires_catalog_threads_and_link_identity(self):
+        digest = hashlib.sha256(b"frozen-draft fixture").hexdigest()
+        profile = {
+            "harnesses": {"frozen-draft-catalog": 1},
+            "tool_versions": {"python": "3.14.0", "cargo": "1.99.1", "rustc": "1.99.1"},
+            "bounds": {"image_bytes": 8388608, "image_sha256": digest, "catalog_objects": 16,
+                       "catalog_threads": 16, "catalog_depth": 2, "root_cnid": 2, "next_cnid": 31,
+                       "generated_cnids": [16, 20, 22], "stub_cnids": [18, 25],
+                       "shared_inode": 30, "link_reference": 100},
+        }
+        transcript = f"""Python 3.14.0
+cargo 1.99.1
+rustc 1.99.1
+Frozen draft image 8388608 bytes SHA-256 {digest}
+Independent catalog matched 16 objects and 16 threads at depth 2, with root CNID 2 and next CNID 31
+Independent forks matched generated CNIDs (16, 20, 22), hard-link stubs (18, 25), and shared inode 30 with reference 100
+"""
+        verify_differential(transcript, profile)
+        for old, new in ((digest, "0" * len(digest)), ("16 threads", "15 threads"), ("CNID 31", "CNID 32"),
+                         ("(16, 20, 22)", "(16, 20, 21)"), ("(18, 25)", "(18, 26)"), ("inode 30", "inode 29")):
+            with self.subTest(replacement=new):
+                with self.assertRaisesRegex(EvidenceError, "incorrect frozen-draft"):
+                    verify_differential(transcript.replace(old, new), profile)
+
     def test_allocation_differential_requires_block_ownership_and_both_headers(self):
         profile, transcript = interleaved_fixture()
         profile["harnesses"] = {"interleaved-allocation": 1}
