@@ -78,6 +78,21 @@
       "harnesses": {
         "placement_proof::placements_cover_exactly_the_admitted_prefix": 1
       }
+    },
+    "sealed-positioned-property": {
+      "obligation": "H-V07",
+      "method": "property",
+      "features": [],
+      "command": ["bash", "crates/filesystem/hfsplus-builder/verification/check-positioned-reads.sh"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "placement_count": 5,
+        "placement_lengths_bytes": [1, 2],
+        "maximum_image_bytes": 10
+      },
+      "harnesses": {
+        "positioned_reads_tests::every_small_layout_matches_its_independent_materialized_byte_model": 3840
+      }
     }
   }
 }

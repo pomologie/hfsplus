@@ -153,4 +153,5 @@ fn every_small_layout_matches_its_independent_materialized_byte_model() {
 		checks,
 		permutations * MAX_PLACEMENT_BYTES.pow(SEGMENTS.len() as u32)
 	);
+	println!("HFS+ property cases checked: {checks}");
 }
