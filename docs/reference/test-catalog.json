@@ -371,8 +371,8 @@
       "scenario": "Data and resource forks both nonempty, large xattr",
       "oracle": "native xattr/fork tools",
       "expected": "Exact independently read bytes and metadata, forks distinct",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/FORMAT.md"
     },
     {
       "id": "H-FMT-04-T04",
