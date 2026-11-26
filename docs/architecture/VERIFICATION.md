@@ -4,6 +4,27 @@ Treat the standalone immutable constructor and later mutable filesystem as diffe
 
 Read the [shared ecosystem verification standard EVS-1](ECOSYSTEM_VERIFICATION.md). The following summarizes the repository-wide planning index at [`verification/obligations.json`](../../verification/obligations.json), which defines properties, assumptions, bounds, negative witnesses and required evidence methods. Implemented proof artifacts live in the owning crate’s `verification/` directory. All obligations are planned. Gate applies only to the activated supported profile; required proofs/tests must pass before that capability ships. Nonblocking advanced capabilities remain disabled if not qualified.
 
+## v0.1.0 coverage
+
+Run `python3 -B tools/measure_coverage.py --output "$evidence_dir"` from a clean checkout. The collector uses `nightly-2026-11-04`, its LLVM tools, and Nextest 0.9.151. It runs the locked no-default-features workspace suite and binds the source and counts from each owned production file. It reports only observed LLVM branch outcomes. [Coverage collector](../../tools/measure_coverage.py) · [EVS-1 coverage criteria](ECOSYSTEM_VERIFICATION.md#7-ci-and-quantitative-gates)
+
+On arm64 macOS, the clean `ec8eb67` run passed 194 tests and skipped ten. LLVM covered 6,944 of 7,850 lines (88.46%) across 65 owned files. The run merged 276 profiles from 41 test binaries and excluded three build profiles. The report is in `target/verification-evidence/v0.1.0/ec8eb67-critical-coverage/` with SHA-256 `ef107bb3c00dc08af32d04d849e8a701dc6b86c6b2eb36d043d60e6576ce77ea`.
+
+| Critical source | Lines | Branch outcomes |
+|---|---:|---:|
+| Builder allocation | 236 / 253 | 12 / 12 |
+| Sealed plan | 163 / 169 | 13 / 14 |
+| Sealed streaming | 42 / 42 | 6 / 6 |
+| Reader allocation | 189 / 222 | 23 / 24 |
+| B-tree format | 142 / 149 | 38 / 58 |
+| Volume format | 184 / 190 | 25 / 32 |
+| Name admission | 100 / 111 | 18 / 18 |
+| Name collation | 27 / 27 | 2 / 2 |
+
+H-VER-01-T01 remains open. Five of these files fall below at least one proposed critical-file threshold. The coverage run supplies source counts for the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+
+## Obligations
+
 | ID | Activation | Scope | Required evidence |
 |---|---|---|---|
 | H-V01 | 0.1.0 | geometry/codecs | kani, property, fuzz, differential |
