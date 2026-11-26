@@ -659,8 +659,8 @@
       "scenario": "Verify hosted-only builder/adapter or optional codec features do not become required by kernel profiles; test supported feature variants separately.",
       "oracle": "Feature graph and compilation matrix",
       "expected": "Hosted features remain available on supported hosts; kernel graph excludes hosted-only dependencies and explicitly labels unsupported combinations.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/architecture/VERIFICATION.md"
     }
   ]
 }
