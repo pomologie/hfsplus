@@ -23,8 +23,9 @@ size, count = struct.unpack_from(">II", primary, geometry_offset)
 PY
 
 toolchain=nightly-2026-11-04
-nightly_bin=$(dirname -- "$(rustup which --toolchain "$toolchain" rustc)")
-export PATH="$nightly_bin:$PATH" CARGO_NET_OFFLINE=true
+nightly_rustc=$(rustup which --toolchain "$toolchain" rustc)
+nightly_bin=$(dirname -- "$nightly_rustc")
+export PATH="$nightly_bin:$PATH" RUSTC="$nightly_rustc" CARGO_NET_OFFLINE=true
 sanitizer=address
 seed=7
 runs=20000
