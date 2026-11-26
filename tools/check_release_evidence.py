@@ -11,7 +11,7 @@ import sys
 
 from hfsplus_evidence_transcript import (
     EvidenceError, require, verify_differential, verify_draft_state_machine, verify_fault_tests, verify_kani,
-    verify_native, verify_property_test,
+    verify_native, verify_property_test, verify_volume_wire_differential,
 )
 from hfsplus_fork_evidence import FORK_VALIDATORS
 from hfsplus_name_evidence import NAME_VALIDATORS
@@ -34,7 +34,10 @@ METHOD_VALIDATORS = {
     "differential": verify_differential, "state-machine": verify_draft_state_machine,
     "native": verify_native,
 }
-OBLIGATION_VALIDATORS = {"H-V03": NAME_VALIDATORS, "H-V04": FORK_VALIDATORS}
+OBLIGATION_VALIDATORS = {
+    "H-V01": {"differential": verify_volume_wire_differential},
+    "H-V03": NAME_VALIDATORS, "H-V04": FORK_VALIDATORS,
+}
 METHOD_TOOLS = {
     "kani": {"kani", "cbmc"}, "property": {"cargo", "rustc"}, "fault": {"cargo", "rustc"},
     "differential": {"cargo", "rustc", "python"}, "state-machine": {"cargo", "rustc"},

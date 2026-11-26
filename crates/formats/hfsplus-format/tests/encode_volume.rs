@@ -28,6 +28,65 @@ fn encodes_native_headers_byte_for_byte() {
 }
 
 #[test]
+fn reports_native_volume_fields_for_the_wire_reference() {
+	let captures = [
+		("native-primary.bin", NATIVE_PRIMARY, NATIVE_VOLUME_BYTES),
+		(
+			"native-alternate.bin",
+			NATIVE_ALTERNATE,
+			NATIVE_VOLUME_BYTES,
+		),
+		("optical-primary.bin", OPTICAL_PRIMARY, OPTICAL_VOLUME_BYTES),
+		(
+			"native-512k-primary.bin",
+			include_bytes!("fixtures/native-512k-primary.bin"),
+			512 << 10,
+		),
+		(
+			"native-8m-primary.bin",
+			include_bytes!("fixtures/native-8m-primary.bin"),
+			NATIVE_VOLUME_BYTES,
+		),
+		(
+			"native-128m-primary.bin",
+			include_bytes!("fixtures/native-128m-primary.bin"),
+			128 << 20,
+		),
+	];
+	for (name, wire, device_bytes) in captures {
+		let header = Header::decode(wire, device_bytes).unwrap();
+		let geometry = header.geometry;
+		assert_eq!(header.encode().unwrap().as_slice(), wire);
+		println!(
+			"HFS+ header {name} {:?} {} {} {} {} {} {}",
+			header.signature,
+			geometry.block_size(),
+			geometry.total_blocks(),
+			header.free_blocks,
+			header.next_allocation.0,
+			geometry.allocation_bytes(),
+			geometry.alternate_header_offset(),
+		);
+		for (role, fork) in [
+			("allocation", header.forks.allocation),
+			("extents", header.forks.extents),
+			("catalog", header.forks.catalog),
+			("attributes", header.forks.attributes),
+			("startup", header.forks.startup),
+		] {
+			print!(
+				"HFS+ fork {name} {role} {} {} {}",
+				fork.logical_bytes, fork.clump_bytes, fork.total_blocks,
+			);
+			for extent in fork.extents() {
+				print!(" {}:{}", extent.start.0, extent.blocks);
+			}
+			println!();
+		}
+	}
+}
+
+#[test]
 fn preserves_the_unjournaled_reserved_word() {
 	let mut expected = NATIVE_PRIMARY.to_vec();
 	expected[RESERVED_JOURNAL_FIELD].copy_from_slice(b"test");

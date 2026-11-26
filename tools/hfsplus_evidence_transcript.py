@@ -1,5 +1,6 @@
 """Check invocation transcripts under the committed HFS+ evidence policy."""
 
+import hashlib
 import json
 import re
 
@@ -120,6 +121,28 @@ def verify_fault_tests(transcript, profile):
     harnesses = profile["harnesses"]
     require(all(count == 1 for count in harnesses.values()), "fault transcript requires each exact test once")
     verify_rust_tests(transcript, profile)
+
+
+def verify_volume_wire_differential(transcript, profile):
+    lines = transcript.splitlines()
+    bounds = profile["bounds"]
+    headers = bounds["native_headers"]
+    forks = bounds["fork_rows"]
+    count = headers + forks
+    require(len(lines) == count + 5 and profile["harnesses"] == {"native-volume-wire": count},
+            "incomplete native volume wire comparison")
+    versions = profile["tool_versions"]
+    for tool in ("Python", "cargo", "rustc"):
+        verify_tool_version(lines[:3], tool, versions[tool.lower()])
+    require(lines[3] == f"Verified native fixture ledgers SHA-256 {bounds['fixture_sha256']}",
+            "native volume fixture ledger digest mismatch")
+    rows = lines[4:-1]
+    digest = hashlib.sha256("\n".join(rows).encode()).hexdigest()
+    require(sum(row.startswith("HFS+ header ") for row in rows) == headers
+            and sum(row.startswith("HFS+ fork ") for row in rows) == forks
+            and digest == bounds["wire_rows_sha256"]
+            and lines[-1] == f"Compared {count} native wire rows SHA-256 {digest}",
+            "incorrect native volume and fork comparison rows")
 
 
 def verify_interleaved_differential(transcript, profile):

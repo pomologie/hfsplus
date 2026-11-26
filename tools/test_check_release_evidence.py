@@ -10,7 +10,7 @@ import unittest
 
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
 from hfsplus_evidence_transcript import (
-    verify_differential, verify_interleaved_native, verify_native,
+    verify_differential, verify_interleaved_native, verify_native, verify_volume_wire_differential,
 )
 
 
@@ -69,6 +69,24 @@ Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and bo
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_volume_wire_differential_requires_pinned_rows_and_ledger(self):
+        rows = "HFS+ header volume HfsPlus 4096 2 0 0 8192 7168\nHFS+ fork volume catalog 4096 4096 1 1:1"
+        digest = hashlib.sha256(rows.encode()).hexdigest()
+        ledger = "a" * 64
+        profile = {
+            "bounds": {"native_headers": 1, "fork_rows": 1, "fixture_sha256": ledger, "wire_rows_sha256": digest},
+            "harnesses": {"native-volume-wire": 2},
+            "tool_versions": {"python": "3.14.0", "cargo": "1.99.1", "rustc": "1.99.1"},
+        }
+        transcript = (f"Python 3.14.0\ncargo 1.99.1\nrustc 1.99.1\n"
+                      f"Verified native fixture ledgers SHA-256 {ledger}\n{rows}\n"
+                      f"Compared 2 native wire rows SHA-256 {digest}\n")
+        verify_volume_wire_differential(transcript, profile)
+        for changed in (transcript.replace("1:1", "2:1"), transcript.replace(ledger, "b" * 64),
+                        transcript.replace("Compared 2", "Compared 1")):
+            with self.assertRaises(EvidenceError):
+                verify_volume_wire_differential(changed, profile)
+
     def setUp(self):
         scratch = tempfile.TemporaryDirectory(prefix="hfsplus-release-evidence-")
         self.addCleanup(scratch.cleanup)

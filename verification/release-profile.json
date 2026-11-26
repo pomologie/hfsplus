@@ -41,6 +41,20 @@
         "volume_wire_shapes_match_the_reference_model": 763
       }
     },
+    "format-native-wire-differential": {
+      "obligation": "H-V01",
+      "method": "differential",
+      "features": [],
+      "command": ["python3", "-B", "crates/formats/hfsplus-format/verification/check-native-volume-wire.py"],
+      "tool_versions": {"python": "3.14.0", "cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "native_headers": 6,
+        "fork_rows": 30,
+        "fixture_sha256": "66324f65398cdaa8726ab8622e9495335e74c85f3b74c8c77c84c563b196e44b",
+        "wire_rows_sha256": "091bdefbb5a79b41666e387e129bfa7e75699bfda8cc855796cf3e30cdbccda7"
+      },
+      "harnesses": {"native-volume-wire": 36}
+    },
     "btree-offset-kani": {
       "obligation": "H-V02",
       "method": "kani",
