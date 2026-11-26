@@ -43,3 +43,11 @@ Run `bash crates/formats/hfsplus-format/verification/check-btree-offsets.sh` wit
 The clean `eb006a3` replay checked 103 valid extent-overflow leaf and index nodes across all seven node sizes. A separate wire model wrote the descriptor, ordered data and resource keys, physical extents or index child IDs, padding, and trailing offsets. Production encoding matched the full node bytes. Decoding returned the exact record slices and ordered typed keys. The run covers the extent tree wire layout within eight records per node. The remaining catalog and attribute record cases and the fuzz and native gates retain their own evidence requirements.
 
 Run `bash crates/formats/hfsplus-format/verification/check-extent-node-model.sh` with Rust 1.99.1. The retained transcript is `target/verification-evidence/v0.1.0/eb006a3-extent-node-model/replay.log`, SHA-256 `0a9c2085d080865e6b6093a851971a0477131251a77e894ba0c69c15cdfddaad`. [Extent node test](../tests/extents.rs)
+
+### AddressSanitizer for valid packed nodes
+
+The offset proofs and retained-node checks cover admission and existing records. The sanitizer harness varies the inputs to the production packer and compares complete output bytes, decoded descriptors, and the exact borrowed record ranges with an independent wire model. Each selector runs catalog index records, overflow extent leaf records, and inline attribute leaf records.
+
+The inputs select among all seven node sizes from 512 to 32,768 bytes, with two to eight records subject to node capacity. They vary ASCII key lengths up to 255 catalog units and 127 attribute units, one to eight extents per overflow record, and zero to 3,802 inline attribute bytes. The model covers standalone valid nodes in memory. Each seed contains only four selectors.
+
+Run `bash crates/formats/hfsplus-format/verification/fuzz/check-packed-nodes.sh` from the workspace root with Rust nightly `2026-11-04`, `cargo-fuzz` 0.13.2, and the locked dependencies cached. The command uses AddressSanitizer, seed 7, seven initial selectors, 12,000 inputs of at most four bytes, a five-second per-input timeout, and a 1,024 MiB RSS limit.

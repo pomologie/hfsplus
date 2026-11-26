@@ -23,3 +23,10 @@ path = "fuzz_targets/volume_wire.rs"
 test = false
 doc = false
 bench = false
+
+[[bin]]
+name = "packed_nodes"
+path = "fuzz_targets/packed_nodes.rs"
+test = false
+doc = false
+bench = false
