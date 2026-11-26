@@ -78,6 +78,19 @@ H-BUILD-04-T02 exhaustively compares every slice of a reference containing metad
 
 H-BUILD-04-T01 also passed. A 5 GiB logical zero range uses one placement, zero metadata bytes and a 16-byte positioned read buffer. The nonseekable counting sink verified that a `2 MiB + 1 byte` zero range emitted its exact length in writes bounded by the stream's 32 KiB scratch buffer. The sink verified the zero contents without storing the output. The same suite checks cancellation on both sides of a source read and exhaustive concurrent reads of the small reference. The canonical native check above corroborates the exact geometry for a complete image. All nine sealed-plan tests and strict Clippy passed. [Sealed-plan tests](../tests/sealed_plan.rs)
 
+## Fresh allocation release evidence
+
+All four H-V06 methods passed on the clean candidate `78ac3fc6678f6880704e478125e209e2c0fa11b4`. Kani 0.68.0 and CBMC 6.11.0 verified four harnesses and reached all eight covers on 512- and 4096-byte allocation blocks and volumes up to 32 blocks. The property test compared four positive layouts. The independent reader reconstructed and checked each of the 2,048 allocation bits in the interleaved image, including the two reserved blocks, 11 metadata blocks, and 80 file blocks, and found identical headers with 1,955 free blocks. The separate canonical image returned 2,048 total and 2,033 free blocks from Apple `statvfs` on macOS 14.7.2 arm64 (23H311). Its read-only software attachment detached and the digest stayed unchanged. [Release profiles](../../../../verification/release-profile.json)
+
+The exact source archive SHA-256 is `5b47c19e42f244c1b6290f2d1ff7b78369f3f4c16512a4e7701182f0cb45e987`. The four transcripts, their validated single-profile records, and the combined `bundle.json` are in `target/verification-evidence/v0.1.0/78ac3fc-fresh-allocation/`. The bundle SHA-256 is `012e4d763b3510aec4b75f52e9cda707774bb6a51322d51e35244af5a590229f`.
+
+| Transcript | SHA-256 |
+| --- | --- |
+| Kani | `f0660a5aa2a161e0c93126b60427a30bd39a5c74ab67d774deba86a23c4fda43` |
+| Property | `6d80ba0b990111817062219cbf115c8fb5d83bb570913f4f16165712f7f79dfe` |
+| Differential | `386c4051885f35cc726b7a0b754956fde966e2356f83ff11ff5aabf72d0aff4b` |
+| Native | `651e1ea570b8000231b25fa37ccf82e0833bda061680701eac7b4e7aa626c121` |
+
 ## Sealed image release evidence
 
 All five H-V07 methods passed on the clean candidate `a8953266c95b02ad7002089080f54e0f35e5c5a2`. The Kani proof reached its required cover, the positioned-read test checked all 3,840 layouts, and the four stream fault tests passed. The independent reader verified all 134 catalog records and both complete forks in the pinned 8 MiB image. Apple `fsck_hfs` 650.140.2 reported a consistent volume in no-write mode. The read-only software attachment stayed unmounted, detached successfully, and the raw image digest matched before and after the check. [Release profiles](../../../../verification/release-profile.json)

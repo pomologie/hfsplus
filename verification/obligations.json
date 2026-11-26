@@ -140,7 +140,7 @@
       ],
       "target": "hfsplus-builder / planner and bitmap",
       "property": "All allocated block ranges contained, disjoint for distinct owners except qualified links; bitmap and allocated/free counts equal reference sets; required reserved and metadata regions protected.",
-      "assumptions_and_initial_bounds": "Kani <=32 blocks/8 reservations with full-width endpoints; compare explicit set model, native free-count oracle.",
+      "assumptions_and_initial_bounds": "Kani up to 32 blocks for 512- and 4096-byte block sizes and one full-width transition from any admitted cursor; four positive property layouts, one independent block ownership comparison, and one native free-count fixture.",
       "required_methods": [
         "kani",
         "property",
@@ -149,8 +149,8 @@
       ],
       "negative_witness": "allocator double uses alternate-header region",
       "mandatory_when_activated": true,
-      "status": "planned",
-      "evidence": []
+      "status": "pass",
+      "evidence": ["crates/filesystem/hfsplus-builder/verification/README.md"]
     },
     {
       "id": "H-V07",

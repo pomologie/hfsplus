@@ -87,10 +87,10 @@ H-VER-01-T01 remains open. Five of these files fall below at least one proposed 
 ### H-V06 — fresh image allocation
 **Target:** hfsplus-builder / planner and bitmap.\
 **Property:** All allocated block ranges contained, disjoint for distinct owners except qualified links; bitmap and allocated/free counts equal reference sets; required reserved and metadata regions protected.\
-**Assumptions and initial bounds:** Kani <=32 blocks/8 reservations with full-width endpoints; compare explicit set model, native free-count oracle.\
+**Assumptions and initial bounds:** Kani covers up to 32 blocks for 512- and 4096-byte block sizes and one full-width transition from any admitted cursor. Separate tests compare four positive layouts, one independent block ownership reconstruction, and one native free-count fixture.\
 **Negative witness:** allocator double uses alternate-header region.\
 **Requirement links:** H-BUILD-02, H-BUILD-03.\
-**Evidence:** kani, property, differential, native; status planned.
+**Evidence:** All four configured methods passed on clean revision `78ac3fc` within their recorded bounds. [Fresh allocation evidence](../../crates/filesystem/hfsplus-builder/verification/README.md#fresh-allocation-release-evidence)
 
 ### H-V07 — sealed image
 **Target:** hfsplus-builder / interval plan and range producer.\
