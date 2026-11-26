@@ -155,7 +155,7 @@
         "H-BUILD-05-T01",
         "H-BUILD-05-T02"
       ],
-      "status": "planned",
+      "status": "pass",
       "mandatory": true
     },
     {

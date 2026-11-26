@@ -107,8 +107,8 @@
       "scenario": "Build full synthetic app tree (hardlinks/attrs/forks) on 3 hosts from same canonical metadata; compare raw digests, native fsck, mount and manifest.",
       "oracle": "native fsck_hfs; native mount; independent reader",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-READ-01-T01",
@@ -503,8 +503,8 @@
       "scenario": "Build same canonical metadata on Linux, macOS, Windows",
       "oracle": "digest and native metadata",
       "expected": "Byte-identical raw volume with fixed profile; native mount/fsck",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-READ-01-T02",
