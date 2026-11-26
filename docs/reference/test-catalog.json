@@ -443,8 +443,8 @@
       "scenario": "Sparse 10 GiB input with explicit known-zero regions",
       "oracle": "counting source",
       "expected": "Exact logical geometry, no payload-proportional RAM",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-03-T02",
