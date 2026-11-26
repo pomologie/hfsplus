@@ -161,3 +161,31 @@ def verify_interleaved_native(transcript, profile):
     require(report and report[0] in {f"** {device} (NO WRITE)", f"** {raw_device} (NO WRITE)"}
             and report[1:] == expected,
             "incorrect Apple no-write result, detach, or fixture digest")
+
+
+def verify_native_allocation_counts(transcript, profile):
+    lines = transcript.splitlines()
+    versions = profile["tool_versions"]
+    for tool in ("Python", "cargo", "rustc"):
+        verify_tool_version(lines[:3], tool, versions[tool.lower()])
+    bounds = profile["bounds"]
+    digest = f"canonical.hfs {bounds['image_sha256']}"
+    expected = [
+        f"macOS {versions['macos']} build {versions['macos_build']}",
+        digest,
+        f"macOS matched {bounds['total_blocks']} total and {bounds['free_blocks']} free "
+        f"{bounds['allocation_block_bytes']}-byte allocation blocks",
+        "Native read-only allocation attachment detached",
+        digest,
+    ]
+    require(lines[3:] == expected, "incorrect native allocation counts, detach, or fixture digest")
+
+
+def verify_native(transcript, profile):
+    harnesses = profile["harnesses"]
+    require(len(harnesses) == 1, "native transcript requires one exact oracle")
+    (name, count), = harnesses.items()
+    oracles = {"interleaved-forks": verify_interleaved_native,
+               "canonical-allocation-counts": verify_native_allocation_counts}
+    require(count == 1 and name in oracles, "unknown native oracle")
+    oracles[name](transcript, profile)

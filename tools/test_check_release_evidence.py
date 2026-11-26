@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
-from hfsplus_evidence_transcript import verify_interleaved_differential, verify_interleaved_native
+from hfsplus_evidence_transcript import verify_interleaved_differential, verify_interleaved_native, verify_native
 
 
 PROFILE = "format-kani"
@@ -217,6 +217,31 @@ Native no-write image SHA-256 {digest}
             with self.subTest(replacement=new):
                 with self.assertRaises(EvidenceError):
                     verify_interleaved_native(transcript.replace(old, new), profile)
+
+    def test_native_allocation_requires_independent_counts_and_identical_digest(self):
+        digest = hashlib.sha256(b"canonical").hexdigest()
+        profile = {
+            "harnesses": {"canonical-allocation-counts": 1},
+            "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0",
+                              "macos": "14.7.2", "macos_build": "23H311"},
+            "bounds": {"image_sha256": digest, "total_blocks": 2048, "free_blocks": 2033,
+                       "allocation_block_bytes": 4096},
+        }
+        transcript = f"""Python 3.14.0
+cargo 1.99.1
+rustc 1.99.1
+macOS 14.7.2 build 23H311
+canonical.hfs {digest}
+macOS matched 2048 total and 2033 free 4096-byte allocation blocks
+Native read-only allocation attachment detached
+canonical.hfs {digest}
+"""
+        verify_native(transcript, profile)
+        for old, new in (("23H311", "23H312"), ("2048 total", "2049 total"), ("2033 free", "2032 free"),
+                         ("attachment detached", "attachment mounted"), (digest, "0" * len(digest))):
+            with self.subTest(replacement=new):
+                with self.assertRaisesRegex(EvidenceError, "incorrect native allocation"):
+                    verify_native(transcript.replace(old, new, 1), profile)
 
     def test_archive_digest_ignores_worktree_line_ending_configuration(self):
         (self.root / ".gitattributes").write_text("*.txt text\n", encoding="utf-8")
