@@ -10,22 +10,24 @@ Run `python3 -B tools/measure_coverage.py --output "$evidence_dir"` from a clean
 
 On arm64 macOS, the clean `ec8eb67` run passed 194 tests and skipped ten. LLVM covered 6,944 of 7,850 lines (88.46%) across 65 owned files. The run merged 276 profiles from 41 test binaries and excluded three build profiles. The report is in `target/verification-evidence/v0.1.0/ec8eb67-critical-coverage/` with SHA-256 `ef107bb3c00dc08af32d04d849e8a701dc6b86c6b2eb36d043d60e6576ce77ea`.
 
-The clean `3ba750a` replay passed 202 tests with 11 skipped. It reproduced the production line and branch counts below, using 43 test binaries and 288 raw profiles with three build profiles excluded. The report is in `target/verification-evidence/v0.1.0/3ba750a-critical-coverage/` with SHA-256 `078c65cd0f706b1df0755491a323a7f79f00a25595c4fa4196ddd801d8cf3a76`.
+The clean `3ba750a` replay passed 202 tests with 11 skipped and reproduced the earlier critical-file counts. The report is in `target/verification-evidence/v0.1.0/3ba750a-critical-coverage/` with SHA-256 `078c65cd0f706b1df0755491a323a7f79f00a25595c4fa4196ddd801d8cf3a76`.
 
-| Critical source | Lines | Branch outcomes |
-|---|---:|---:|
-| Builder allocation | 236 / 253 | 12 / 12 |
-| Sealed plan | 163 / 169 | 13 / 14 |
-| Sealed streaming | 42 / 42 | 6 / 6 |
-| Reader allocation | 189 / 222 | 23 / 24 |
-| B-tree format | 142 / 149 | 38 / 58 |
-| Volume format | 184 / 190 | 25 / 32 |
-| Name admission | 100 / 111 | 18 / 18 |
-| Name collation | 27 / 27 | 2 / 2 |
+At clean revision `aed3601`, the replay passed 207 tests with 11 skipped and covered 6,995 of 7,850 owned lines (89.11%). It used the same 43 test binaries, with 293 raw profiles and three build profiles excluded. The report is in `target/verification-evidence/v0.1.0/aed3601-critical-coverage/` with SHA-256 `902f08b96cd18080608b5d4e54939e6f13ccd2a020d5e8c8d539373f79603e52`.
 
-H-VER-01-T01 remains open. Five of these files fall below at least one proposed critical-file threshold. The coverage run supplies source counts for the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+| Critical source | Baseline lines | Latest lines | Baseline branches | Latest branches |
+|---|---:|---:|---:|---:|
+| Builder allocation | 236 / 253 | 250 / 253 | 12 / 12 | 12 / 12 |
+| Sealed plan | 163 / 169 | 166 / 169 | 13 / 14 | 13 / 14 |
+| Sealed streaming | 42 / 42 | 42 / 42 | 6 / 6 | 6 / 6 |
+| Reader allocation | 189 / 222 | 200 / 222 | 23 / 24 | 23 / 24 |
+| B-tree format | 142 / 149 | 145 / 149 | 38 / 58 | 41 / 58 |
+| Volume format | 184 / 190 | 184 / 190 | 25 / 32 | 26 / 32 |
+| Name admission | 100 / 111 | 109 / 111 | 18 / 18 | 18 / 18 |
+| Name collation | 27 / 27 | 27 / 27 | 2 / 2 | 2 / 2 |
 
-Two later clean, targeted replays improved coverage. At `33db05f`, name admission reached 109 of 111 lines with all 18 measured branch outcomes. At `543d782`, builder allocation reached 250 of 253 lines, and the sealed plan reached 166 of 169 lines with 13 of 14 branch outcomes. The detailed reports are in `target/verification-evidence/v0.1.0/33db05f-name-admission-coverage/` and `target/verification-evidence/v0.1.0/543d782-builder-coverage/`. The table records the earlier whole-workspace baseline.
+H-VER-01-T01 remains open. Reader allocation falls below the proposed line threshold. The B-tree and volume codecs fall below the branch threshold. The coverage counts describe the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+
+Detailed intermediate replays are in `target/verification-evidence/v0.1.0/33db05f-name-admission-coverage/` and `target/verification-evidence/v0.1.0/543d782-builder-coverage/`.
 
 ## Obligations
 
