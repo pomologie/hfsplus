@@ -105,8 +105,8 @@
       ],
       "negative_witness": "resource fork confused with data fork; hardlink deref cycle",
       "mandatory_when_activated": true,
-      "status": "planned",
-      "evidence": []
+      "status": "pass",
+      "evidence": ["verification/README.md"]
     },
     {
       "id": "H-V05",
