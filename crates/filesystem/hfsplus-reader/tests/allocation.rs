@@ -1,8 +1,11 @@
+use std::{error::Error as _, io};
+
+use hfsplus_core::{ByteLen, ByteOffset, ReadAt};
 use hfsplus_format::volume::{
 	ALTERNATE_HEADER_FROM_END, AllocationBlock, HEADER_BYTES, PRIMARY_HEADER_OFFSET,
 };
 use hfsplus_reader::{
-	SpecialFile, Volume,
+	Error, SpecialFile, Volume,
 	allocation::{AllocationError, AllocationLimits, MetadataOwner},
 };
 
@@ -12,6 +15,8 @@ const DEVICE_BYTES: usize = 8 << 20;
 const ALLOCATION_BITMAP_AT: usize = 4096;
 const NATIVE_TOTAL_BLOCKS: u32 = 2048;
 const NATIVE_FREE_BLOCKS: u32 = 1997;
+// The two header regions and one extent each for allocation, extents, catalog, and attributes.
+const NATIVE_METADATA_RANGES: usize = 6;
 const FIRST_BLOCK_MASK: u8 = 1 << (u8::BITS - 1);
 const PRIMARY: usize = PRIMARY_HEADER_OFFSET as usize;
 const ALLOCATION_FORK: usize = PRIMARY + 112;
@@ -95,21 +100,87 @@ fn rejects_shared_metadata_blocks_and_short_bitmaps() {
 fn checks_bitmap_and_metadata_range_limits() {
 	let raw = native_volume();
 	let volume = Volume::open(raw.as_slice()).unwrap();
-	let limit = BITMAP.len() as u64 - 1;
 	let limits = AllocationLimits {
-		max_bitmap_bytes: limit,
+		max_bitmap_bytes: BITMAP.len() as u64,
+		max_ranges: NATIVE_METADATA_RANGES,
 		..AllocationLimits::default()
 	};
+	assert_eq!(
+		volume.check_metadata_allocation(limits).unwrap(),
+		volume
+			.check_metadata_allocation(AllocationLimits::default())
+			.unwrap()
+	);
+
+	let limit = limits.max_bitmap_bytes - 1;
+	let error = volume
+		.check_metadata_allocation(AllocationLimits {
+			max_bitmap_bytes: limit,
+			..limits
+		})
+		.unwrap_err();
 	assert!(matches!(
-		volume.check_metadata_allocation(limits),
-		Err(AllocationError::BitmapLimit { required, limit: reported }) if required == limit + 1 && reported == limit
+		error,
+		AllocationError::BitmapLimit { required, limit: reported } if required == limits.max_bitmap_bytes && reported == limit
 	));
-	let limits = AllocationLimits {
-		max_ranges: 2,
-		..AllocationLimits::default()
-	};
+	assert_eq!(
+		error.to_string(),
+		format!(
+			"allocation bitmap requires {} bytes with a limit of {limit}",
+			limits.max_bitmap_bytes
+		)
+	);
+	assert!(error.source().is_none());
+
+	let error = volume
+		.check_metadata_allocation(AllocationLimits {
+			max_ranges: limits.max_ranges - 1,
+			..limits
+		})
+		.unwrap_err();
+	assert!(matches!(error, AllocationError::RangeLimit));
+	assert_eq!(error.to_string(), "allocation range limit exceeded");
+	assert!(error.source().is_none());
+}
+
+#[test]
+fn reports_bitmap_io_with_the_volume_offset_and_source_error() {
+	let raw = native_volume();
+	let volume = Volume::open(BlockedBitmapSource(&raw)).unwrap();
+	let error = volume
+		.check_metadata_allocation(AllocationLimits::default())
+		.unwrap_err();
 	assert!(matches!(
-		volume.check_metadata_allocation(limits),
-		Err(AllocationError::RangeLimit)
+		&error,
+		AllocationError::Read(Error::Source { offset, error })
+			if *offset == ByteOffset(ALLOCATION_BITMAP_AT as u64)
+				&& error.kind() == io::ErrorKind::WouldBlock
 	));
+	let source = error.source().unwrap();
+	assert_eq!(error.to_string(), source.to_string());
+	let underlying = source
+		.source()
+		.unwrap()
+		.downcast_ref::<io::Error>()
+		.unwrap();
+	assert_eq!(underlying.kind(), io::ErrorKind::WouldBlock);
+}
+
+struct BlockedBitmapSource<'a>(&'a [u8]);
+
+impl ReadAt for BlockedBitmapSource<'_> {
+	type Error = io::Error;
+
+	fn len(&self) -> ByteLen {
+		ReadAt::len(self.0)
+	}
+
+	fn read_exact_at(&self, offset: ByteOffset, destination: &mut [u8]) -> Result<(), Self::Error> {
+		if offset == ByteOffset(ALLOCATION_BITMAP_AT as u64) {
+			return Err(io::ErrorKind::WouldBlock.into());
+		}
+		self.0
+			.read_exact_at(offset, destination)
+			.map_err(|error| io::Error::new(io::ErrorKind::InvalidInput, error))
+	}
 }
