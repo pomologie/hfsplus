@@ -1,4 +1,5 @@
 use std::{
+	cell::{Cell, RefCell},
 	io::{self, Read, Write},
 	thread,
 };
@@ -174,6 +175,105 @@ fn preserves_source_faults_sink_faults_and_cancellation() {
 		Err(WriteError::Cancelled)
 	));
 	assert!(output.is_empty());
+}
+
+struct ObservedSource<'a> {
+	bytes: &'a [u8],
+	reads: RefCell<Vec<(ByteOffset, usize)>>,
+	fail_once: Cell<bool>,
+}
+
+impl ObservedSource<'_> {
+	fn seal(&self) -> SealedPlan<&Self> {
+		let mut draft = PlanBuilder::new(self.len(), Limits::default());
+		draft
+			.push_source(ByteOffset(0), self, ByteOffset(0), self.len())
+			.unwrap();
+		draft.seal().unwrap()
+	}
+}
+
+impl ReadAt for ObservedSource<'_> {
+	type Error = io::Error;
+
+	fn len(&self) -> ByteLen {
+		self.bytes.len().into()
+	}
+
+	fn read_exact_at(&self, offset: ByteOffset, destination: &mut [u8]) -> io::Result<()> {
+		self.reads.borrow_mut().push((offset, destination.len()));
+		if self.fail_once.replace(false) {
+			return Err(io::ErrorKind::UnexpectedEof.into());
+		}
+		self.bytes
+			.read_exact_at(offset, destination)
+			.map_err(io::Error::other)
+	}
+}
+
+#[test]
+fn cancellation_around_the_next_chunk_preserves_only_the_completed_prefix() {
+	const IMAGE_BYTES: usize = 128 * 1024;
+	const CHECK_BEFORE_SECOND_READ: usize = 3;
+	const CHECK_AFTER_SECOND_READ: usize = 4;
+	let data = vec![0x5a; IMAGE_BYTES];
+	let source = ObservedSource {
+		bytes: &data,
+		reads: RefCell::default(),
+		fail_once: Cell::new(false),
+	};
+	let plan = source.seal();
+	let write_until = |cancel_on| {
+		source.reads.borrow_mut().clear();
+		let mut output = Vec::new();
+		let mut checks = 0;
+		let result = plan.write_with_cancel(&mut output, || {
+			checks += 1;
+			Some(checks) == cancel_on
+		});
+		(result, output)
+	};
+	let (result, output) = write_until(Some(CHECK_BEFORE_SECOND_READ));
+	assert!(matches!(result, Err(WriteError::Cancelled)));
+	assert_eq!(*source.reads.borrow(), [(ByteOffset(0), output.len())]);
+	assert!((1..IMAGE_BYTES).contains(&output.len()));
+	assert_eq!(output, &data[..output.len()]);
+
+	let (result, after_read) = write_until(Some(CHECK_AFTER_SECOND_READ));
+	assert!(matches!(result, Err(WriteError::Cancelled)));
+	assert_eq!(source.reads.borrow().len(), 2);
+	assert_eq!(source.reads.borrow()[1].0, ByteOffset(output.len() as u64));
+	assert_eq!(after_read, output);
+
+	let (result, complete) = write_until(None);
+	result.unwrap();
+	assert_eq!(complete, data);
+}
+
+#[test]
+fn reader_retries_a_failed_range_and_stops_reading_the_source_at_eof() {
+	const PAYLOAD: &[u8; 4] = b"data";
+	let source = ObservedSource {
+		bytes: PAYLOAD,
+		reads: RefCell::default(),
+		fail_once: Cell::new(true),
+	};
+	let plan = source.seal();
+	let mut reader = plan.reader();
+	let mut data = [0; PAYLOAD.len() + 1];
+	assert_eq!(reader.read(&mut []).unwrap(), 0);
+	let error = reader.read(&mut data).unwrap_err();
+	assert!(matches!(
+		error.get_ref().and_then(|cause| cause.downcast_ref()),
+		Some(ReadError::<io::Error>::Source {
+			offset: ByteOffset(0),
+			error: WindowError::Source(cause),
+		}) if cause.kind() == io::ErrorKind::UnexpectedEof
+	));
+	assert_eq!(reader.read(&mut data).unwrap(), PAYLOAD.len());
+	assert_eq!(&data[..PAYLOAD.len()], PAYLOAD);
+	assert_eq!(reader.read(&mut data).unwrap(), 0);
+	assert_eq!(*source.reads.borrow(), [(ByteOffset(0), PAYLOAD.len()); 2]);
 }
 
 #[test]
