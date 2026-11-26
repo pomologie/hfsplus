@@ -130,6 +130,30 @@ fn reconstructs_native_catalog_header_and_leaf_nodes_byte_for_byte() {
 }
 
 #[test]
+fn tree_header_requests_require_a_header_node_and_the_full_fork() {
+	let catalog_header = Node::decode(NATIVE_CATALOG_HEADER).unwrap();
+	let header = TreeHeader::decode(&catalog_header, TREE_FORK_BYTES).unwrap();
+	assert_eq!(
+		TreeHeader::node_size_hint(NATIVE_CATALOG_HEADER),
+		Ok(header.node_bytes),
+	);
+	assert_eq!(
+		TreeHeader::decode(&catalog_header, TREE_FORK_BYTES - 1),
+		Err(Error::InvalidNode),
+	);
+
+	let catalog_leaf = Node::decode(NATIVE_CATALOG_LEAF).unwrap();
+	assert_eq!(
+		TreeHeader::decode(&catalog_leaf, TREE_FORK_BYTES),
+		Err(Error::InvalidNode),
+	);
+	assert_eq!(
+		TreeHeader::node_size_hint(NATIVE_CATALOG_LEAF),
+		Err(Error::InvalidNode),
+	);
+}
+
+#[test]
 fn packs_index_and_bitmap_continuation_nodes() {
 	let mut destination = [0xff; SMALL_NODE_BYTES];
 	let keyed_pointer_a = [0, 2, 0, 1, 0, 0, 0, 8];

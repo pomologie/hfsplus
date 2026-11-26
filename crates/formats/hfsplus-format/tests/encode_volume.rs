@@ -140,6 +140,35 @@ fn constructs_and_rechecks_the_header_and_fork() {
 }
 
 #[test]
+fn fork_encoding_checks_capacity_of_the_receiving_geometry() {
+	const SMALL_VOLUME_BLOCKS: u32 = 4;
+	const FORK_BLOCKS: u32 = SMALL_VOLUME_BLOCKS + 1;
+	let original =
+		Geometry::new(NATIVE_BLOCK_BYTES, NATIVE_BLOCK_COUNT, NATIVE_VOLUME_BYTES).unwrap();
+	let receiving = Geometry::new(
+		NATIVE_BLOCK_BYTES,
+		SMALL_VOLUME_BLOCKS,
+		u64::from(NATIVE_BLOCK_BYTES) * u64::from(SMALL_VOLUME_BLOCKS),
+	)
+	.unwrap();
+	let fork = Fork::new(
+		u64::from(NATIVE_BLOCK_BYTES) * u64::from(FORK_BLOCKS),
+		NATIVE_BLOCK_BYTES,
+		FORK_BLOCKS,
+		&[Extent {
+			start: AllocationBlock(1),
+			blocks: FORK_BLOCKS,
+		}],
+		original,
+	)
+	.unwrap();
+	let encoded = fork.encode(original).unwrap();
+	assert_eq!(Fork::decode(&encoded, original), Ok(fork));
+	assert_eq!(fork.validate_geometry(receiving), Err(Error::InvalidFork));
+	assert_eq!(fork.encode(receiving), Err(Error::InvalidFork));
+}
+
+#[test]
 fn volume_wire_shapes_match_the_reference_model() {
 	const ALLOCATION_BLOCK_SIZES: [u32; 3] = [512, 4096, 65_536];
 	const PHYSICAL_STARTS: [u32; 8] = [90, 12, 75, 33, 45, 66, 20, 112];
