@@ -13,6 +13,8 @@ from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, ar
 
 PROFILE = "format-kani"
 HARNESS = "object::verification::sample"
+PROPERTY_TEST = "positioned_reads_tests::model"
+PROPERTY_CASES = 3840
 TRANSCRIPT = f"""Kani Rust Verifier 0.68.0 (cargo plugin)
 CBMC 6.11.0
 Checking harness {HARNESS}...
@@ -21,6 +23,18 @@ Checking harness {HARNESS}...
 VERIFICATION:- SUCCESSFUL
 Manual Harness Summary:
 Complete - 1 successfully verified harnesses, 0 failures, 1 total.
+"""
+PROPERTY_TRANSCRIPT = f"""cargo 1.99.1
+rustc 1.99.1
+running 1 test
+test {PROPERTY_TEST} ... ok
+
+successes:
+
+---- {PROPERTY_TEST} stdout ----
+HFS+ property cases checked: {PROPERTY_CASES}
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.08s
 """
 
 
@@ -79,6 +93,39 @@ class ReleaseEvidenceTests(unittest.TestCase):
 
     def test_accepts_matching_candidate_and_transcript(self):
         self.assertEqual(self.check([self.record]), (1, "0.1.0", self.commit))
+
+    def test_property_requires_the_exact_successful_test_and_case_count(self):
+        property_profile = "sealed-positioned-property"
+        profile = self.policy["profiles"].pop(PROFILE)
+        profile.update(
+            method="property", command=["bash", "check-positioned-reads.sh"],
+            tool_versions={"cargo": "1.99.1", "rustc": "1.99.1"},
+            harnesses={PROPERTY_TEST: PROPERTY_CASES},
+        )
+        self.policy["profiles"][property_profile] = profile
+        self.registry["methods"]["property"] = "property checks"
+        self.registry["obligations"][0]["required_methods"] = ["property"]
+        self.commit_policy()
+        self.record.update(
+            commit=self.commit, source_hash=self.digest, profile=property_profile,
+            method="property", command=profile["command"], tool_versions=profile["tool_versions"],
+        )
+        self.record.pop("proof")
+        self.set_transcript(PROPERTY_TRANSCRIPT)
+        self.assertEqual(self.check([self.record], property_profile), (1, "0.1.0", self.commit))
+
+        for old, new, message in (
+            ("rustc 1.99.1", "rustc 1.99.0", "wrong rustc version"),
+            (f"test {PROPERTY_TEST} ... ok", "test other ... ok", "exact property test"),
+            ("running 1 test", "running 0 tests", "exact property test"),
+            ("1 passed; 0 failed", "0 passed; 1 failed", "exact property test"),
+            (f"checked: {PROPERTY_CASES}", "checked: 3839", "property case count"),
+            (f"HFS+ property cases checked: {PROPERTY_CASES}\n", "", "property case count"),
+        ):
+            with self.subTest(replacement=new):
+                self.set_transcript(PROPERTY_TRANSCRIPT.replace(old, new, 1))
+                with self.assertRaisesRegex(EvidenceError, message):
+                    self.check([self.record], property_profile)
 
     def test_archive_digest_ignores_worktree_line_ending_configuration(self):
         (self.root / ".gitattributes").write_text("*.txt text\n", encoding="utf-8")

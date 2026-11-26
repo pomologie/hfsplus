@@ -9,7 +9,7 @@ import re
 import subprocess
 import sys
 
-from hfsplus_evidence_transcript import EvidenceError, require, verify_kani
+from hfsplus_evidence_transcript import EvidenceError, require, verify_kani, verify_property_test
 
 
 POLICY_PATH = "verification/release-profile.json"
@@ -24,7 +24,8 @@ RECORD_FIELDS = {
 }
 OPTIONAL_RECORD_FIELDS = {"seed", "trace_hash", "fixture_hash", "proof"}
 PROFILE_FIELDS = {"obligation", "method", "features", "command", "tool_versions", "bounds", "harnesses"}
-METHOD_VALIDATORS = {"kani": verify_kani}
+METHOD_VALIDATORS = {"kani": verify_kani, "property": verify_property_test}
+METHOD_TOOLS = {"kani": {"kani", "cbmc"}, "property": {"cargo", "rustc"}}
 
 
 def unique_object(pairs):
@@ -123,7 +124,7 @@ def required_matrix(policy, registry, requested_profile):
         require(method in METHOD_VALIDATORS, f"no transcript verifier for {name}")
         require(text_list(profile["features"]) and len(set(profile["features"])) == len(profile["features"])
                 and text_list(profile["command"]) and profile["command"], f"invalid invocation for {name}")
-        require(text_mapping(profile["tool_versions"]) and {"kani", "cbmc"} <= profile["tool_versions"].keys(),
+        require(text_mapping(profile["tool_versions"]) and METHOD_TOOLS[method] <= profile["tool_versions"].keys(),
                 f"unpinned tool versions for {name}")
         require(isinstance(profile["bounds"], dict) and profile["bounds"], f"missing bounds for {name}")
         harnesses = profile["harnesses"]
@@ -188,8 +189,10 @@ def validate_record(record, name, profile, commit, digest, artifacts_root):
             "incomplete invocation provenance")
     require(json.dumps(record["bounds"], sort_keys=True) == json.dumps(profile["bounds"], sort_keys=True),
             "proof bounds do not match profile")
-    proof = record.get("proof")
-    require(isinstance(proof, dict) and proof == {"theorem": name}, "Kani theorem does not match profile")
+    if record["method"] == "kani":
+        require(record.get("proof") == {"theorem": name}, "Kani theorem does not match profile")
+    elif record["method"] == "property":
+        require("proof" not in record, "property evidence must not declare a theorem")
     transcript = read_artifacts(artifacts_root, record["artifacts"])
     METHOD_VALIDATORS[record["method"]](transcript, profile["harnesses"], profile["tool_versions"])
 
