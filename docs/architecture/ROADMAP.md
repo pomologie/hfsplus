@@ -14,6 +14,12 @@ All stages are proposed, test-gated releases, not calendar estimates. Use indepe
 
 Bootstrap: acquire lawful synthetic fixtures; implement checked geometry and endian codecs; volume/catalog/extent reader independent of builder; normalization table qualification; bulk tree packing and range planning; metadata/forks and stable identities; dmgez adapter. Keep first builder scope strict and small. If a hard link/xattr profile isn't ready, block 0.1 release of that advertised profile rather than claim support or flatten metadata. No feature flags for unimplemented functionality in published manifest. Initial raw CLI may be helpful for development but never required by dmgez. See the [testing guide](TESTING.md) and [test catalog](../reference/test-catalog.json).
 
+## v0.1.0 source packages
+
+The dependency order from the normalized Cargo manifests is `hfsplus-pomologie-core` and `hfsplus-format` first, then `hfsplus-reader`, then `hfsplus-builder`. The builder archive retains its versioned reader development dependency for tests. The four exact package names returned 404 from `cargo owner --list` during the candidate check.
+
+At `4e2adf5`, Cargo 1.99.1 assembled all four archives. Its built-in workspace verifier stopped on a missing checksum for an unpublished sibling. Running the locked package assembly with `--no-verify` and testing the extracted archives in a fresh offline workspace passed 197 tests, with ten opt-in tests skipped. Each archive's recorded Git commit and included license files were checked. Package checksums, test output, and the dependency order are in `target/release-candidates/v0.1.0/4e2adf5-cargo/`. The acceptance and obligation gates apply separately from package assembly.
+
 ## Verification integration
 
 The [verification guide](VERIFICATION.md) and [obligation index](../../verification/obligations.json) define mandatory profile-specific verification gates in addition to the original acceptance tests. Apply [ecosystem standard EVS-1](ECOSYSTEM_VERIFICATION.md). No required proof, model check, native test or critical fault gate can be substituted by coverage or a self-generated round trip. `cargo-nextest`, property tests, fuzz/corpus replay, coverage and deterministic architecture checks are required; formal methods activate at the milestones in the obligation registry.
