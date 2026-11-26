@@ -81,42 +81,73 @@ fn constructs_and_rechecks_the_header_and_fork() {
 }
 
 #[test]
-fn embedded_fork_slots_preserve_logical_order_and_report_overflow() {
-	const PHYSICAL_STARTS: [u32; 8] = [90, 12, 75, 33, 45, 66, 20, 10];
-	const CLUMP_BLOCKS: u32 = 4;
-	let geometry =
-		Geometry::new(NATIVE_BLOCK_BYTES, NATIVE_BLOCK_COUNT, NATIVE_VOLUME_BYTES).unwrap();
-	let extents = PHYSICAL_STARTS.map(|block| Extent {
-		start: AllocationBlock(block),
-		blocks: 1,
-	});
-	for extent_count in 0..=extents.len() {
-		let entries = &extents[..extent_count];
-		let embedded = extent_count as u32;
-		let maximum_total = embedded + u32::from(extent_count == extents.len());
-		for total in embedded..=maximum_total {
-			let logical_bytes = u64::from(total) * u64::from(NATIVE_BLOCK_BYTES);
-			let clump = CLUMP_BLOCKS * NATIVE_BLOCK_BYTES;
-			let fork = Fork::new(logical_bytes, clump, total, entries, geometry).unwrap();
-			let mut expected = Vec::with_capacity(FORK_BYTES);
-			expected.extend(logical_bytes.to_be_bytes());
-			expected.extend(clump.to_be_bytes());
-			expected.extend(total.to_be_bytes());
-			for extent in entries {
-				expected.extend(extent.start.0.to_be_bytes());
-				expected.extend(extent.blocks.to_be_bytes());
+fn volume_wire_shapes_match_the_reference_model() {
+	const ALLOCATION_BLOCK_SIZES: [u32; 3] = [512, 4096, 65_536];
+	const PHYSICAL_STARTS: [u32; 8] = [90, 12, 75, 33, 45, 66, 20, 112];
+	const EXTENT_ROTATIONS: [usize; 3] = [0, 3, 7];
+	const EXPECTED_FORK_CASES: usize = 171;
+	let mut cases = 0;
+	for block_bytes in ALLOCATION_BLOCK_SIZES {
+		let allocation_bytes = u128::from(NATIVE_BLOCK_COUNT) * u128::from(block_bytes);
+		let device_bytes = u64::try_from(allocation_bytes + u128::from(block_bytes - 1)).unwrap();
+		let geometry = Geometry::new(block_bytes, NATIVE_BLOCK_COUNT, device_bytes).unwrap();
+		assert_eq!(u128::from(geometry.allocation_bytes()), allocation_bytes);
+		for rotation in EXTENT_ROTATIONS {
+			let extents: [Extent; PHYSICAL_STARTS.len()] = std::array::from_fn(|index| Extent {
+				start: AllocationBlock(PHYSICAL_STARTS[(index + rotation) % PHYSICAL_STARTS.len()]),
+				blocks: 1 + u32::try_from(index % 3).unwrap(),
+			});
+			for extent in &extents {
+				let range = geometry.block_range(extent.start, extent.blocks).unwrap();
+				let start = u128::from(extent.start.0) * u128::from(block_bytes);
+				let end = start + u128::from(extent.blocks) * u128::from(block_bytes);
+				assert_eq!(u128::from(range.start)..u128::from(range.end), start..end);
 			}
-			expected.resize(FORK_BYTES, 0);
-			assert_eq!(fork.encode(geometry).unwrap().as_slice(), expected);
-			let decoded = Fork::decode(&expected, geometry).unwrap();
-			assert!(decoded.extents().eq(entries.iter().copied()));
-			assert_eq!(decoded.has_overflow(), total != embedded);
+			cases += match_fork_wire_shapes(&extents, geometry);
 		}
 	}
+	assert_eq!(cases, EXPECTED_FORK_CASES);
+	let prefixes = check_native_header_and_fork_prefixes();
+	assert_eq!(prefixes, HEADER_BYTES + FORK_BYTES);
+	println!("HFS+ property cases checked: {}", cases + prefixes);
 }
 
-#[test]
-fn rejects_every_short_prefix_of_a_native_header_and_fork() {
+fn match_fork_wire_shapes(extents: &[Extent], geometry: Geometry) -> usize {
+	const CLUMP_BLOCKS: u32 = 4;
+	let mut cases = 0;
+	for extent_count in 0..=extents.len() {
+		let entries = &extents[..extent_count];
+		let embedded = entries.iter().map(|extent| extent.blocks).sum::<u32>();
+		let maximum_total = embedded + u32::from(extent_count == extents.len());
+		for total in embedded..=maximum_total {
+			let allocation_bytes = u64::from(total) * u64::from(geometry.block_size());
+			let partial = allocation_bytes.saturating_sub(u64::from(geometry.block_size() - 1));
+			let logical_sizes = [allocation_bytes, partial];
+			for logical_bytes in logical_sizes.into_iter().take(1 + usize::from(total != 0)) {
+				let clump = CLUMP_BLOCKS * geometry.block_size();
+				let fork = Fork::new(logical_bytes, clump, total, entries, geometry).unwrap();
+				let mut expected = Vec::with_capacity(FORK_BYTES);
+				expected.extend(logical_bytes.to_be_bytes());
+				expected.extend(clump.to_be_bytes());
+				expected.extend(total.to_be_bytes());
+				for extent in entries {
+					expected.extend(extent.start.0.to_be_bytes());
+					expected.extend(extent.blocks.to_be_bytes());
+				}
+				expected.resize(FORK_BYTES, 0);
+				assert_eq!(fork.encode(geometry).unwrap().as_slice(), expected);
+				let decoded = Fork::decode(&expected, geometry).unwrap();
+				assert_eq!(decoded, fork);
+				assert!(decoded.extents().eq(entries.iter().copied()));
+				assert_eq!(decoded.has_overflow(), total != embedded);
+				cases += 1;
+			}
+		}
+	}
+	cases
+}
+
+fn check_native_header_and_fork_prefixes() -> usize {
 	let header = Header::decode(NATIVE_PRIMARY, NATIVE_VOLUME_BYTES).unwrap();
 	let catalog = header.forks.catalog.encode(header.geometry).unwrap();
 	for length in 0..HEADER_BYTES {
@@ -137,4 +168,5 @@ fn rejects_every_short_prefix_of_a_native_header_and_fork() {
 		Fork::decode(&catalog, header.geometry).unwrap(),
 		header.forks.catalog,
 	);
+	HEADER_BYTES + FORK_BYTES
 }
