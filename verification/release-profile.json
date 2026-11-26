@@ -93,6 +93,26 @@
       "harnesses": {
         "positioned_reads_tests::every_small_layout_matches_its_independent_materialized_byte_model": 3840
       }
+    },
+    "sealed-stream-faults": {
+      "obligation": "H-V07",
+      "method": "fault",
+      "features": [],
+      "command": ["bash", "crates/filesystem/hfsplus-builder/verification/check-sealed-faults.sh"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "in_memory_sources_and_sinks": true,
+        "injected_source_failures_per_attempt": 1,
+        "same_length_identity_change": true,
+        "cancellation_image_bytes": 131072,
+        "retry_payload_bytes": 4
+      },
+      "harnesses": {
+        "preserves_source_faults_sink_faults_and_cancellation": 1,
+        "reports_a_source_identity_change_after_sealing": 1,
+        "cancellation_around_the_next_chunk_preserves_only_the_completed_prefix": 1,
+        "reader_retries_a_failed_range_and_stops_reading_the_source_at_eof": 1
+      }
     }
   }
 }
