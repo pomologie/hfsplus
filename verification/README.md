@@ -38,11 +38,14 @@ All three profiles passed the release checker at clean revision `84a365fff0eba8b
 
 ### Fork and metadata release evidence
 
+Use `--profile fork-windows-property` for every in-bounds positioned read of the stored data and resource forks through five aliases, across the retained Apple chained and chain-free fixtures. The exact test checks inode IDs and link counts for each alias and compares all 4,810 read windows against the known payload slices. The largest fork is 24 bytes. The enumeration includes zero-length windows and the empty resource fork.
+
 Use `--profile forks-differential` for the standalone byte reader on the pinned interleaved image and the exact production-reader replays for the retained Apple fixtures. It checks four continuation keys, both complete interleaved payloads, three exact Rust tests, and the matching fixture digests. Set `fixture_hash` to the interleaved image digest.
 
 Use `--profile forks-native` for a freshly generated 64 MiB Apple HFS+ tree. The command checks the device with no-write `fsck_hfs`, mounts read-only to capture native metadata, and detaches before Rust reads back the raw image. Rust verifies both 5 MiB forks across 20 extents through each of two hard-link names, plus directory listings, attributes, and a literal dangling symlink. Set `fixture_hash` to the stable tree manifest digest. The generated image's digest is recorded separately because its timestamps and ownership come from the native run. [Native metadata fixture provenance](../docs/features/FORMAT.md)
 
 ```sh
+python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py property
 python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py differential
 env -u TMPDIR python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py native
 ```

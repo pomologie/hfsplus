@@ -169,6 +169,23 @@
         "preserves_reference_ids_across_generated_binding_states_and_seal": 72
       }
     },
+    "fork-windows-property": {
+      "obligation": "H-V04",
+      "method": "property",
+      "features": [],
+      "command": ["python3", "-B", "crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py", "property"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "fixture_representations": ["verified-chain", "chain-free"],
+        "aliases_per_fixture": 5,
+        "aliases_per_inode": [3, 2],
+        "fork_lengths_bytes_by_inode": [[22, 24], [23, 0]],
+        "includes_zero_length_windows": true
+      },
+      "harnesses": {
+        "fork_lifetime::all_native_alias_fork_windows_match_distinct_payloads": 4810
+      }
+    },
     "forks-differential": {
       "obligation": "H-V04",
       "method": "differential",

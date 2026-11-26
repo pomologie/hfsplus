@@ -29,6 +29,7 @@ DIFFERENTIAL_TESTS = (
 	("hard_links", "native_and_chain_free_aliases_resolve_identity_metadata_and_distinct_forks"),
 	("hard_links", "fork_lifetime::native_stored_forks_outlive_the_catalog_lookup"),
 )
+FORK_WINDOW_TEST = "fork_lifetime::all_native_alias_fork_windows_match_distinct_payloads"
 TEST_START = "HFS+ fork test: "
 TIMEOUT = 180
 
@@ -42,6 +43,16 @@ def run(*command, environment=None, show=False):
 		print(result.stdout, end="", flush=True)
 	result.check_returncode()
 	return result.stdout.strip()
+
+
+def check_property(cargo, compiler):
+	print(run(*cargo, "--version"), flush=True)
+	print(run(compiler, "--version"), flush=True)
+	with TemporaryDirectory(prefix="hfsplus-fork-windows-") as target:
+		environment = os.environ | {"CARGO_TARGET_DIR": target, "RUSTC": compiler}
+		run(*cargo, "test", "--color", "never", "--locked", "--no-default-features",
+			"-p", "hfsplus-reader", "--test", "hard_links", "--", "--exact", "--show-output",
+			FORK_WINDOW_TEST, environment=environment, show=True)
 
 
 def check_differential(cargo, compiler):
@@ -74,16 +85,14 @@ def check_native(cargo, compiler):
 
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
-	parser.add_argument("method", choices=("differential", "native"))
+	methods = {"property": check_property, "differential": check_differential, "native": check_native}
+	parser.add_argument("method", choices=methods)
 	arguments = parser.parse_args()
 	with (ROOT / "rust-toolchain.toml").open("rb") as config:
 		toolchain = tomllib.load(config)["toolchain"]["channel"]
 	cargo = ("rustup", "run", toolchain, "cargo")
 	compiler = run("rustup", "which", "--toolchain", toolchain, "rustc")
-	if arguments.method == "differential":
-		check_differential(cargo, compiler)
-	else:
-		check_native(cargo, compiler)
+	methods[arguments.method](cargo, compiler)
 
 
 if __name__ == "__main__":
