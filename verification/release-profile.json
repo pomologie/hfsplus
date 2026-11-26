@@ -62,6 +62,39 @@
         "bitmap_proof::standard_allocation_matches_transition_model": 2
       }
     },
+    "fresh-allocation-property": {
+      "obligation": "H-V06",
+      "method": "property",
+      "features": [],
+      "command": ["bash", "crates/filesystem/hfsplus-builder/verification/check-allocation-set.sh"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "allocation_block_bytes": 4096,
+        "free_space_bytes": 8388608,
+        "fixture_files": [0, 2, 1, 100000],
+        "fixture_first_file_bytes": [0, 4097, 3221225472, 0]
+      },
+      "harnesses": {
+        "independent_block_set_matches_empty_small_large_and_many_file_layouts": 4
+      }
+    },
+    "fresh-allocation-native": {
+      "obligation": "H-V06",
+      "method": "native",
+      "features": [],
+      "command": ["env", "-u", "TMPDIR", "python3", "-B", "crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py", "--allocation-counts-only"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0", "macos": "14.7.2", "macos_build": "23H311"},
+      "bounds": {
+        "image_bytes": 8388608,
+        "image_sha256": "63e2f4d50df05f59a1e6dbe63c77e5d75b10e1e2780bae068af3eec4faeadba6",
+        "allocation_block_bytes": 4096,
+        "total_blocks": 2048,
+        "free_blocks": 2033
+      },
+      "harnesses": {
+        "canonical-allocation-counts": 1
+      }
+    },
     "sealed-placement-kani": {
       "obligation": "H-V07",
       "method": "kani",

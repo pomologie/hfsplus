@@ -6,7 +6,7 @@ Run the checker with Git and Python 3.11 or later from a clean candidate worktre
 python3 -B tools/check_release_evidence.py --root . --bundle "$evidence_dir/bundle.json"
 ```
 
-The release command derives the mandatory methods for the milestone from the committed [obligation registry](obligations.json). It requires a configured invocation for every active obligation and method, and a passing evidence record for every configured invocation. The current [release policy](release-profile.json) includes `format-kani` for H-V01 geometry, `btree-offset-kani` for H-V02 offset tables, `fresh-allocation-kani` for H-V06 allocation, and five H-V07 profiles for range admission, bounded positioned reads, synthetic stream faults, independent image comparison, and native no-write checking. The release command reports the remaining unconfigured methods and rejects the bundle until the matrix is complete.
+The release command derives the mandatory methods for the milestone from the committed [obligation registry](obligations.json). It requires a configured invocation for every active obligation and method, and a passing evidence record for every configured invocation. The current [release policy](release-profile.json) includes `format-kani` for H-V01 geometry, `btree-offset-kani` for H-V02 offset tables, H-V06 profiles for allocation proofs, block-set properties and macOS counts, and five H-V07 profiles for range admission, bounded positioned reads, synthetic stream faults, independent image comparison, and native no-write checking. The release command reports the remaining unconfigured methods and rejects the bundle until the matrix is complete.
 
 Use `--profile format-kani` to check the geometry proofs separately. Run the policy's proof command from an isolated checkout of the candidate with Kani 0.68.0 and CBMC 6.11.0. Capture both output streams together. The [geometry verification guide](../crates/formats/hfsplus-format/verification/README.md) explains the proof scope and bounds.
 
@@ -18,7 +18,11 @@ python3 -B tools/check_release_evidence.py --root . --profile format-kani --bund
 
 Use `--profile btree-offset-kani` with a record of `bash crates/formats/hfsplus-format/verification/check-btree-offsets.sh` to check the offset-table proofs independently. The [format verification guide](../crates/formats/hfsplus-format/verification/README.md#btree-offset-tables) describes the assumptions and scope.
 
-Use `--profile fresh-allocation-kani` with a record of `bash crates/filesystem/hfsplus-builder/verification/check-allocation.sh` to check the two bitmap and two reservation transition proofs independently. Each harness must reach both covers. The explicit allocation-set and native free-count oracles retain their separate evidence. [Builder verification guide](../crates/filesystem/hfsplus-builder/verification/README.md)
+Use `--profile fresh-allocation-kani` with a record of `bash crates/filesystem/hfsplus-builder/verification/check-allocation.sh` to check the two bitmap and two reservation transition proofs independently. Each harness must reach both covers. [Builder verification guide](../crates/filesystem/hfsplus-builder/verification/README.md)
+
+Use `--profile fresh-allocation-property` with a record of `bash crates/filesystem/hfsplus-builder/verification/check-allocation-set.sh`. The exact positive test compares every stored allocation bit and count with the reference block set for four valid layouts.
+
+Use `--profile fresh-allocation-native` with a record of `env -u TMPDIR python3 -B crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py --allocation-counts-only`. Set `fixture_hash` to the canonical digest. This scoped Apple `statvfs` comparison covers one fresh synthetic image through a read-only software mount. It compares total and free bytes with the serialized header and requires an unchanged digest after detach. H-V06 still needs differential release evidence.
 
 Use `--profile sealed-placement-kani` with a record of `bash crates/filesystem/hfsplus-builder/verification/check-placement.sh` to check the admission proof independently. The [builder verification guide](../crates/filesystem/hfsplus-builder/verification/README.md) records the positioned-read properties and the separate hosted and native checks.
 

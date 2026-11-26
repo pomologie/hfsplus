@@ -30,9 +30,8 @@ ORACLE_TIMEOUT = 30
 HDIUTIL = "/usr/bin/hdiutil"
 FSCK_HFS = "/sbin/fsck_hfs"
 XATTR = "/usr/bin/xattr"
-VOLUME_HEADER_OFFSET = 1024
-ALLOCATION_GEOMETRY_OFFSET = 40
-ALLOCATION_GEOMETRY = struct.Struct(">III")
+SW_VERS = "/usr/bin/sw_vers"
+RAW_IMAGE_ARGUMENT = ("-imagekey", "diskimage-class=CRawDiskImage")
 WHOLE_DEVICE = re.compile(r"/dev/disk[0-9]+")
 VOLUME = "Pomologie Fixture"
 MACOS_DIRECTORY = "Synthetic.app/Contents/MacOS"
@@ -220,22 +219,12 @@ def verify_native_metadata(path, entry):
 
 
 def verify_mounted_image(image, wrapped):
-	with image.open("rb") as stream:
-		stream.seek(VOLUME_HEADER_OFFSET + ALLOCATION_GEOMETRY_OFFSET)
-		block_bytes, total_blocks, free_blocks = ALLOCATION_GEOMETRY.unpack(
-			stream.read(ALLOCATION_GEOMETRY.size),
-		)
-	if block_bytes * total_blocks != IMAGE_BYTES or free_blocks > total_blocks:
-		raise ValueError("the canonical volume header has unexpected allocation geometry")
+	from allocation_count_oracle import verify_mounted_allocation_counts
 
 	mount = image.parent / "mount"
 	mount.mkdir()
 	with mounted_read_only(wrapped, mount, owners="on") as mounted:
-		if (mounted.f_blocks * mounted.f_frsize, mounted.f_bfree * mounted.f_frsize) != (
-			total_blocks * block_bytes, free_blocks * block_bytes,
-		):
-			raise ValueError("native total or free bytes differ from the volume header")
-		print(f"macOS matched {total_blocks} total and {free_blocks} free {block_bytes}-byte allocation blocks")
+		verify_mounted_allocation_counts(image, mounted)
 		verify_mounted_metadata(mount)
 	# The witness includes execute-only permissions for non-owners. Ignore
 	# ownership on a second read-only attachment to examine those payloads.
@@ -244,10 +233,11 @@ def verify_mounted_image(image, wrapped):
 
 
 @contextmanager
-def mounted_read_only(wrapped, mount, owners):
+def mounted_read_only(image, mount, owners, *, raw_image=False):
+	image_format = RAW_IMAGE_ARGUMENT if raw_image else ()
 	attachment = plistlib.loads(run(
 		HDIUTIL, "attach", "-readonly", "-nobrowse", "-noautoopen", "-owners", owners,
-		"-mountpoint", mount, "-plist", wrapped,
+		"-mountpoint", mount, "-plist", *image_format, image,
 	))
 	entries = attachment["system-entities"]
 	devices = [entry["dev-entry"] for entry in entries if WHOLE_DEVICE.fullmatch(entry.get("dev-entry", ""))]
@@ -371,12 +361,16 @@ def verify_packed_mount(mount, names):
 	print(f"macOS matched all {len(names)} packed catalog files, both forks, and the maximum inline attribute")
 
 
-def verify_interleaved_forks(root, toolchain, compiler, options):
-	from interleaved_fork_oracle import DIRECTORY, ITEM_COUNT, PAIRED_FILE, check_interleaved_forks, payloads
-
+def report_tool_versions(toolchain, compiler):
 	print(f"Python {sys.version.split(maxsplit=1)[0]}")
 	print(run("rustup", "run", toolchain, "cargo", "--version").decode("utf-8").strip())
 	print(run(compiler, "--version").decode("utf-8").strip())
+
+
+def verify_interleaved_forks(root, toolchain, compiler, options):
+	from interleaved_fork_oracle import DIRECTORY, ITEM_COUNT, PAIRED_FILE, check_interleaved_forks, payloads
+
+	report_tool_versions(toolchain, compiler)
 	image = root / "interleaved.hfs"
 	emit(image, toolchain, compiler, reverse=False, test="interleaved_forks",
 		emitter="emit_interleaved_forks", output_env="POMOLOGIE_INTERLEAVED_FORK_OUTPUT")
@@ -428,6 +422,25 @@ def verify_metadata_dates(root, toolchain, compiler):
 			print(f"macOS {name} birth, content change, attribute change, access = {times}")
 
 
+def verify_native_allocation_counts(image, toolchain, compiler):
+	from allocation_count_oracle import verify_mounted_allocation_counts
+
+	report_tool_versions(toolchain, compiler)
+	version, build = (run(SW_VERS, arg).decode("utf-8").strip()
+		for arg in ("-productVersion", "-buildVersion"))
+	print(f"macOS {version} build {build}")
+	emit(image, toolchain, compiler, reverse=False)
+	if not stat.S_ISREG(image.lstat().st_mode):
+		raise ValueError("native count comparison expects its generated regular image file")
+	check_digest(image)
+	mount = image.parent / "mount"
+	mount.mkdir()
+	with mounted_read_only(image, mount, owners="on", raw_image=True) as mounted:
+		verify_mounted_allocation_counts(image, mounted)
+	print("Native read-only allocation attachment detached")
+	check_digest(image)
+
+
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--seven-zip", metavar="COMMAND", help="independent 7-Zip CLI command or path")
@@ -437,8 +450,10 @@ def main():
 	profile.add_argument("--interleaved-forks", action="store_true", help="check the interleaved fork witness")
 	profile.add_argument("--interleaved-fsck-only", action="store_true", help="check the interleaved image without mounting it")
 	profile.add_argument("--metadata-dates", action="store_true", help="check native timestamp projection")
+	profile.add_argument("--allocation-counts-only", action="store_true", help="compare native allocation counts")
 	options = parser.parse_args()
-	if (options.native_fsck or options.metadata_dates or options.interleaved_fsck_only) and sys.platform != "darwin":
+	native = options.native_fsck or options.metadata_dates or options.interleaved_fsck_only or options.allocation_counts_only
+	if native and sys.platform != "darwin":
 		parser.error("native volume checks require macOS")
 	if options.interleaved_fsck_only and options.native_fsck:
 		parser.error("--interleaved-fsck-only cannot be combined with --native-fsck")
@@ -458,6 +473,9 @@ def main():
 				verify_metadata_dates(root, toolchain, compiler)
 				return 0
 			baseline = root / "canonical.hfs"
+			if options.allocation_counts_only:
+				verify_native_allocation_counts(baseline, toolchain, compiler)
+				return 0
 			for path, reverse in ((baseline, False), (root / "reordered.hfs", True)):
 				emit(path, toolchain, compiler, reverse=reverse)
 				check_digest(path)

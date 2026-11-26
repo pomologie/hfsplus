@@ -188,9 +188,12 @@ fn verify_block_set(image: &SealedPlan<ZeroPayload>, case: Case) {
 
 #[test]
 fn independent_block_set_matches_empty_small_large_and_many_file_layouts() {
+	let mut checked = 0;
 	for case in CASES {
 		verify_block_set(&layout(case), case);
+		checked += 1;
 	}
+	println!("HFS+ property cases checked: {checked}");
 }
 
 #[test]
