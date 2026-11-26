@@ -22,6 +22,25 @@
         "volume_geometry_proofs::geometry_matches_widened_volume_model": 4
       }
     },
+    "format-wire-property": {
+      "obligation": "H-V01",
+      "method": "property",
+      "features": [],
+      "command": ["bash", "crates/formats/hfsplus-format/verification/check-volume-wire-properties.sh"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "allocation_block_sizes_bytes": [512, 4096, 65536],
+        "extent_rotations": [0, 3, 7],
+        "maximum_embedded_extents": 8,
+        "embedded_fork_cases": 171,
+        "native_header_prefixes": 512,
+        "catalog_fork_prefixes": 80,
+        "widened_extent_ranges": 72
+      },
+      "harnesses": {
+        "volume_wire_shapes_match_the_reference_model": 763
+      }
+    },
     "btree-offset-kani": {
       "obligation": "H-V02",
       "method": "kani",
