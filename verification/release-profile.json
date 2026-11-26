@@ -41,6 +41,27 @@
         "btree::offset_proofs::table_admission_matches_full_width_wire_counts": 2
       }
     },
+    "fresh-allocation-kani": {
+      "obligation": "H-V06",
+      "method": "kani",
+      "features": [],
+      "command": ["bash", "crates/filesystem/hfsplus-builder/verification/check-allocation.sh"],
+      "tool_versions": {"kani": "0.68.0", "cbmc": "6.11.0"},
+      "bounds": {
+        "allocation_block_sizes_bytes": [512, 4096],
+        "maximum_volume_blocks": 32,
+        "device_tail_less_than_allocation_block": true,
+        "reservation_length_bits": 64,
+        "reference_arithmetic_bits": 128,
+        "transition_attempts_per_reachable_cursor": 1
+      },
+      "harnesses": {
+        "bitmap_proof::sector_allocation_matches_bitmap_model": 2,
+        "bitmap_proof::sector_allocation_matches_transition_model": 2,
+        "bitmap_proof::standard_allocation_matches_bitmap_model": 2,
+        "bitmap_proof::standard_allocation_matches_transition_model": 2
+      }
+    },
     "sealed-placement-kani": {
       "obligation": "H-V07",
       "method": "kani",
