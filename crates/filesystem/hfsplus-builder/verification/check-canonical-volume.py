@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import struct
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
@@ -26,6 +27,9 @@ CARGO_TIMEOUT = 120
 ORACLE_TIMEOUT = 30
 HDIUTIL = "/usr/bin/hdiutil"
 FSCK_HFS = "/sbin/fsck_hfs"
+VOLUME_HEADER_OFFSET = 1024
+ALLOCATION_GEOMETRY_OFFSET = 40
+ALLOCATION_GEOMETRY = struct.Struct(">III")
 WHOLE_DEVICE = re.compile(r"/dev/disk[0-9]+")
 VOLUME = "Pomologie Fixture"
 RESOURCES = "Synthetic.app/Contents/Resources"
@@ -101,6 +105,37 @@ def verify_native(image):
 		if len(devices) != 1:
 			raise ValueError("expected one whole device for the disposable partitionless image")
 		print(run(FSCK_HFS, "-fn", devices[0]).decode("utf-8", errors="replace").strip())
+	finally:
+		for device in devices:
+			run(HDIUTIL, "detach", device)
+	verify_mounted_allocation(image, wrapped)
+
+
+def verify_mounted_allocation(image, wrapped):
+	with image.open("rb") as stream:
+		stream.seek(VOLUME_HEADER_OFFSET + ALLOCATION_GEOMETRY_OFFSET)
+		block_bytes, total_blocks, free_blocks = ALLOCATION_GEOMETRY.unpack(
+			stream.read(ALLOCATION_GEOMETRY.size),
+		)
+	if block_bytes * total_blocks != IMAGE_BYTES or free_blocks > total_blocks:
+		raise ValueError("the canonical volume header has unexpected allocation geometry")
+
+	mount = image.parent / "mount"
+	mount.mkdir()
+	attachment = plistlib.loads(run(HDIUTIL, "attach", "-readonly", "-mountpoint", mount, "-plist", wrapped))
+	entries = attachment["system-entities"]
+	devices = [entry["dev-entry"] for entry in entries if WHOLE_DEVICE.fullmatch(entry.get("dev-entry", ""))]
+	try:
+		if len(devices) != 1 or not any(entry.get("mount-point") == str(mount) for entry in entries):
+			raise ValueError("expected the disposable partitionless image at the requested mount point")
+		mounted = os.statvfs(mount)
+		if not mounted.f_flag & os.ST_RDONLY:
+			raise ValueError("expected a read-only mounted volume")
+		if (mounted.f_blocks * mounted.f_frsize, mounted.f_bfree * mounted.f_frsize) != (
+			total_blocks * block_bytes, free_blocks * block_bytes,
+		):
+			raise ValueError("native total or free bytes differ from the volume header")
+		print(f"macOS matched {total_blocks} total and {free_blocks} free {block_bytes}-byte allocation blocks")
 	finally:
 		for device in devices:
 			run(HDIUTIL, "detach", device)
