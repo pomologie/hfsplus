@@ -311,6 +311,17 @@ fn reordered_groups_and_aliases_have_identical_capacity_identities_and_bytes() {
 }
 
 #[test]
+fn rejects_link_groups_with_conflicting_metadata_for_one_name() {
+	let first = group(vec![FIRST, SECOND]);
+	let mut second = group(vec![SECOND, THIRD]);
+	second.metadata.mode = 0o640;
+	assert!(matches!(
+		plan_with_hard_links(options(), entries(), vec![first, second]),
+		Err(VolumeError::PathCollision { .. })
+	));
+}
+
+#[test]
 fn rejects_invalid_group_members_and_duplicate_shared_attributes() {
 	assert!(matches!(
 		plan_with_hard_links(options(), entries(), vec![group(vec![FIRST])]),

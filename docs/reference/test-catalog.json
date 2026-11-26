@@ -383,8 +383,8 @@
       "scenario": "Hard-linked regular files with unequal requested metadata",
       "oracle": "native inode/link oracle",
       "expected": "Correct shared file identity or conflict, no silent duplication",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-01-T02",
