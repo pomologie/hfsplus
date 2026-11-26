@@ -1,4 +1,4 @@
-use std::{error::Error as _, io};
+use std::{convert::Infallible, error::Error as _, io};
 
 use hfsplus_core::{ByteLen, ByteOffset, ReadAt};
 use hfsplus_format::volume::{
@@ -141,6 +141,55 @@ fn checks_bitmap_and_metadata_range_limits() {
 	assert!(matches!(error, AllocationError::RangeLimit));
 	assert_eq!(error.to_string(), "allocation range limit exceeded");
 	assert!(error.source().is_none());
+}
+
+#[test]
+fn allocation_diagnostics_identify_the_inconsistent_counts_and_owners() {
+	let catalog = MetadataOwner::SpecialFile(SpecialFile::Catalog);
+	let block = AllocationBlock(42);
+	let cases: &[(AllocationError<Infallible>, &[&str])] = &[
+		(
+			AllocationError::BitmapLength {
+				required: 256,
+				actual: 64,
+			},
+			&["allocation fork has 64 bytes", "256 required"],
+		),
+		(
+			AllocationError::ExtentBounds { owner: catalog },
+			&["Catalog", "outside the volume"],
+		),
+		(
+			AllocationError::Overlap {
+				block,
+				first: catalog,
+				second: MetadataOwner::SpecialFile(SpecialFile::Attributes),
+			},
+			&["block 42", "shared", "Catalog", "Attributes"],
+		),
+		(
+			AllocationError::MarkedFree {
+				block,
+				owner: catalog,
+			},
+			&["block 42", "Catalog", "marked free"],
+		),
+		(
+			AllocationError::FreeBlocks {
+				declared: 12,
+				counted: 13,
+			},
+			&["declares 12 free blocks", "allocation file contains 13"],
+		),
+	];
+
+	for (error, expected_details) in cases {
+		let message = error.to_string();
+		for detail in *expected_details {
+			assert!(message.contains(detail), "{message:?} omitted {detail:?}");
+		}
+		assert!(error.source().is_none(), "{error:?}");
+	}
 }
 
 #[test]
