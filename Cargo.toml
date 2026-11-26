@@ -19,6 +19,9 @@ license = "Apache-2.0"
 repository = "https://github.com/pomologie/hfsplus"
 
 [workspace.dependencies]
+# Workspace filesystem
+hfsplus-reader = { version = "0.1.0", path = "crates/filesystem/hfsplus-reader", default-features = false }
+
 # Workspace formats
 hfsplus-format = { version = "0.1.0", path = "crates/formats/hfsplus-format", default-features = false }
 

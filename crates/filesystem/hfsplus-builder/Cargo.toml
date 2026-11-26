@@ -16,7 +16,7 @@ hfsplus-core.workspace = true
 
 [dev-dependencies]
 # Workspace filesystem reader for image verification
-hfsplus-reader = { path = "../hfsplus-reader", default-features = false }
+hfsplus-reader.workspace = true
 
 [lints]
 workspace = true
