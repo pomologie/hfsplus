@@ -14,3 +14,7 @@ pub mod symlink;
 pub mod volume;
 
 pub use error::Error;
+
+#[cfg(kani)]
+#[path = "../verification/kani/volume_geometry.rs"]
+mod volume_geometry_proofs;

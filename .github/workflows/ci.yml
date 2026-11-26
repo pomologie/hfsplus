@@ -66,3 +66,4 @@ jobs:
       - run: cargo install --locked kani-verifier --version '=0.68.0'
       - run: cargo kani setup
       - run: bash crates/filesystem/hfsplus-builder/verification/check.sh
+      - run: bash crates/formats/hfsplus-format/verification/check.sh

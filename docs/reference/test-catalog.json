@@ -251,8 +251,8 @@
       "scenario": "Block size zero, nonqualified size, totalBlocks*blockSize overflow",
       "oracle": "Kani",
       "expected": "Reject before allocation",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/formats/hfsplus-format/verification/README.md"
     },
     {
       "id": "H-FMT-01-T04",

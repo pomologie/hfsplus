@@ -26,9 +26,11 @@ H-FMT-01-T01 passed on macOS 14.7.2 arm64 (23H311). `newfs_hfs` initialized 512 
 
 H-FMT-01-T02 passed. `fsck_hfs` returned 0 after the alternate write count changed and 8 after removal of the final 512-byte sector from the 8 MiB raw image. On a separate native optical fixture, the reader reported the alternate difference and retained the primary. The read spy observed only the two in-bounds headers for the disagreement, zero reads for tiny sources, and only the primary header for truncation by one byte or one sector. [Reader tests](../../crates/filesystem/hfsplus-reader/tests/read.rs)
 
+H-FMT-01-T03 passed with Kani 0.68.0. The proof covers every on-disk block size and count and every source length. Products beyond the source fail geometry admission, and every `u32` block size and count product fits the implementation's `u64` arithmetic. The range proof also reaches overflow of `u32` block start plus count and verifies rejection. [Geometry proofs](../../crates/formats/hfsplus-format/verification/README.md)
+
 H-FMT-01-T04 passed against that optical fixture. An independent allocation-block set checked physical coverage and the logical byte limit. The reader rejected ranges crossing the volume boundary or starting at `u32::MAX`, and a logical size one byte beyond the allocation. Each failure returned `InvalidFork` after only the primary-header read, before any fork bytes could be returned. [Optical fixture provenance](../../crates/filesystem/hfsplus-reader/tests/fixtures/optical-volume.json) · [Reader tests](../../crates/filesystem/hfsplus-reader/tests/read.rs)
 
-Rust 1.99.1 passed both `cargo test --locked --offline --no-default-features -p hfsplus-format --test native` and `cargo test --locked --offline --no-default-features -p hfsplus-reader --test read`. H-FMT-01-T03 still requires its Kani run.
+Rust 1.99.1 passed both `cargo test --locked --offline --no-default-features -p hfsplus-format --test native` and `cargo test --locked --offline --no-default-features -p hfsplus-reader --test read`.
 
 ### H-FMT-04 metadata evidence
 
