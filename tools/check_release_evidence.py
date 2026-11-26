@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 from hfsplus_evidence_transcript import (
-    EvidenceError, require, verify_fault_tests, verify_interleaved_differential, verify_kani,
+    EvidenceError, require, verify_fault_tests, verify_interleaved_differential, verify_interleaved_native, verify_kani,
     verify_property_test,
 )
 
@@ -30,10 +30,12 @@ PROFILE_FIELDS = {"obligation", "method", "features", "command", "tool_versions"
 METHOD_VALIDATORS = {
     "kani": verify_kani, "property": verify_property_test, "fault": verify_fault_tests,
     "differential": verify_interleaved_differential,
+    "native": verify_interleaved_native,
 }
 METHOD_TOOLS = {
     "kani": {"kani", "cbmc"}, "property": {"cargo", "rustc"}, "fault": {"cargo", "rustc"},
     "differential": {"cargo", "rustc", "python"},
+    "native": {"cargo", "rustc", "python", "fsck_hfs"},
 }
 
 
@@ -202,11 +204,11 @@ def validate_record(record, name, profile, commit, digest, artifacts_root):
         require(record.get("proof") == {"theorem": name}, "Kani theorem does not match profile")
     elif record["method"] in {"property", "fault"}:
         require("proof" not in record, "Rust test evidence must not declare a theorem")
-    elif record["method"] == "differential":
+    elif record["method"] in {"differential", "native"}:
         fixture_hash = profile["bounds"]["image_sha256"]
         require(isinstance(fixture_hash, str) and SHA256.fullmatch(fixture_hash)
                 and record.get("fixture_hash") == fixture_hash and "proof" not in record,
-                "differential record does not match the pinned fixture")
+                "image check record does not match the pinned fixture")
     transcript = read_artifacts(artifacts_root, record["artifacts"])
     METHOD_VALIDATORS[record["method"]](transcript, profile)
 

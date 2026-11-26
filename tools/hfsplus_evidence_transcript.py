@@ -1,5 +1,6 @@
 """Check invocation transcripts under the committed HFS+ evidence policy."""
 
+import json
 import re
 
 
@@ -22,6 +23,7 @@ RUST_TEST_SUMMARY = re.compile(
     r"test result: ok\. (\d+) passed; 0 failed; 0 ignored; 0 measured; \d+ filtered out; finished in \d+\.\d+s"
 )
 PROPERTY_CASES = "HFS+ property cases checked: "
+DIFFERENTIAL_LINE_COUNT = 6
 
 
 def verify_kani(transcript, profile):
@@ -121,3 +123,41 @@ def verify_interleaved_differential(transcript, profile):
         f"and both complete forks ({data}, {resource} bytes)",
     ]
     require(lines[3:] == expected, "incorrect interleaved fixture digest, catalog, or complete fork evidence")
+
+
+def verify_interleaved_native(transcript, profile):
+    lines = transcript.splitlines()
+    verify_interleaved_differential("\n".join(lines[:DIFFERENTIAL_LINE_COUNT]), profile)
+    native = lines[DIFFERENTIAL_LINE_COUNT:]
+    require(len(native) >= 5, "incomplete Apple no-write transcript")
+    attach_argv, attachment_status, fsck_argv, *report = native
+    bounds = profile["bounds"]
+    require(attach_argv == f"Native attachment argv {json.dumps(bounds['attachment_argv'])}",
+            "incorrect read-only software attachment command")
+    attachment = re.fullmatch(r"Native attachment checked unmounted (/dev/disk[0-9]+)", attachment_status)
+    require(attachment, "missing verified unmounted software attachment")
+    device = attachment[1]
+    require(fsck_argv == f"Native fsck argv {json.dumps([*bounds['fsck_argv'], device])}",
+            "incorrect no-write Apple checker command or target")
+    raw_device = device.replace("/dev/disk", "/dev/rdisk")
+    if report[0] == f"Can't open {raw_device}: Permission denied":
+        report = report[1:]
+    version = profile["tool_versions"]["fsck_hfs"]
+    volume = bounds["volume_label"]
+    expected = [
+        f"   Executing fsck_hfs (version hfs-{version}).",
+        "** Checking non-journaled HFS Plus Volume.",
+        f"   The volume name is {volume}",
+        "** Checking extents overflow file.",
+        "** Checking catalog file.",
+        "** Checking multi-linked files.",
+        "** Checking catalog hierarchy.",
+        "** Checking volume bitmap.",
+        "** Checking volume information.",
+        f"** The volume {volume} appears to be OK.",
+        f"Native attachment detached {device}",
+        f"Native no-write image SHA-256 {bounds['image_sha256']}",
+    ]
+    require(report and report[0] in {f"** {device} (NO WRITE)", f"** {raw_device} (NO WRITE)"}
+            and report[1:] == expected,
+            "incorrect Apple no-write result, detach, or fixture digest")

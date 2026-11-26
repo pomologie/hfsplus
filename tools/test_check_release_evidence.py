@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
-from hfsplus_evidence_transcript import verify_interleaved_differential
+from hfsplus_evidence_transcript import verify_interleaved_differential, verify_interleaved_native
 
 
 PROFILE = "format-kani"
@@ -45,6 +45,25 @@ test source_failure ... ok
 
 test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.01s
 """
+
+
+def interleaved_fixture():
+    digest = hashlib.sha256(b"fixture").hexdigest()
+    profile = {
+        "harnesses": {"interleaved-forks": 1},
+        "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0"},
+        "bounds": {"image_bytes": 8388608, "image_sha256": digest, "catalog_records": 134,
+                   "catalog_depth": 2, "continuation_keys": [[0, 16], [0, 32]],
+                   "fork_lengths_bytes": [159761, 159775]},
+    }
+    transcript = f"""Python 3.14.0
+cargo 1.99.1
+rustc 1.99.1
+Interleaved image 8388608 bytes SHA-256 {digest}
+Independent raw reader found 134 unique catalog records at depth 2
+Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and both complete forks (159761, 159775 bytes)
+"""
+    return profile, transcript
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
@@ -152,21 +171,8 @@ class ReleaseEvidenceTests(unittest.TestCase):
                     self.check([self.record], fault_profile)
 
     def test_differential_requires_the_exact_fixture_and_both_fork_results(self):
-        digest = hashlib.sha256(b"fixture").hexdigest()
-        profile = {
-            "harnesses": {"interleaved-forks": 1},
-            "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0"},
-            "bounds": {"image_bytes": 8388608, "image_sha256": digest, "catalog_records": 134,
-                       "catalog_depth": 2, "continuation_keys": [[0, 16], [0, 32]],
-                       "fork_lengths_bytes": [159761, 159775]},
-        }
-        transcript = f"""Python 3.14.0
-cargo 1.99.1
-rustc 1.99.1
-Interleaved image 8388608 bytes SHA-256 {digest}
-Independent raw reader found 134 unique catalog records at depth 2
-Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and both complete forks (159761, 159775 bytes)
-"""
+        profile, transcript = interleaved_fixture()
+        digest = profile["bounds"]["image_sha256"]
         verify_interleaved_differential(transcript, profile)
         for old, new in ((digest, "0" * len(digest)), ("134 unique", "133 unique"),
                          ("(0, 32)", "(0, 31)"), ("159775 bytes", "159774 bytes")):
@@ -175,6 +181,42 @@ Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and bo
                     verify_interleaved_differential(transcript.replace(old, new), profile)
         with self.assertRaisesRegex(EvidenceError, "incorrect interleaved fixture"):
             verify_interleaved_differential(transcript.rsplit("\n", 2)[0], profile)
+
+    def test_native_requires_no_mount_no_write_and_matching_device_and_digest(self):
+        profile, transcript = interleaved_fixture()
+        profile["tool_versions"]["fsck_hfs"] = "650.140.2"
+        attach = ["/usr/bin/hdiutil", "attach", "-readonly", "-nomount", "<fixture>"]
+        fsck = ["/sbin/fsck_hfs", "-fn"]
+        profile["bounds"].update(attachment_argv=attach, fsck_argv=fsck, volume_label="Interleaved Forks")
+        digest = profile["bounds"]["image_sha256"]
+        transcript += f"""Native attachment argv {json.dumps(attach)}
+Native attachment checked unmounted /dev/disk42
+Native fsck argv {json.dumps([*fsck, '/dev/disk42'])}
+Can't open /dev/rdisk42: Permission denied
+** /dev/rdisk42 (NO WRITE)
+   Executing fsck_hfs (version hfs-650.140.2).
+** Checking non-journaled HFS Plus Volume.
+   The volume name is Interleaved Forks
+** Checking extents overflow file.
+** Checking catalog file.
+** Checking multi-linked files.
+** Checking catalog hierarchy.
+** Checking volume bitmap.
+** Checking volume information.
+** The volume Interleaved Forks appears to be OK.
+Native attachment detached /dev/disk42
+Native no-write image SHA-256 {digest}
+"""
+        verify_interleaved_native(transcript, profile)
+        for old, new in (
+            ("-nomount", "-mount"), ("checked unmounted", "checked mounted"),
+            ("-fn", "-fy"), ("(NO WRITE)", "(WRITE)"), ("hfs-650.140.2", "hfs-650.140.1"),
+            ("appears to be OK", "repaired"), ("detached /dev/disk42", "detached /dev/disk43"),
+            (f"Native no-write image SHA-256 {digest}", "Native no-write image SHA-256 invalid"),
+        ):
+            with self.subTest(replacement=new):
+                with self.assertRaises(EvidenceError):
+                    verify_interleaved_native(transcript.replace(old, new), profile)
 
     def test_archive_digest_ignores_worktree_line_ending_configuration(self):
         (self.root / ".gitattributes").write_text("*.txt text\n", encoding="utf-8")
