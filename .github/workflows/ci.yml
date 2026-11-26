@@ -43,6 +43,9 @@ jobs:
       - name: Check fresh allocation across native volume sizes
         if: runner.os == 'macOS'
         run: env -u TMPDIR python3 -B crates/filesystem/hfsplus-builder/verification/check-allocation-layouts.py
+      - name: Check mounted HFS+ name lookup and ordering
+        if: runner.os == 'macOS'
+        run: env -u TMPDIR python3 -B crates/foundation/hfsplus-pomologie-core/tools/capture_kernel_names.py --check
       - name: Check interleaved data and resource forks with native and independent readers
         if: runner.os == 'macOS'
         run: env -u TMPDIR python3 -B crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py --interleaved-forks --native-fsck

@@ -35,8 +35,8 @@
       "scenario": "Composed/decomposed, combining, ignorable/case pairs, UTF-16 lengths, supplementary, forbidden/reserved names; compare native lookup/collision and key ordering; no modern normalization substitution.",
       "oracle": "native filesystem name oracle",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/foundation/hfsplus-pomologie-core/UNICODE32.md"
     },
     {
       "id": "H-FMT-04-T01",
