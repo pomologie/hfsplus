@@ -69,7 +69,7 @@ def check_differential(cargo, compiler):
 				test, environment=environment, show=True)
 
 
-def check_native(cargo, compiler):
+def check_native(cargo, compiler, *, packed_nodes=False):
 	if sys.platform != "darwin":
 		raise ValueError("native HFS+ fork evidence requires macOS")
 	print(f"Python {platform.python_version()}", flush=True)
@@ -80,19 +80,26 @@ def check_native(cargo, compiler):
 	manifest = DIRECTORY / "native-fork-tree.json"
 	print(f"Native HFS+ tree manifest SHA-256 {hashlib.sha256(manifest.read_bytes()).hexdigest()}",
 		flush=True)
-	run(sys.executable, "-B", DIRECTORY / "check-fragmented-forks.py", "--tree", show=True)
+	options = ("--packed-nodes",) if packed_nodes else ()
+	run(sys.executable, "-B", DIRECTORY / "check-fragmented-forks.py", "--tree", *options, show=True)
 
 
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	methods = {"property": check_property, "differential": check_differential, "native": check_native}
 	parser.add_argument("method", choices=methods)
+	parser.add_argument("--packed-nodes", action="store_true", help="check native B-tree leaf nodes as well")
 	arguments = parser.parse_args()
+	if arguments.packed_nodes and arguments.method != "native":
+		parser.error("--packed-nodes requires the native method")
 	with (ROOT / "rust-toolchain.toml").open("rb") as config:
 		toolchain = tomllib.load(config)["toolchain"]["channel"]
 	cargo = ("rustup", "run", toolchain, "cargo")
 	compiler = run("rustup", "which", "--toolchain", toolchain, "rustc")
-	methods[arguments.method](cargo, compiler)
+	if arguments.method == "native":
+		check_native(cargo, compiler, packed_nodes=arguments.packed_nodes)
+	else:
+		methods[arguments.method](cargo, compiler)
 
 
 if __name__ == "__main__":

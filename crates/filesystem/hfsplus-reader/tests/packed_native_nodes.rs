@@ -8,6 +8,9 @@ use hfsplus_format::{
 	volume::{AllocationBlock, Extent, Geometry, Header},
 };
 
+#[path = "../verification/packed-live.rs"]
+mod packed_live;
+
 const CATALOG: &[u8] = include_bytes!("fixtures/native-catalog-volume.bin");
 const ATTRIBUTES: &[u8] = include_bytes!("fixtures/native-attribute-tree.bin");
 const EXTENTS: &[u8] = include_bytes!("fixtures/native-overflow.bin");

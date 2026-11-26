@@ -41,6 +41,7 @@ SHARED_VALUE = b"shared\0attribute\xff"
 FOLDER_VALUE = b"nested folder metadata"
 NANOSECONDS_PER_SECOND = 1_000_000_000
 TREE_MANIFEST = Path(__file__).with_name("native-fork-tree.json")
+PACKED_TEST = "packed_live::fresh_native_leaf_chains_match_packed_records"
 
 
 def run(*args, env=None, timeout=60):
@@ -153,7 +154,7 @@ def capture_tree(mount, scratch):
 	print(f"Native mount matched {len(entries)} stored names, shared inode {primary.st_ino}, UF_NODUMP, and exact attributes and link target")
 
 
-def compare(scratch, *, tree):
+def compare(scratch, *, tree, packed_nodes):
 	with (ROOT / "rust-toolchain.toml").open("rb") as config:
 		toolchain = tomllib.load(config)["toolchain"]["channel"]
 	compiler = os.fsdecode(run("rustup", "which", "--toolchain", toolchain, "rustc").strip())
@@ -170,6 +171,14 @@ def compare(scratch, *, tree):
 		env=environment,
 	)
 	print(output.decode("utf-8").strip())
+	if packed_nodes:
+		output = run(
+			"rustup", "run", toolchain, "cargo", "test", "--color", "never", "--locked", "--no-default-features",
+			"-p", "hfsplus-reader", "--test", "packed_native_nodes", "--",
+			"--exact", "--ignored", "--show-output", PACKED_TEST,
+			env=environment,
+		)
+		print(output.decode("utf-8").strip())
 
 
 def check_tree_manifest(scratch):
@@ -210,9 +219,12 @@ def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--tree", action="store_true", help="include nested paths, hard links, attributes and a symlink")
 	parser.add_argument("--fstool", metavar="COMMAND", help="independently read both forks of the tree witness")
+	parser.add_argument("--packed-nodes", action="store_true", help="check the fresh image's occupied B-tree leaf nodes")
 	options = parser.parse_args()
 	if options.fstool and not options.tree:
 		parser.error("--fstool requires --tree")
+	if options.packed_nodes and not options.tree:
+		parser.error("--packed-nodes requires --tree")
 	if sys.platform != "darwin":
 		raise ValueError("the native HFS+ reader comparison requires macOS")
 	with TemporaryDirectory(prefix="hfsplus-full-forks-") as temporary:
@@ -230,7 +242,7 @@ def main():
 			print(f"Native raw image SHA-256 {hashlib.file_digest(source, 'sha256').hexdigest()}")
 		if options.tree:
 			check_tree_manifest(scratch)
-		compare(scratch, tree=options.tree)
+		compare(scratch, tree=options.tree, packed_nodes=options.packed_nodes)
 		if options.fstool:
 			compare_fstool(scratch, options.fstool)
 
