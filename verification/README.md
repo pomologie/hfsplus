@@ -22,7 +22,9 @@ Use `--profile btree-packed-native-property` with a record of `python3 -B crates
 
 Use `--profile btree-packed-wire-differential` with a record of `python3 -B crates/filesystem/hfsplus-reader/verification/check-packed-wire.py`. An independent Python decoder compares 21 node descriptors and 228 record spans, keys and values with the production Rust output. It covers catalog folders, files and threads, resolved overflow extent groups, inline and fork-backed attributes, and index child IDs. Set `fixture_hash` to the combined ledger digest. The comparison reads the retained fixture files directly.
 
-The property profile passed at clean revision `e1618cfae53b0fd601cbddf7eb5bf16bab65db16` with Rust 1.99.1 on arm64 macOS. The Git archive SHA-256 was `c2eab850b9bdd478f1e039667047c35b0198e6bafef0973ad977700c338fc364`. The local evidence directory is `target/verification-evidence/v0.1.0/e1618cf-packed-property/`, with bundle SHA-256 `54b3466016a510a05260a2f29382ee950f5f68f52da8cf72622ffa7cd780f5e1`. H-V02 still requires separate differential, native and fuzz evidence.
+The property profile passed at clean revision `e1618cfae53b0fd601cbddf7eb5bf16bab65db16` with Rust 1.99.1 on arm64 macOS. The Git archive SHA-256 was `c2eab850b9bdd478f1e039667047c35b0198e6bafef0973ad977700c338fc364`. The local evidence directory is `target/verification-evidence/v0.1.0/e1618cf-packed-property/`, with bundle SHA-256 `54b3466016a510a05260a2f29382ee950f5f68f52da8cf72622ffa7cd780f5e1`.
+
+The differential profile passed at clean revision `23f291f9e8aabbe35ea4e8f847023c1b1bdfe963` with Rust 1.99.1 and Python 3.14.0. The Git archive SHA-256 was `4b293058acc8ed889a70ba7847e328b5f1410633281b5b23d865c1771b0f855c`. The local evidence directory is `target/verification-evidence/v0.1.0/23f291f-packed-wire/`, with bundle SHA-256 `2bebe0488deb479d3b357f0c3f0e5d55f4d23319f25b36452ebf7a7ae0c8367b`. H-V02 still requires separate native and fuzz evidence.
 
 ### Historical name release evidence
 
