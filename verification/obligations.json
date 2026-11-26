@@ -172,8 +172,8 @@
       ],
       "negative_witness": "gap implicitly zeroed over unplanned metadata; short source read accepted",
       "mandatory_when_activated": true,
-      "status": "planned",
-      "evidence": []
+      "status": "pass",
+      "evidence": ["crates/filesystem/hfsplus-builder/verification/README.md"]
     },
     {
       "id": "H-V08",

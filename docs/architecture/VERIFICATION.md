@@ -2,7 +2,7 @@
 
 Treat the standalone immutable constructor and later mutable filesystem as different assurance profiles. A formatter can ship without journal mutation. The first release proves/checks geometry, packing and allocation bounds, verifies a real Apple-compatible raw image, and supports dmgez streaming. The future Charles profile needs real kernel and persistence qualification, not just no_std.
 
-Read the [shared ecosystem verification standard EVS-1](ECOSYSTEM_VERIFICATION.md). The following summarizes the repository-wide planning index at [`verification/obligations.json`](../../verification/obligations.json), which defines properties, assumptions, bounds, negative witnesses and required evidence methods. Implemented proof artifacts live in the owning crate’s `verification/` directory. All obligations are planned. Gate applies only to the activated supported profile; required proofs/tests must pass before that capability ships. Nonblocking advanced capabilities remain disabled if not qualified.
+Read the [shared ecosystem verification standard EVS-1](ECOSYSTEM_VERIFICATION.md). The repository-wide [obligation registry](../../verification/obligations.json) records properties, assumptions, bounds, negative witnesses, required methods, and status. Proof artifacts live in the owning crate’s `verification/` directory. Each activated profile requires its listed evidence before release.
 
 ## v0.1.0 coverage
 
@@ -98,7 +98,7 @@ H-VER-01-T01 remains open. Five of these files fall below at least one proposed 
 **Assumptions and initial bounds:** Kani <=8 ranges with arbitrary u64 endpoints; immutable bounded source contract; native raw image output.\
 **Negative witness:** gap implicitly zeroed over unplanned metadata; short source read accepted.\
 **Requirement links:** H-BUILD-04, H-BUILD-05.\
-**Evidence:** kani, property, fault, differential, native; status planned.
+**Evidence:** All five configured methods passed on clean revision `a895326` within their recorded bounds. [Sealed image evidence](../../crates/filesystem/hfsplus-builder/verification/README.md#sealed-image-release-evidence)
 
 ### H-V08 — B-tree lookup
 **Target:** hfsplus-reader / pure B-tree descent and key search.\
