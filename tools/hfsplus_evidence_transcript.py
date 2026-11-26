@@ -88,17 +88,32 @@ def verify_rust_tests(transcript, profile):
     return lines, [index for index, _ in results], summaries[0]
 
 
-def verify_property_test(transcript, profile):
+def verify_rust_test_output(transcript, profile, marker, expected, error):
     harnesses = profile["harnesses"]
-    require(len(harnesses) == 1, "property transcript requires one exact test")
-    (name, count), = harnesses.items()
+    require(len(harnesses) == 1, f"{profile['method']} transcript requires one exact test")
+    (name, _), = harnesses.items()
     lines, results, summary = verify_rust_tests(transcript, profile)
     headers = [index for index, line in enumerate(lines) if line == f"---- {name} stdout ----"]
-    cases = [index for index, line in enumerate(lines) if line.startswith(PROPERTY_CASES)]
+    cases = [index for index, line in enumerate(lines) if line.startswith(marker)]
     require(len(headers) == 1 and len(cases) == 1 and cases[0] == headers[0] + 1
-            and results[0] < headers[0] < cases[0] < summary
-            and lines[cases[0]] == f"{PROPERTY_CASES}{count}",
-            "missing or incorrect property case count")
+            and results[0] < headers[0] < cases[0] < summary and lines[cases[0]] == expected, error)
+
+
+def verify_property_test(transcript, profile):
+    count = next(iter(profile["harnesses"].values()), None)
+    verify_rust_test_output(transcript, profile, PROPERTY_CASES, f"{PROPERTY_CASES}{count}",
+                            "missing or incorrect property case count")
+
+
+def verify_draft_state_machine(transcript, profile):
+    bounds = profile["bounds"]
+    pending, sealed = bounds["unbound_prefixes"], bounds["sealed_histories"]
+    marker = "HFS+ draft histories checked: "
+    totals = f"{pending + sealed} total, {pending} pending, {sealed} sealed"
+    expected = f"{marker}{totals} ({bounds['catalog_objects']} catalog objects)"
+    require(list(profile["harnesses"].values()) == [pending + sealed],
+            "inconsistent state-machine history bound")
+    verify_rust_test_output(transcript, profile, marker, expected, "missing or incorrect draft history counts")
 
 
 def verify_fault_tests(transcript, profile):

@@ -114,6 +114,24 @@
         "kernel::mounted_names_match_normalization_collisions_bounds_and_order": 1
       }
     },
+    "draft-identity-state-machine": {
+      "obligation": "H-V05",
+      "method": "state-machine",
+      "features": [],
+      "command": ["bash", "crates/filesystem/hfsplus-builder/verification/check-draft-identity.sh"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "catalog_objects": 16,
+        "generated_entries": 3,
+        "binding_orders": 6,
+        "payload_lengths_bytes": [0, 8, 4097],
+        "unbound_prefixes": 54,
+        "sealed_histories": 18
+      },
+      "harnesses": {
+        "preserves_reference_ids_across_generated_binding_states_and_seal": 72
+      }
+    },
     "fresh-allocation-kani": {
       "obligation": "H-V06",
       "method": "kani",

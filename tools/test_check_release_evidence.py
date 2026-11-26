@@ -160,6 +160,27 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 with self.assertRaisesRegex(EvidenceError, message):
                     self.check([self.record], property_profile)
 
+    def test_state_machine_requires_the_exact_draft_history_counts(self):
+        name = "draft-identity-state-machine"
+        test = "preserves_reference_ids_across_generated_binding_states_and_seal"
+        self.policy["profiles"][PROFILE]["bounds"] = self.record["bounds"] = {
+            "unbound_prefixes": 54, "sealed_histories": 18, "catalog_objects": 16,
+        }
+        self.set_rust_profile(name, "state-machine", {test: 72})
+        counts = "HFS+ draft histories checked: 72 total, 54 pending, 18 sealed (16 catalog objects)"
+        transcript = PROPERTY_TRANSCRIPT.replace(PROPERTY_TEST, test).replace(
+            f"HFS+ property cases checked: {PROPERTY_CASES}", counts,
+        )
+        self.set_transcript(transcript)
+        self.assertEqual(self.check([self.record], name), (1, "0.1.0", self.commit))
+
+        for replacement in ("", counts.replace("54 pending", "53 pending"),
+                            counts.replace("18 sealed", "19 sealed"), counts.replace("16 catalog", "15 catalog")):
+            with self.subTest(replacement=replacement):
+                self.set_transcript(transcript.replace(counts, replacement))
+                with self.assertRaisesRegex(EvidenceError, "draft history counts"):
+                    self.check([self.record], name)
+
     def test_fault_requires_each_exact_successful_test(self):
         fault_profile = "sealed-stream-faults"
         self.set_rust_profile(fault_profile, "fault", {"retry": 1, "source_failure": 1})

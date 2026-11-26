@@ -262,6 +262,7 @@ fn first_pending(bound: &[bool; UNBOUND_PATHS.len()]) -> Option<CatalogId> {
 #[test]
 fn preserves_reference_ids_across_generated_binding_states_and_seal() {
 	assert_eq!(OBJECT_COUNT, 16);
+	let (mut pending, mut sealed) = (0, 0);
 	for (order_idx, order) in BIND_ORDERS.into_iter().enumerate() {
 		for length_rotation in 0..LENGTHS.len() {
 			// The same reservations and bind order visit every prefix. Sealing
@@ -300,16 +301,22 @@ fn preserves_reference_ids_across_generated_binding_states_and_seal() {
 						draft.seal(),
 						Err(VolumeError::MissingGeneratedData(id)) if id == expected
 					));
+					pending += 1;
 				} else {
 					let capacity = draft.capacity(CAPACITY).unwrap();
 					assert_frozen_identity(&draft);
 					let image = draft.seal_with_capacity(CAPACITY).unwrap();
 					assert_eq!(image.image_len(), capacity.image_bytes());
 					assert_sealed_identity(&image, &bound_payloads);
+					sealed += 1;
 				}
 			}
 		}
 	}
+	println!(
+		"HFS+ draft histories checked: {} total, {pending} pending, {sealed} sealed ({OBJECT_COUNT} catalog objects)",
+		pending + sealed
+	);
 }
 
 #[test]
