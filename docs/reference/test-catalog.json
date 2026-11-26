@@ -71,8 +71,8 @@
       "scenario": "Empty/small/multi-GiB/100k files, explicit capacity and insufficient space; validate nonoverlap, bitmap/free counts, reserved and alternate header; capped convergence.",
       "oracle": "native fsck; allocation property tests",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-03-T01",

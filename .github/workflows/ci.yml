@@ -39,6 +39,9 @@ jobs:
         run: |
           brew install p7zip
           env -u TMPDIR python3 crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py --seven-zip 7z --native-fsck
+      - name: Check fresh allocation across native volume sizes
+        if: runner.os == 'macOS'
+        run: env -u TMPDIR python3 -B crates/filesystem/hfsplus-builder/verification/check-allocation-layouts.py
 
   bare-metal:
     runs-on: ubuntu-24.04
