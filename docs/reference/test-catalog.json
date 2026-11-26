@@ -347,8 +347,8 @@
       "scenario": "Comparator triples and canonicalization repeated",
       "oracle": "proptest; historical corpus",
       "expected": "Transitive, antisymmetric sign, idempotent key within admitted names",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/foundation/hfsplus-pomologie-core/UNICODE32.md"
     },
     {
       "id": "H-FMT-04-T02",

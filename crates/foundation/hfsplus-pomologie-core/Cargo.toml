@@ -10,5 +10,9 @@ description = "Portable bounded storage contracts for HFS+"
 [lib]
 name = "hfsplus_core"
 
+[dev-dependencies]
+# Property testing
+proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
+
 [lints]
 workspace = true
