@@ -248,6 +248,29 @@
         "fork_lifetime::all_native_alias_fork_windows_match_distinct_payloads": 4810
       }
     },
+    "fork-windows-fuzz": {
+      "obligation": "H-V04",
+      "method": "fuzz",
+      "features": [],
+      "command": ["bash", "crates/filesystem/hfsplus-reader/verification/fuzz/check-fork-windows.sh"],
+      "tool_versions": {"rustc": "1.101.0-nightly", "cargo-fuzz": "0.13.2"},
+      "bounds": {
+        "seed": 7,
+        "inputs": 12000,
+        "max_input_bytes": 2,
+        "timeout_seconds": 5,
+        "rss_limit_mb": 1024,
+        "initial_corpus_files": 4,
+        "maximum_fork_bytes": 24,
+        "aliases_per_fixture": 2,
+        "fork_kinds_per_alias": 2,
+        "retained_fixture_sha256": {
+          "native-chained-hardlinks.bin": "e22a68bd293506a479b24e14ce8851bc26fb914ba4d126e1c4f1e9726455765a",
+          "native-chain-free-hardlinks.bin": "02285cd4522a096c8eb4ff217ba2246f0c935f6f298b477d9119eda8ee222403"
+        }
+      },
+      "harnesses": {"fork_windows": 12000}
+    },
     "forks-differential": {
       "obligation": "H-V04",
       "method": "differential",

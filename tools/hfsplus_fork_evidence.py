@@ -3,7 +3,7 @@
 import re
 
 from hfsplus_evidence_transcript import (
-    DIFFERENTIAL_LINE_COUNT, require, verify_interleaved_differential,
+    DIFFERENTIAL_LINE_COUNT, require, verify_address_sanitizer, verify_interleaved_differential,
     verify_rust_tests, verify_tool_version,
 )
 
@@ -104,7 +104,18 @@ def verify_fork_native(transcript, profile):
     verify_exact_test(lines[tree + 5:], lines[1:3], profile, NATIVE_TEST, report)
 
 
+def verify_fork_windows_fuzz(transcript, profile):
+    digests = profile["bounds"]["retained_fixture_sha256"]
+    lines = transcript.splitlines()
+    retained = [line for line in lines if line.startswith("Retained HFS+ fixture ")]
+    expected = [f"Retained HFS+ fixture {name} SHA-256 {digest}" for name, digest in digests.items()]
+    require(retained == expected and lines[:len(expected)] == expected,
+            "incorrect retained HFS+ fork captures")
+    verify_address_sanitizer(transcript, profile, target="fork_windows", report="fork window")
+
+
 FORK_VALIDATORS = {
     "differential": verify_fork_differential,
     "native": verify_fork_native,
+    "fuzz": verify_fork_windows_fuzz,
 }

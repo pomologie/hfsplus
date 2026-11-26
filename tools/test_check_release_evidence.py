@@ -14,6 +14,7 @@ from hfsplus_evidence_transcript import (
     verify_differential, verify_interleaved_native, verify_native, verify_volume_wire_differential,
     verify_volume_wire_fuzz,
 )
+from hfsplus_fork_evidence import verify_fork_windows_fuzz
 
 
 PROFILE = "format-kani"
@@ -113,6 +114,32 @@ HFS+ volume fuzz artifacts: 0
                         transcript.replace("Done 20000", "Done 10000")):
             with self.assertRaises(EvidenceError):
                 verify_volume_wire_fuzz(changed, profile)
+
+    def test_fork_windows_fuzz_pins_retained_captures_and_request_budget(self):
+        names = {"native-chained-hardlinks.bin": "a" * 64, "native-chain-free-hardlinks.bin": "b" * 64}
+        profile = {"bounds": {"seed": 7, "inputs": 12000, "max_input_bytes": 2, "timeout_seconds": 5,
+                              "rss_limit_mb": 1024, "initial_corpus_files": 4, "retained_fixture_sha256": names},
+                   "tool_versions": {"rustc": "1.101.0-nightly", "cargo-fuzz": "0.13.2"},
+                   "harnesses": {"fork_windows": 12000}}
+        fixtures = "\n".join(f"Retained HFS+ fixture {name} SHA-256 {digest}" for name, digest in names.items())
+        transcript = f"""{fixtures}
+rustc 1.101.0-nightly
+cargo-fuzz 0.13.2
+HFS+ fork window fuzz profile: address seed=7 runs=12000 max_len=2 timeout_s=5 rss_limit_mb=1024
+     Running `/scratch/fork_windows -seed=7 -runs=12000 -max_len=2 -timeout=5 -rss_limit_mb=1024 /scratch/corpus`
+INFO: Seed: 7
+INFO: seed corpus: files: 4 min: 2b max: 2b total: 8b
+#12000 DONE   cov: 808 ft: 815 corp: 5/9b lim: 2
+Done 12000 runs in 14 second(s)
+HFS+ fork window fuzz artifacts: 0
+"""
+        verify_fork_windows_fuzz(transcript, profile)
+        for changed in (transcript.split("\n", 1)[1], transcript.replace("a" * 64, "c" * 64),
+                        transcript.replace("-max_len=2", "-max_len=3"), transcript.replace("#12000", "#11999"),
+                        transcript.replace("artifacts: 0", "artifacts: 1"),
+                        transcript.replace("#12000", "ERROR: AddressSanitizer\n#12000")):
+            with self.assertRaises(EvidenceError):
+                verify_fork_windows_fuzz(changed, profile)
 
     def test_volume_wire_differential_requires_pinned_rows_and_ledger(self):
         rows = "HFS+ header volume HfsPlus 4096 2 0 0 8192 7168\nHFS+ fork volume catalog 4096 4096 1 1:1"

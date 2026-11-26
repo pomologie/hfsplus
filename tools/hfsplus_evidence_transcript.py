@@ -146,6 +146,10 @@ def verify_volume_wire_differential(transcript, profile):
 
 
 def verify_volume_wire_fuzz(transcript, profile):
+    verify_address_sanitizer(transcript, profile, target="volume_wire", report="volume")
+
+
+def verify_address_sanitizer(transcript, profile, *, target, report):
     lines = transcript.splitlines()
     bounds = profile["bounds"]
     seed = bounds["seed"]
@@ -156,11 +160,11 @@ def verify_volume_wire_fuzz(transcript, profile):
     versions = profile["tool_versions"]
     verify_tool_version(lines, "rustc", versions["rustc"])
     verify_tool_version(lines, "cargo-fuzz", versions["cargo-fuzz"])
-    expected = (f"HFS+ volume fuzz profile: address seed={seed} runs={runs} max_len={max_len} "
+    expected = (f"HFS+ {report} fuzz profile: address seed={seed} runs={runs} max_len={max_len} "
                 f"timeout_s={timeout} rss_limit_mb={memory}")
-    require(lines.count(expected) == 1 and profile["harnesses"] == {"volume_wire": runs},
+    require(lines.count(expected) == 1 and profile["harnesses"] == {target: runs},
             "incorrect HFS+ sanitizer profile")
-    launches = [line for line in lines if re.match(r"^\s*Running `.*?/volume_wire ", line)]
+    launches = [line for line in lines if re.match(rf"^\s*Running `.*?/{re.escape(target)} ", line)]
     argv = (f"-seed={seed}", f"-runs={runs}", f"-max_len={max_len}",
             f"-timeout={timeout}", f"-rss_limit_mb={memory}")
     require(len(launches) == 1 and all(flag in launches[0].split() for flag in argv)
@@ -172,7 +176,7 @@ def verify_volume_wire_fuzz(transcript, profile):
     outcomes = [line for line in lines if re.search(r"^#\d+\s+DONE\s+", line)]
     require(len(outcomes) == 1 and re.match(rf"^#{runs}\s+DONE\s+cov: [1-9]\d* ft: [1-9]\d* ", outcomes[0])
             and sum(bool(re.fullmatch(rf"Done {runs} runs in \d+ second\(s\)", line)) for line in lines) == 1
-            and lines[-1] == "HFS+ volume fuzz artifacts: 0"
+            and lines[-1] == f"HFS+ {report} fuzz artifacts: 0"
             and not any(marker in transcript for marker in ("ERROR: AddressSanitizer", "ERROR: libFuzzer", "panicked at")),
             "incomplete or unsuccessful HFS+ sanitizer run")
 

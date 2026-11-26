@@ -48,19 +48,22 @@ All three profiles passed the release checker at clean revision `84a365fff0eba8b
 
 Use `--profile fork-windows-property` for every in-bounds positioned read of the stored data and resource forks through five aliases, across the retained Apple chained and chain-free fixtures. The exact test checks inode IDs and link counts for each alias and compares all 4,810 read windows against the known payload slices. The largest fork is 24 bytes. The enumeration includes zero-length windows and the empty resource fork.
 
+Use `--profile fork-windows-fuzz` for the bounded AddressSanitizer campaign on the two digest-pinned retained hard-link captures. The harness varies only in-bounds API read positions and lengths and compares each response with its known data or resource fork bytes. The record requires 12,000 runs, seed 7, a two-byte input limit, the pinned capture digests, and zero failure artifacts. [Reader sanitizer runner](../crates/filesystem/hfsplus-reader/verification/fuzz/README.md)
+
 Use `--profile forks-differential` for the standalone byte reader on the pinned interleaved image and the exact production-reader replays for the retained Apple fixtures. It checks four continuation keys, both complete interleaved payloads, three exact Rust tests, and the matching fixture digests. Set `fixture_hash` to the interleaved image digest.
 
 Use `--profile forks-native` for a freshly generated 64 MiB Apple HFS+ tree. The command checks the device with no-write `fsck_hfs`, mounts read-only to capture native metadata, and detaches before Rust reads back the raw image. Rust verifies both 5 MiB forks across 20 extents through each of two hard-link names, plus directory listings, attributes, and a literal dangling symlink. Set `fixture_hash` to the stable tree manifest digest. The generated image's digest is recorded separately because its timestamps and ownership come from the native run. [Native metadata fixture provenance](../docs/features/FORMAT.md)
 
 ```sh
 python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py property
+bash crates/filesystem/hfsplus-reader/verification/fuzz/check-fork-windows.sh
 python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py differential
 env -u TMPDIR python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py native
 ```
 
 The differential and native profiles passed the release checker at clean revision `b82a34fc34b27c40792b6f1cd303434b6d889304` on arm64 macOS 14.7.2 (23H311). The Git archive SHA-256 was `995bcf1d79afff2ea6a064439e18cf77060aea4267baf8d0bc1565908680f80a`. The local evidence directory is `target/verification-evidence/v0.1.0/b82a34f-forks/`. Its `bundle.json` SHA-256 is `298cb783b80d3eed052b0abbe20e3ab5009128bc05b3572d01cf6cf808fbffd6`. Select `differential.json` or `native.json` for an individual check.
 
-The property profile passed at clean revision `269f9c149223c03cc56e0e7390d2443d75b5355d` with Rust 1.99.1 on arm64 macOS. The Git archive SHA-256 was `1adecd6b343b12ffb3e80829dfdc2ac5c4ef5bdf14fcd9d43dd0209006cf887c`. The local evidence directory is `target/verification-evidence/v0.1.0/269f9c1-fork-property/`, with bundle SHA-256 `831a880800d9d9cd877e43c44d891223ec74df91a0f5971e2a37784e321bc48b`. H-V04 still requires separate fuzz evidence.
+The property profile passed at clean revision `269f9c149223c03cc56e0e7390d2443d75b5355d` with Rust 1.99.1 on arm64 macOS. The Git archive SHA-256 was `1adecd6b343b12ffb3e80829dfdc2ac5c4ef5bdf14fcd9d43dd0209006cf887c`. The local evidence directory is `target/verification-evidence/v0.1.0/269f9c1-fork-property/`, with bundle SHA-256 `831a880800d9d9cd877e43c44d891223ec74df91a0f5971e2a37784e321bc48b`. The AddressSanitizer profile has a separate candidate replay.
 
 ### Allocation and sealed output
 
