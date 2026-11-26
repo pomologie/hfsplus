@@ -127,8 +127,8 @@
       ],
       "negative_witness": "reallocation after alias bytes generated changes CNID",
       "mandatory_when_activated": true,
-      "status": "planned",
-      "evidence": []
+      "status": "pass",
+      "evidence": ["crates/filesystem/hfsplus-builder/verification/README.md"]
     },
     {
       "id": "H-V06",

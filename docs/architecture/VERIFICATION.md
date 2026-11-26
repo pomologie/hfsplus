@@ -82,7 +82,7 @@ H-VER-01-T01 remains open. Five of these files fall below at least one proposed 
 **Assumptions and initial bounds:** Finite tree <=16 entries + overflow boundaries; deterministic comparator; identities fixed before seal.\
 **Negative witness:** reallocation after alias bytes generated changes CNID.\
 **Requirement links:** H-BUILD-01, H-BUILD-03.\
-**Evidence:** property, state-machine, differential, native; status planned.
+**Evidence:** All four configured methods passed on clean revision `89df833` within their recorded bounds. [Stable-ID evidence](../../crates/filesystem/hfsplus-builder/verification/README.md#stable-id-release-evidence)
 
 ### H-V06 — fresh image allocation
 **Target:** hfsplus-builder / planner and bitmap.\

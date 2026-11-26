@@ -78,6 +78,19 @@ H-BUILD-04-T02 exhaustively compares every slice of a reference containing metad
 
 H-BUILD-04-T01 also passed. A 5 GiB logical zero range uses one placement, zero metadata bytes and a 16-byte positioned read buffer. The nonseekable counting sink verified that a `2 MiB + 1 byte` zero range emitted its exact length in writes bounded by the stream's 32 KiB scratch buffer. The sink verified the zero contents without storing the output. The same suite checks cancellation on both sides of a source read and exhaustive concurrent reads of the small reference. The canonical native check above corroborates the exact geometry for a complete image. All nine sealed-plan tests and strict Clippy passed. [Sealed-plan tests](../tests/sealed_plan.rs)
 
+## Stable-ID release evidence
+
+All four H-V05 methods passed on clean candidate `89df83379346b4e61ad2e1b88cd70c8aeb851774`. The property test checked 768 layouts across 192 parent-closed ASCII catalog trees with up to 13 objects. The state-machine test checked 72 histories in a fixed 16-object tree, with 54 pending prefixes and 18 sealed layouts. The independent wire reader matched all 16 objects and matching threads, the next CNID, generated forks, and the regular hard-link references in the pinned 8 MiB frozen draft. On a read-only software mount, macOS 14.7.2 arm64 (23H311) reported root CNID 2, generated CNIDs 16, 20, and 22, and a shared inode 30 with two links. The generated files' data and resource forks and the shared data matched. The mount detached and the raw image digest stayed unchanged. [Release profiles](../../../../verification/release-profile.json)
+
+The source archive SHA-256 is `d4d6e2d89568b33dc82f0b8a3496be46a0ebe79e30c4ef0542b4b9c029763dc9`. The transcripts, validated single-profile records, and combined `bundle.json` are in `target/verification-evidence/v0.1.0/89df833-frozen-identity/`. The bundle SHA-256 is `a882372234a0be93d6165a4ab97ca0462b4dbbb97dd9bff76fd71447417f51f5`.
+
+| Transcript | SHA-256 |
+| --- | --- |
+| Property | `b6b56a64bae343bfa2c55864985d56839f602da9cd86b96062c3bf9423ffcfee` |
+| State machine | `4bd602b56e717243d889142e419d072ff4b0c0e6a40de76b5915a93594a9cf0c` |
+| Differential | `795d99c03f8bd88c5330f457c8604f46dc78414e8b833877c572b71063c77b83` |
+| Native | `e045707d73682c15f31444246aafbc9fc36b6223dcdfb8922d59afa345b41d51` |
+
 ## Fresh allocation release evidence
 
 All four H-V06 methods passed on the clean candidate `78ac3fc6678f6880704e478125e209e2c0fa11b4`. Kani 0.68.0 and CBMC 6.11.0 verified four harnesses and reached all eight covers on 512- and 4096-byte allocation blocks and volumes up to 32 blocks. The property test compared four positive layouts. The independent reader reconstructed and checked each of the 2,048 allocation bits in the interleaved image, including the two reserved blocks, 11 metadata blocks, and 80 file blocks, and found identical headers with 1,955 free blocks. The separate canonical image returned 2,048 total and 2,033 free blocks from Apple `statvfs` on macOS 14.7.2 arm64 (23H311). Its read-only software attachment detached and the digest stayed unchanged. [Release profiles](../../../../verification/release-profile.json)
