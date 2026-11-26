@@ -83,8 +83,8 @@
       "scenario": "Tree exceeding leaf/map capacity, large attrs and forks; inspect node packing and counts; native fsck/mount accepts; compare logical tree.",
       "oracle": "native fsck/mount; independent reader",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/BUILD.md"
     },
     {
       "id": "H-BUILD-04-T01",

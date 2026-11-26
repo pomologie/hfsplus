@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the canonical HFS+ witness and the separate frozen-draft witness."""
+"""Check the canonical, frozen-draft, or packed-catalog HFS+ witness."""
 
 import argparse
 from contextlib import contextmanager
@@ -77,6 +77,20 @@ FROZEN_DRAFT_INODE = 30
 FROZEN_DRAFT_LINK_DATA = b"shared identity"
 FROZEN_DRAFT_BACKING_FILE = "[HFS+ Private Data]/iNode100"
 GENERATED_WITNESS_IDS = struct.Struct(">II")
+PACKED_TEST = "packed_catalog_volume"
+PACKED_EMITTER = "emit_packed_catalog_volume"
+PACKED_OUTPUT_ENV = "POMOLOGIE_PACKED_CATALOG_OUTPUT"
+PACKED_VOLUME = "Packed Catalog"
+PACKED_FOLDER = "Catalog"
+PACKED_FILE_COUNT = 96_000
+PACKED_NAME_SUFFIX = "x" * 249
+PACKED_PAYLOAD = "Payload.bin"
+PACKED_DATA = bytes([0xd1]) * (257 * 1024 + 1)
+PACKED_RESOURCE = bytes([0x52]) * (129 * 1024 + 1)
+PACKED_ATTRIBUTE = "org.pomologie.packed-catalog"
+PACKED_ATTRIBUTE_VALUE = bytes([0xa5]) * 3802
+PACKED_SHA256 = "8b0ecc6114a266bce51cb6e3174bc894206202dbdc9cb9b8662c5713fc019d82"
+PACKED_TIMEOUT = 240
 
 
 def run(*args, environment=None, timeout=ORACLE_TIMEOUT):
@@ -296,10 +310,72 @@ def verify_frozen_draft_mount(mount, generated):
 		f"{tuple(FROZEN_DRAFT_GENERATED_IDS.values())}, and shared inode {FROZEN_DRAFT_INODE} with two links")
 
 
+def verify_packed_catalog(root, toolchain, compiler, options):
+	image = root / "packed.hfs"
+	environment = os.environ | {
+		"RUSTC": compiler,
+		"CARGO_TARGET_DIR": str(root / "target"),
+		"CARGO_PROFILE_RELEASE_STRIP": "none",
+		PACKED_OUTPUT_ENV: str(image),
+	}
+	output = run(
+		"rustup", "run", toolchain, "cargo", "test", "--locked", "--release",
+		"-p", PACKAGE, "--test", PACKED_TEST, "--", "--exact", "--ignored", "--nocapture", PACKED_EMITTER,
+		environment=environment, timeout=CARGO_TIMEOUT,
+	)
+	print(output.decode("utf-8").strip(), flush=True)
+	with image.open("rb") as source:
+		digest = hashlib.file_digest(source, "sha256").hexdigest()
+	if digest != PACKED_SHA256:
+		raise ValueError(f"packed catalog image SHA-256 {digest}, expected {PACKED_SHA256}")
+	print(f"Packed catalog image SHA-256 {digest}", flush=True)
+	names = {f"{ordinal:05}-{PACKED_NAME_SUFFIX}" for ordinal in range(PACKED_FILE_COUNT)}
+	if options.seven_zip:
+		listing = run(options.seven_zip, "l", "-slt", "-sccUTF-8", image, timeout=PACKED_TIMEOUT)
+		prefix = f"Path = {PACKED_VOLUME}/{PACKED_FOLDER}/"
+		paths = [line.removeprefix(prefix) for line in listing.decode("utf-8").splitlines()
+			if line.startswith(prefix)]
+		if len(paths) != len(names) or set(paths) != names:
+			raise ValueError(f"7-Zip listed {len(paths)} paths and the packed catalog manifest differs")
+		payload = run(
+			options.seven_zip, "x", "-so", "-bd", image, f"{PACKED_VOLUME}/{PACKED_PAYLOAD}",
+			timeout=PACKED_TIMEOUT,
+		)
+		if payload != PACKED_DATA:
+			raise ValueError("7-Zip readback differs for the packed catalog data fork")
+		print(f"7-Zip matched all {len(names)} packed catalog names and the multi-block data fork", flush=True)
+	if options.native_fsck:
+		wrapped = wrap_and_check(image)
+		mount = root / "mount"
+		mount.mkdir()
+		with mounted_read_only(wrapped, mount, owners="off"):
+			verify_packed_mount(mount, names)
+
+
+def verify_packed_mount(mount, names):
+	seen = set()
+	with os.scandir(mount / PACKED_FOLDER) as entries:
+		for entry in entries:
+			if entry.name in seen or not entry.is_file(follow_symlinks=False) or entry.stat().st_size:
+				raise ValueError(f"duplicate or nonempty regular file expected at {entry.name!r}")
+			seen.add(entry.name)
+	if seen != names:
+		raise ValueError(f"macOS listed {len(seen)} packed catalog names and the manifest differs")
+	payload = mount / PACKED_PAYLOAD
+	if payload.read_bytes() != PACKED_DATA:
+		raise ValueError("macOS readback differs for the packed catalog data fork")
+	for name, expected in ((FORK, PACKED_RESOURCE), (PACKED_ATTRIBUTE, PACKED_ATTRIBUTE_VALUE)):
+		observed = bytes.fromhex(run(XATTR, "-px", name, payload).decode("ascii"))
+		if observed != expected:
+			raise ValueError(f"macOS readback differs for {name!r}")
+	print(f"macOS matched all {len(names)} packed catalog files, both forks, and the maximum inline attribute")
+
+
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--seven-zip", metavar="COMMAND", help="independent 7-Zip CLI command or path")
 	parser.add_argument("--native-fsck", action="store_true", help="check the disposable image on macOS")
+	parser.add_argument("--packed-catalog", action="store_true", help="check the 256 MiB catalog-map witness")
 	options = parser.parse_args()
 	if options.native_fsck and sys.platform != "darwin":
 		parser.error("--native-fsck requires macOS")
@@ -309,6 +385,9 @@ def main():
 		compiler = os.fsdecode(run("rustup", "which", "--toolchain", toolchain, "rustc").strip())
 		with TemporaryDirectory(prefix="hfsplus-canonical.") as temporary:
 			root = Path(temporary).resolve()
+			if options.packed_catalog:
+				verify_packed_catalog(root, toolchain, compiler, options)
+				return 0
 			baseline = root / "canonical.hfs"
 			for path, reverse in ((baseline, False), (root / "reordered.hfs", True)):
 				emit(path, toolchain, compiler, reverse=reverse)

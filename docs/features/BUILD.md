@@ -19,3 +19,16 @@ The HFSX fixture for H-FMT-03 and H-BUILD-02 compares complete raw images from o
 ## Verification and acceptance
 
 Native tests generate comparable newfs_hfs/ditto fixtures and check our raw volume with read-only fsck then mount on disposable test device, compare tree, metadata, forks, file counts, link semantics. Tests raw reader independently checks output, fstool/hfsplus reader comparison when profile supported. Fixtures: empty volume, zero-byte file, many small files requiring multi-level catalog/map nodes, multi-GiB file, large xattr requiring fork, resource fork, symlink, hard link group, decomposed collision, max-name, generated root Finder info and IDs, exact-capacity and insufficient space, final alternate header offsets, deterministic seed, source changed mid-read, concurrent sector reads, bounded nonseekable sink, corrupt allocation and overflow checks. Raw image byte identical across runs and supported hosts given identical logical manifest/profile; no claim Apple byte-identical allocator. Add property tests ranges cover exactly and do not overlap, bitmap counts match planned allocations, all file data read back. Large-scale benchmark metadata budget and no full raw intermediate in dmgez integration. Default constructor emits only qualified profile; unsupported journaling, sparse semantics, names, timestamp or metadata require explicit error/loss report. Hard links preserved or fail, not flatten silently. Add HFSX profile after comparator parity. P0 release does not need mutable writes, repair or resizing.
+
+### Packed catalog and continuation map
+
+H-BUILD-03-T01 passed for the inline-attribute writer profile on macOS 14.7.2 arm64 (23H311) with Rust 1.99.1. The 256 MiB image contains 96,000 files with 255-byte ASCII names, a 263,169-byte data fork, a 132,097-byte resource fork, and a 3,802-byte inline attribute at the writer's supported size limit. The test supplies larger node and metadata budgets through the existing `VolumeOptions`.
+
+The catalog contains 192,006 records in 32,915 leaf nodes. Its depth is six, and the continuation map accounts for all 36,164 allocated nodes. The test traverses each index child once, counts leaf records, and checks every allocation bit in the header and continuation map. Two emitted images matched SHA-256 `8b0ecc6114a266bce51cb6e3174bc894206202dbdc9cb9b8662c5713fc019d82`. [Packed catalog test](../../crates/filesystem/hfsplus-builder/tests/packed_catalog_volume.rs)
+
+Apple `fsck_hfs` hfs-650.140.2 completed its no-write catalog, hierarchy, attribute and bitmap checks. The read-only mount matched all 96,000 paths as empty regular files, along with both complete forks and the complete inline attribute. p7zip 17.05 independently matched all 96,000 paths and extracted the data fork byte for byte. [Native and independent checker](../../crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py)
+
+```sh
+python3 -B crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py \
+  --packed-catalog --seven-zip 7z --native-fsck
+```
