@@ -9,6 +9,7 @@ import tempfile
 import unittest
 
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
+from hfsplus_evidence_transcript import verify_interleaved_differential
 
 
 PROFILE = "format-kani"
@@ -149,6 +150,31 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 self.set_transcript(FAULT_TRANSCRIPT.replace(expected, changed))
                 with self.assertRaisesRegex(EvidenceError, "exact fault test"):
                     self.check([self.record], fault_profile)
+
+    def test_differential_requires_the_exact_fixture_and_both_fork_results(self):
+        digest = hashlib.sha256(b"fixture").hexdigest()
+        profile = {
+            "harnesses": {"interleaved-forks": 1},
+            "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0"},
+            "bounds": {"image_bytes": 8388608, "image_sha256": digest, "catalog_records": 134,
+                       "catalog_depth": 2, "continuation_keys": [[0, 16], [0, 32]],
+                       "fork_lengths_bytes": [159761, 159775]},
+        }
+        transcript = f"""Python 3.14.0
+cargo 1.99.1
+rustc 1.99.1
+Interleaved image 8388608 bytes SHA-256 {digest}
+Independent raw reader found 134 unique catalog records at depth 2
+Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and both complete forks (159761, 159775 bytes)
+"""
+        verify_interleaved_differential(transcript, profile)
+        for old, new in ((digest, "0" * len(digest)), ("134 unique", "133 unique"),
+                         ("(0, 32)", "(0, 31)"), ("159775 bytes", "159774 bytes")):
+            with self.subTest(replacement=new):
+                with self.assertRaisesRegex(EvidenceError, "incorrect interleaved fixture"):
+                    verify_interleaved_differential(transcript.replace(old, new), profile)
+        with self.assertRaisesRegex(EvidenceError, "incorrect interleaved fixture"):
+            verify_interleaved_differential(transcript.rsplit("\n", 2)[0], profile)
 
     def test_archive_digest_ignores_worktree_line_ending_configuration(self):
         (self.root / ".gitattributes").write_text("*.txt text\n", encoding="utf-8")

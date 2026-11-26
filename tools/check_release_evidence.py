@@ -9,7 +9,10 @@ import re
 import subprocess
 import sys
 
-from hfsplus_evidence_transcript import EvidenceError, require, verify_fault_tests, verify_kani, verify_property_test
+from hfsplus_evidence_transcript import (
+    EvidenceError, require, verify_fault_tests, verify_interleaved_differential, verify_kani,
+    verify_property_test,
+)
 
 
 POLICY_PATH = "verification/release-profile.json"
@@ -24,8 +27,14 @@ RECORD_FIELDS = {
 }
 OPTIONAL_RECORD_FIELDS = {"seed", "trace_hash", "fixture_hash", "proof"}
 PROFILE_FIELDS = {"obligation", "method", "features", "command", "tool_versions", "bounds", "harnesses"}
-METHOD_VALIDATORS = {"kani": verify_kani, "property": verify_property_test, "fault": verify_fault_tests}
-METHOD_TOOLS = {"kani": {"kani", "cbmc"}, "property": {"cargo", "rustc"}, "fault": {"cargo", "rustc"}}
+METHOD_VALIDATORS = {
+    "kani": verify_kani, "property": verify_property_test, "fault": verify_fault_tests,
+    "differential": verify_interleaved_differential,
+}
+METHOD_TOOLS = {
+    "kani": {"kani", "cbmc"}, "property": {"cargo", "rustc"}, "fault": {"cargo", "rustc"},
+    "differential": {"cargo", "rustc", "python"},
+}
 
 
 def unique_object(pairs):
@@ -193,8 +202,13 @@ def validate_record(record, name, profile, commit, digest, artifacts_root):
         require(record.get("proof") == {"theorem": name}, "Kani theorem does not match profile")
     elif record["method"] in {"property", "fault"}:
         require("proof" not in record, "Rust test evidence must not declare a theorem")
+    elif record["method"] == "differential":
+        fixture_hash = profile["bounds"]["image_sha256"]
+        require(isinstance(fixture_hash, str) and SHA256.fullmatch(fixture_hash)
+                and record.get("fixture_hash") == fixture_hash and "proof" not in record,
+                "differential record does not match the pinned fixture")
     transcript = read_artifacts(artifacts_root, record["artifacts"])
-    METHOD_VALIDATORS[record["method"]](transcript, profile["harnesses"], profile["tool_versions"])
+    METHOD_VALIDATORS[record["method"]](transcript, profile)
 
 
 def validate(root, bundle, requested_profile):
