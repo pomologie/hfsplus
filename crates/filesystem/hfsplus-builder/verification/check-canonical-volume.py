@@ -374,10 +374,13 @@ def verify_packed_mount(mount, names):
 def verify_interleaved_forks(root, toolchain, compiler, options):
 	from interleaved_fork_oracle import DIRECTORY, ITEM_COUNT, PAIRED_FILE, check_interleaved_forks, payloads
 
+	print(f"Python {sys.version.split(maxsplit=1)[0]}")
+	print(run("rustup", "run", toolchain, "cargo", "--version").decode("utf-8").strip())
+	print(run(compiler, "--version").decode("utf-8").strip())
 	image = root / "interleaved.hfs"
 	emit(image, toolchain, compiler, reverse=False, test="interleaved_forks",
 		emitter="emit_interleaved_forks", output_env="POMOLOGIE_INTERLEAVED_FORK_OUTPUT")
-	print(f"Interleaved image SHA-256 {image_digest(image)}")
+	print(f"Interleaved image {image.stat().st_size} bytes SHA-256 {image_digest(image)}")
 	check_interleaved_forks(image)
 	if options.native_fsck:
 		wrapped = wrap_and_check(image)

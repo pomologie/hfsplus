@@ -145,4 +145,5 @@ def check_interleaved_forks(path):
 		physical = b"".join(image[start * BLOCK_BYTES:(start + count) * BLOCK_BYTES] for start, count in extents)
 		if physical[:length] != expected or any(physical[length:]):
 			raise ValueError("independent raw readback differs in fork contents or block padding")
-	print(f"Independent raw reader matched all {len(records)} continuation keys {keys} and both complete forks")
+	print(f"Independent raw reader matched all {len(records)} continuation keys {keys} "
+		f"and both complete forks ({DATA_BYTES}, {RESOURCE_BYTES} bytes)")
