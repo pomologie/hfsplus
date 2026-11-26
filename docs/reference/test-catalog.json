@@ -623,8 +623,8 @@
       "scenario": "Isolate every active kernel-facing crate with defaults disabled and explicit supported kernel features; check on aarch64-unknown-none and x86_64-unknown-none; build at release.",
       "oracle": "Pinned rustc/Cargo target checks and release code generation",
       "expected": "Both targets pass for each active profile; record exact commands, features and toolchain.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/architecture/VERIFICATION.md"
     },
     {
       "id": "H-PORT-01-T02",
