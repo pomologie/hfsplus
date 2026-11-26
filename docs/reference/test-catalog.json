@@ -467,8 +467,8 @@
       "scenario": "Attributes tree has inline and extent-backed values (qualified profile)",
       "oracle": "native fixture",
       "expected": "Exact values; unsupported representation error if not qualified",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-04-T02",
