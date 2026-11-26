@@ -10,6 +10,8 @@ Run `python3 -B tools/measure_coverage.py --output "$evidence_dir"` from a clean
 
 On arm64 macOS, the clean `ec8eb67` run passed 194 tests and skipped ten. LLVM covered 6,944 of 7,850 lines (88.46%) across 65 owned files. The run merged 276 profiles from 41 test binaries and excluded three build profiles. The report is in `target/verification-evidence/v0.1.0/ec8eb67-critical-coverage/` with SHA-256 `ef107bb3c00dc08af32d04d849e8a701dc6b86c6b2eb36d043d60e6576ce77ea`.
 
+The clean `3ba750a` replay passed 202 tests with 11 skipped. It reproduced the production line and branch counts below, using 43 test binaries and 288 raw profiles with three build profiles excluded. The report is in `target/verification-evidence/v0.1.0/3ba750a-critical-coverage/` with SHA-256 `078c65cd0f706b1df0755491a323a7f79f00a25595c4fa4196ddd801d8cf3a76`.
+
 | Critical source | Lines | Branch outcomes |
 |---|---:|---:|
 | Builder allocation | 236 / 253 | 12 / 12 |
@@ -22,6 +24,8 @@ On arm64 macOS, the clean `ec8eb67` run passed 194 tests and skipped ten. LLVM c
 | Name collation | 27 / 27 | 2 / 2 |
 
 H-VER-01-T01 remains open. Five of these files fall below at least one proposed critical-file threshold. The coverage run supplies source counts for the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+
+Two later clean, targeted replays improved coverage. At `33db05f`, name admission reached 109 of 111 lines with all 18 measured branch outcomes. At `543d782`, builder allocation reached 250 of 253 lines, and the sealed plan reached 166 of 169 lines with 13 of 14 branch outcomes. The detailed reports are in `target/verification-evidence/v0.1.0/33db05f-name-admission-coverage/` and `target/verification-evidence/v0.1.0/543d782-builder-coverage/`. The table records the earlier whole-workspace baseline.
 
 ## Obligations
 
@@ -58,7 +62,7 @@ H-VER-01-T01 remains open. Five of these files fall below at least one proposed 
 **Assumptions and initial bounds:** Kani <=8 records/128-byte synthetic packing and real nodes tested at qualified sizes; endian exact; comparator contract.\
 **Negative witness:** offset table points into itself; malformed node count reads before start.\
 **Requirement links:** H-FMT-02, H-BUILD-03.\
-**Evidence:** The offset-table Kani profile is configured. The packed-node property profile checked 228 record ranges and 3,517 within-node key pairs on clean revision `e1618cf`. The independent wire decoder matched 21 node descriptors and 228 records against production Rust on clean revision `23f291f`. Separate native and fuzz evidence remains open. [Packed-node release evidence](../../verification/README.md)
+**Evidence:** All five configured methods passed on clean revision `3ba750a` within their recorded bounds. [Packed-node and aggregate release evidence](../../verification/README.md)
 
 ### H-V03 — names
 **Target:** hfsplus-pomologie-core name keys, hfsplus-builder planner, and hfsplus-reader catalog lookup.\

@@ -6,7 +6,13 @@ Run the checker with Git and Python 3.11 or later from a clean candidate worktre
 python3 -B tools/check_release_evidence.py --root . --bundle "$evidence_dir/bundle.json"
 ```
 
-The release command derives the mandatory methods for the milestone from the committed [obligation registry](obligations.json). It requires a configured invocation for every active obligation and method, and a passing evidence record for every configured invocation. The current [release policy](release-profile.json) includes `format-kani` for H-V01 geometry, `btree-offset-kani` for H-V02 offset tables, three H-V03 name profiles, the H-V05 stable-ID property, draft state machine, independent wire comparison, and native mount, H-V06 profiles for allocation proofs, block-set properties, independent raw allocation comparison, and macOS counts, and five H-V07 profiles for range admission, bounded positioned reads, synthetic stream faults, independent image comparison, and native no-write checking. The release command reports the remaining unconfigured methods and rejects the bundle until the matrix is complete.
+The release command derives the mandatory methods from the committed [obligation registry](obligations.json). It requires a configured invocation for every active obligation and method, and a passing evidence record for every invocation in the [release policy](release-profile.json).
+
+## v0.1.0 aggregate replay
+
+The release checker accepted all 29 profiles for H-V01 through H-V07 on clean revision `3ba750a625627bedecd00e902a0267e79082cb3f` on arm64 macOS. The source archive SHA-256 is `13dfb4ffdc9fd13f0d99db1d71ac0d01fcce9890e802791917e2a6f0cb571f66`. The records and transcripts are in `target/verification-evidence/v0.1.0/3ba750a-release-complete/`. The bundle SHA-256 is `2c05e680210c83f0fadf65306be715101444b93d130458bbe65816c65d991fbe`. The [acceptance catalog](../docs/reference/test-catalog.json) tracks the additional coverage and format scenarios.
+
+On that same revision, all 24 checker tests passed. The negative cases cover missing, stale, dirty, timed-out, unsupported, wrong-profile and vacuous evidence. The aggregate replay also ran the production Kani geometry, offset admission and placement harnesses and verified their reached covers. The `evidence-checker-tests.log` SHA-256 is `f5946d7b12a6f072131fc56922e1f4b0dee83876396da2dd107effd7b99303c7`.
 
 Use `--profile format-kani` to check the geometry proofs separately. Run the policy's proof command from an isolated checkout of the candidate with Kani 0.68.0 and CBMC 6.11.0. Capture both output streams together. The [geometry verification guide](../crates/formats/hfsplus-format/verification/README.md) explains the proof scope and bounds.
 

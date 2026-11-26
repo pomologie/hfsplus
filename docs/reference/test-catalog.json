@@ -215,8 +215,8 @@
       "scenario": "Reject missing, stale, dirty, timed-out, unsupported, wrong-profile or vacuous required verification results; run actual Kani on admitted range/geometry helpers with bounds and non-vacuity.",
       "oracle": "EVS-1; Kani; release evidence validator",
       "expected": "All required gates in the active scope pass with current evidence; injected invalid evidence is rejected.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "verification/README.md#v010-aggregate-replay"
     },
     {
       "id": "H-VER-03-T01",

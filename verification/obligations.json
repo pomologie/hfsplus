@@ -61,8 +61,8 @@
       ],
       "negative_witness": "offset table points into itself; malformed node count reads before start",
       "mandatory_when_activated": true,
-      "status": "planned",
-      "evidence": []
+      "status": "pass",
+      "evidence": ["verification/README.md"]
     },
     {
       "id": "H-V03",
