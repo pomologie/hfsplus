@@ -70,6 +70,7 @@ version = "0.1.0"
 dependencies = [
  "hfsplus-format",
  "hfsplus-pomologie-core",
+ "hfsplus-reader",
 ]
 
 [[package]]

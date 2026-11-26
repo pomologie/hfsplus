@@ -1,3 +1,5 @@
+use std::num::NonZeroU32;
+
 use hfsplus_core::{
 	ReadAt,
 	names::{NameCollation, NormalizedName},
@@ -65,12 +67,23 @@ pub struct VolumeDraft<'a, S> {
 	pub(super) next_id: CatalogId,
 	pub(super) attributes: Attributes,
 	pub(super) hard_links: Option<HardLinks<S>>,
+	pub(super) fork_run_blocks: Option<NonZeroU32>,
 }
 
 /// An admitted manifest returned by the printable-ASCII planning entry point.
 pub type AsciiVolumeDraft<'a, S> = VolumeDraft<'a, S>;
 
 impl<S: ReadAt> VolumeDraft<'_, S> {
+	/// Interleave the nonempty data and resource forks of regular files.
+	///
+	/// Each fork gets up to `run_blocks` allocation blocks per turn while both
+	/// have blocks left. Once either fork ends, the other's remainder is placed
+	/// contiguously. Single-fork files and special files keep contiguous layout.
+	/// Capacity selection includes any additional overflow tree nodes.
+	pub fn interleave_paired_forks(&mut self, run_blocks: NonZeroU32) {
+		self.fork_run_blocks = Some(run_blocks);
+	}
+
 	/// Gets the frozen catalog ID of a path. The empty path denotes the root
 	/// folder. An inadmissible path or failed normalization returns `None`.
 	#[must_use]
@@ -345,6 +358,7 @@ fn prepare<'a, S: ReadAt>(
 		file_count: count - folder_count + hidden_files,
 		next_id,
 		attributes: Attributes::default(),
+		fork_run_blocks: None,
 		hard_links,
 	})
 }

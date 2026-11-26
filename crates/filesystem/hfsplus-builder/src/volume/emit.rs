@@ -1,6 +1,7 @@
 use hfsplus_core::{ByteLen, ByteOffset, ReadAt};
-use hfsplus_format::volume::{
-	Extent, Fork, Geometry, Header, PRIMARY_HEADER_OFFSET, Signature, SpecialFiles,
+use hfsplus_format::{
+	extents::ForkKind,
+	volume::{Extent, Fork, Geometry, Header, PRIMARY_HEADER_OFFSET, Signature, SpecialFiles},
 };
 
 use crate::{Limits, PlanBuilder, PlanError, SealedPlan};
@@ -8,6 +9,7 @@ use crate::{Limits, PlanBuilder, PlanError, SealedPlan};
 use super::{
 	EntryKind, ForkSource, VolumeError, VolumeFormat,
 	catalog::DEFAULT_ENCODING_HINT,
+	fork_placement::InterleavedForks,
 	layout::{self, EntryExtents, Layout, allocated_fork, attributes_clump_bytes},
 	manifest::{Input, VolumeDraft},
 };
@@ -93,9 +95,12 @@ pub(super) fn seal<S: ReadAt>(mut draft: VolumeDraft<'_, S>) -> Result<SealedPla
 				image.file(placement, data, resource)?;
 			}
 			EntryKind::Symlink { target } => {
-				let extent = placement
-					.data
-					.expect("an admitted symbolic link has a target");
+				let EntryExtents::Contiguous {
+					data: Some(extent), ..
+				} = placement
+				else {
+					unreachable!("an admitted symbolic link has a contiguous target");
+				};
 				image.extent_metadata(extent, target.into_boxed_slice())?;
 			}
 			EntryKind::GeneratedFile { .. } => {
@@ -189,12 +194,59 @@ impl<S: ReadAt> Emitter<S> {
 		data: ForkSource<S>,
 		resource: Option<ForkSource<S>>,
 	) -> Result<(), VolumeError> {
-		if let Some(extent) = placement.data {
-			self.source(extent, data)?;
+		match placement {
+			EntryExtents::Empty => {}
+			EntryExtents::Contiguous {
+				data: data_extent,
+				resource: resource_extent,
+			} => {
+				if let Some(extent) = data_extent {
+					self.source(extent, data)?;
+				}
+				if let Some((extent, resource)) = resource_extent.zip(resource) {
+					self.source(extent, resource)?;
+				}
+			}
+			EntryExtents::Interleaved(runs) => {
+				self.interleaved(
+					runs,
+					data,
+					resource.expect("interleaved forks require a resource source"),
+				)?;
+			}
 		}
-		if let Some((extent, resource)) = placement.resource.zip(resource) {
-			self.source(extent, resource)?;
+		Ok(())
+	}
+
+	fn interleaved(
+		&mut self,
+		runs: InterleavedForks,
+		data: ForkSource<S>,
+		resource: ForkSource<S>,
+	) -> Result<(), VolumeError> {
+		let data_len = data.range.len().0;
+		let resource_len = resource.range.len().0;
+		let data_source = self.image.register_source(data.source, data.range)?;
+		let resource_source = self
+			.image
+			.register_source(resource.source, resource.range)?;
+		let mut data_offset = 0;
+		let mut resource_offset = 0;
+		let block_bytes = u64::from(self.geometry.block_size());
+		for (kind, extent) in runs.runs() {
+			let (source, length, logical) = match kind {
+				ForkKind::Data => (data_source, data_len, &mut data_offset),
+				ForkKind::Resource => (resource_source, resource_len, &mut resource_offset),
+			};
+			let offset = self.extent_start(extent)?;
+			let len = ByteLen((length - *logical).min(u64::from(extent.blocks) * block_bytes));
+			self.pad_to(offset)?;
+			self.image
+				.push_source_range(offset, source, ByteOffset(*logical), len)?;
+			self.end = ByteOffset(offset.0 + len.0);
+			*logical += len.0;
 		}
+		debug_assert_eq!((data_offset, resource_offset), (data_len, resource_len));
 		Ok(())
 	}
 

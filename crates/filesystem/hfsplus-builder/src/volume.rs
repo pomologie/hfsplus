@@ -19,6 +19,7 @@ mod capacity;
 mod catalog;
 mod catalog_path;
 mod emit;
+mod fork_placement;
 mod hard_links;
 mod layout;
 mod manifest;

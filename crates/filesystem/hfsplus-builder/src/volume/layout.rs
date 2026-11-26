@@ -1,3 +1,5 @@
+use std::num::NonZeroU32;
+
 use hfsplus_core::ByteLen;
 use hfsplus_format::{
 	attributes::NATIVE_NODE_BYTES as ATTRIBUTE_NODE_BYTES,
@@ -7,6 +9,7 @@ use hfsplus_format::{
 		VARIABLE_INDEX_KEYS_MASK,
 	},
 	catalog::{MAX_KEY_LENGTH, ThreadKind},
+	extents::KEY_LENGTH as EXTENTS_MAX_KEY_BYTES,
 	hard_links::{Inode, PRIVATE_DIRECTORY_NAME, Stub, private_directory_value},
 	symlink::FINDER_TYPE_AND_CREATOR,
 	volume::{CatalogId, Extent, Fork, Geometry, HEADER_BYTES},
@@ -22,18 +25,23 @@ use super::{
 	attributes::Attributes,
 	capacity::Footprint,
 	catalog::{Catalog, file, folder, metadata},
+	fork_placement::{InterleavedForks, OverflowRecords},
 	manifest::{Input, ROOT_ID, ROOT_PARENT_ID, VolumeDraft},
 };
 
 const NODE_BYTES: u16 = 4096;
-const EXTENTS_MAX_KEY_BYTES: u16 = 10;
 const EXTENTS_KEY_COMPARE: u8 = 0;
-const RESERVED_CATALOG_FORK_WORD: u32 = 0;
+pub(super) const RESERVED_CATALOG_FORK_WORD: u32 = 0;
 
 #[derive(Default)]
-pub(super) struct EntryExtents {
-	pub(super) data: Option<Extent>,
-	pub(super) resource: Option<Extent>,
+pub(super) enum EntryExtents {
+	#[default]
+	Empty,
+	Contiguous {
+		data: Option<Extent>,
+		resource: Option<Extent>,
+	},
+	Interleaved(InterleavedForks),
 }
 
 pub(super) struct PlacedTree {
@@ -98,6 +106,7 @@ fn place<S>(
 		.as_ref()
 		.map_or(0, |links| links.files.len() + 1);
 	let mut records = Catalog::new(geometry, draft.entries.len() + hidden, metadata_limit)?;
+	let mut overflow = OverflowRecords::new(options.limits.max_ranges, metadata_limit);
 	let mut remaining_metadata = metadata_limit;
 	draft.attributes.sort()?;
 
@@ -151,8 +160,15 @@ fn place<S>(
 				ThreadKind::Folder,
 			),
 			EntryKind::File { data, resource } => {
-				let (data, resource, placement) =
-					allocate_file(&mut allocation, geometry, data, resource.as_ref())?;
+				let (data, resource, placement) = allocate_file(
+					&mut allocation,
+					geometry,
+					data,
+					resource.as_ref(),
+					entry.id,
+					draft.fork_run_blocks,
+					&mut overflow,
+				)?;
 				extents = placement;
 				(
 					file(
@@ -172,7 +188,10 @@ fn place<S>(
 					.ok_or(VolumeError::Limit)?;
 				let (data, extent) =
 					allocate_fork(&mut allocation, geometry, ByteLen::from(target.len()).0)?;
-				extents.data = extent;
+				extents = EntryExtents::Contiguous {
+					data: extent,
+					resource: None,
+				};
 				let mut input = input.metadata;
 				input.finder_info[..FINDER_TYPE_AND_CREATOR.len()]
 					.copy_from_slice(&FINDER_TYPE_AND_CREATOR);
@@ -203,6 +222,9 @@ fn place<S>(
 				geometry,
 				&file.data,
 				file.resource.as_ref(),
+				file.id,
+				draft.fork_run_blocks,
+				&mut overflow,
 			)?;
 			record_payload(placement);
 			let inode = Inode {
@@ -235,7 +257,10 @@ fn place<S>(
 		.and_then(|bytes| bytes.checked_sub(HEADER_BYTES * 2))
 		.ok_or(VolumeError::Limit)?;
 	let (trees, unused) = pack_trees(
-		records,
+		MetadataRecords {
+			catalog: records,
+			overflow,
+		},
 		&draft.attributes,
 		options.max_tree_nodes,
 		tree_budget,
@@ -268,8 +293,13 @@ struct MetadataTrees {
 	attributes: Option<PackedTree>,
 }
 
+struct MetadataRecords {
+	catalog: Catalog,
+	overflow: OverflowRecords,
+}
+
 fn pack_trees(
-	records: Catalog,
+	records: MetadataRecords,
 	attributes: &Attributes,
 	max_nodes: u32,
 	byte_budget: usize,
@@ -277,14 +307,16 @@ fn pack_trees(
 	format: VolumeFormat,
 	first_child: Option<CatalogId>,
 ) -> Result<(MetadataTrees, usize), VolumeError> {
-	let extents = PackedTree::build(
-		&[],
-		tree_options(max_nodes, byte_budget, geometry, TreeKind::Extents),
-	)?;
+	let extents = records.overflow.pack(tree_options(
+		max_nodes,
+		byte_budget,
+		geometry,
+		TreeKind::Extents,
+	))?;
 	let after_extents = byte_budget
 		.checked_sub(extents.as_bytes().len())
 		.ok_or(VolumeError::Limit)?;
-	let catalog = records.pack(
+	let catalog = records.catalog.pack(
 		tree_options(
 			max_nodes,
 			after_extents,
@@ -332,7 +364,26 @@ fn allocate_file<S>(
 	geometry: Geometry,
 	data: &ForkSource<S>,
 	resource: Option<&ForkSource<S>>,
+	id: CatalogId,
+	run_blocks: Option<NonZeroU32>,
+	overflow: &mut OverflowRecords,
 ) -> Result<(Fork, Fork, EntryExtents), VolumeError> {
+	if let Some((run_blocks, resource)) = run_blocks.zip(resource) {
+		let data_bytes = data.range.len().0;
+		let resource_bytes = resource.range.len().0;
+		if let Some(placement) = InterleavedForks::allocate(
+			allocation,
+			geometry,
+			data_bytes,
+			resource_bytes,
+			run_blocks,
+			overflow,
+		)? {
+			let (data, resource) =
+				placement.describe(geometry, id, data_bytes, resource_bytes, overflow)?;
+			return Ok((data, resource, EntryExtents::Interleaved(placement)));
+		}
+	}
 	let (data, data_extent) = allocate_fork(allocation, geometry, data.range.len().0)?;
 	let (resource, resource_extent) = match resource {
 		Some(source) => allocate_fork(allocation, geometry, source.range.len().0)?,
@@ -341,7 +392,7 @@ fn allocate_file<S>(
 	Ok((
 		data,
 		resource,
-		EntryExtents {
+		EntryExtents::Contiguous {
 			data: data_extent,
 			resource: resource_extent,
 		},

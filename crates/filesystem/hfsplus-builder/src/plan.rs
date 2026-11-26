@@ -39,8 +39,12 @@ pub enum RangeKind {
 enum Payload<S> {
 	Metadata(Box<[u8]>),
 	Source(Window<S>),
+	SourceRange { source: SourceId, range: ByteRange },
 	Zero,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct SourceId(usize);
 
 #[derive(Debug)]
 struct Placement<S> {
@@ -61,6 +65,7 @@ pub struct PlanBuilder<S> {
 	limits: Limits,
 	metadata_bytes: ByteLen,
 	placements: Vec<Placement<S>>,
+	sources: Vec<Window<S>>,
 }
 
 impl<S: ReadAt> PlanBuilder<S> {
@@ -73,6 +78,7 @@ impl<S: ReadAt> PlanBuilder<S> {
 			limits,
 			metadata_bytes: ByteLen(0),
 			placements: Vec::new(),
+			sources: Vec::new(),
 		}
 	}
 
@@ -107,6 +113,34 @@ impl<S: ReadAt> PlanBuilder<S> {
 	) -> Result<(), PlanError> {
 		let window = Window::new(source, source_offset, len).map_err(PlanError::SourceRange)?;
 		self.push(offset, len, Payload::Source(window))
+	}
+
+	pub(crate) fn register_source(
+		&mut self,
+		source: S,
+		range: ByteRange,
+	) -> Result<SourceId, PlanError> {
+		let window =
+			Window::new(source, range.start(), range.len()).map_err(PlanError::SourceRange)?;
+		if self.sources.len() >= self.limits.max_ranges {
+			return Err(PlanError::RangeLimit);
+		}
+		self.sources.try_reserve(1).map_err(PlanError::Allocation)?;
+		let id = SourceId(self.sources.len());
+		self.sources.push(window);
+		Ok(id)
+	}
+
+	pub(crate) fn push_source_range(
+		&mut self,
+		offset: ByteOffset,
+		source: SourceId,
+		source_offset: ByteOffset,
+		len: ByteLen,
+	) -> Result<(), PlanError> {
+		let range = ByteRange::new(source_offset, len, self.sources[source.0].len())
+			.map_err(PlanError::SourceRange)?;
+		self.push(offset, len, Payload::SourceRange { source, range })
 	}
 
 	/// Explicitly assigns zeros to the next `len` bytes without backing storage.
@@ -146,6 +180,7 @@ impl<S: ReadAt> PlanBuilder<S> {
 		Ok(SealedPlan {
 			image_len: self.image_len,
 			placements: self.placements,
+			sources: self.sources,
 		})
 	}
 }
@@ -173,6 +208,7 @@ pub(crate) fn admit_range(
 pub struct SealedPlan<S> {
 	image_len: ByteLen,
 	placements: Vec<Placement<S>>,
+	sources: Vec<Window<S>>,
 }
 
 impl<S> SealedPlan<S> {
@@ -187,7 +223,7 @@ impl<S> SealedPlan<S> {
 		self.placements.iter().map(|placement| {
 			let kind = match placement.payload {
 				Payload::Metadata(_) => RangeKind::Metadata,
-				Payload::Source(_) => RangeKind::Source,
+				Payload::Source(_) | Payload::SourceRange { .. } => RangeKind::Source,
 				Payload::Zero => RangeKind::Zero,
 			};
 			(placement.range, kind)
@@ -236,6 +272,12 @@ impl<S: ReadAt> ReadAt for SealedPlan<S> {
 							error,
 						})?
 				}
+				Payload::SourceRange { source, range } => self.sources[source.0]
+					.read_exact_at(ByteOffset(range.start().0 + relative.0), chunk)
+					.map_err(|error| ReadError::Source {
+						offset: start,
+						error,
+					})?,
 				Payload::Zero => chunk.fill(0),
 			}
 			destination = remaining;
