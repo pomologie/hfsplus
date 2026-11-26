@@ -1,0 +1,29 @@
+{
+  "source": "Apple hdiutil HFS+ optical filesystem from a single synthetic file",
+  "license": "Apache-2.0; synthetic data only",
+  "os": "14.7.2",
+  "build": "23H311",
+  "architecture": "arm64",
+  "argv": [
+    "/usr/bin/hdiutil",
+    "makehybrid",
+    "-hfs",
+    "-hfs-volume-name",
+    "Optical Name Fixture",
+    "-o",
+    "optical.dmg",
+    "source"
+  ],
+  "input_scalar_hex": [
+    "1d15e"
+  ],
+  "stored_scalar_hex": [
+    "1d157",
+    "1d165"
+  ],
+  "payload_sha256": "ed1c9c86d4ae5f6d176c2cb01a26a027a8958e9f3f2e2b95de9ea3e29f4307a2",
+  "raw_apm_sha256": "2bbbbf5e64987c3e303dd7446ab70156603cef2550d73fe9d3e1f786b09c6601",
+  "volume_offset": 32768,
+  "volume_bytes": 20480,
+  "bounded_volume_sha256": "7eb45c9b49a5ba15da1ad5b38e2fa0f1ecb4803350e22173f945da58067f07f3"
+}

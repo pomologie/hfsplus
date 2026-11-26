@@ -10,7 +10,10 @@ use hfsplus_format::{
 };
 use hfsplus_reader::{
 	Volume,
-	catalog::{CatalogError, CatalogLimits, Corruption, Entry, EntryKind, Limit, ROOT_ID},
+	catalog::{
+		CatalogError, CatalogLimits, Corruption, Entry, EntryKind, Limit, NameNormalization,
+		ROOT_ID,
+	},
 };
 
 #[path = "catalog/hosted.rs"]
@@ -21,12 +24,16 @@ mod separators;
 mod symlink;
 
 const NATIVE: &[u8] = include_bytes!("fixtures/native-catalog-volume.bin");
+const OPTICAL_SUPPLEMENTARY: &[u8] = include_bytes!("fixtures/native-optical-supplementary.bin");
 const NATIVE_PATH: &str = "tests/fixtures/native-catalog-volume.bin";
 const LABEL: &str = "Pomologie Catalog";
 const NESTED: &str = "Nested";
 const FOLDED_FILE: &str = "RÉSUMÉ.TXT";
 const STORED_FILE: &str = "Re\u{0301}sume\u{0301}.txt";
 const PAYLOAD: &[u8] = b"catalog unicode payload\n";
+const OPTICAL_NAME_INPUT: &str = "\u{1d15e}";
+const OPTICAL_NAME_STORED: &str = "\u{1d157}\u{1d165}";
+const OPTICAL_NAME_PAYLOAD: &[u8] = b"Optical naming witness\n";
 const EMPTY_FILES: usize = 96;
 const NATIVE_NODE_BYTES: usize = 4096;
 const HEADER_MAP_ORDINAL: usize = 2;
@@ -41,6 +48,42 @@ fn catalog_retains_its_exact_volume_view_identity() {
 	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
 	assert!(catalog.belongs_to(&volume));
 	assert!(!catalog.belongs_to(&Volume::open(NATIVE).unwrap()));
+}
+
+#[test]
+fn reads_native_optical_supplementary_names_with_the_explicit_scalar_policy() {
+	let volume = Volume::open(OPTICAL_SUPPLEMENTARY).unwrap();
+	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
+	assert_eq!(catalog.lookup(ROOT_ID, OPTICAL_NAME_INPUT).unwrap(), None);
+	let entry = catalog
+		.lookup_with_normalization(
+			ROOT_ID,
+			OPTICAL_NAME_INPUT,
+			NameNormalization::Unicode32Scalars,
+		)
+		.unwrap()
+		.unwrap();
+	assert!(
+		entry
+			.name
+			.iter()
+			.copied()
+			.eq(OPTICAL_NAME_STORED.encode_utf16())
+	);
+	assert_eq!(
+		catalog.lookup_raw(ROOT_ID, &entry.name).unwrap().as_ref(),
+		Some(&entry)
+	);
+	let EntryKind::File { data, .. } = entry.kind else {
+		panic!("expected the synthetic optical file");
+	};
+	let mut bytes = [0; OPTICAL_NAME_PAYLOAD.len()];
+	volume
+		.open_embedded_fork(&data)
+		.unwrap()
+		.read_exact_at(ByteOffset(0), &mut bytes)
+		.unwrap();
+	assert_eq!(bytes, OPTICAL_NAME_PAYLOAD);
 }
 
 #[test]

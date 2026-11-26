@@ -4,7 +4,7 @@ use crate::alloc::vec::Vec;
 
 use hfsplus_core::{
 	ReadAt,
-	names::{MAX_NAME_UNITS, NameCollation, normalize},
+	names::{MAX_NAME_UNITS, NameCollation},
 };
 use hfsplus_format::{
 	btree::NodeId,
@@ -32,6 +32,7 @@ pub use hard_links::{
 	HardLink, HardLinkError, HardLinkLimits, HardLinkProfile, LinkCorruption, LinkTarget,
 	RegularFile,
 };
+pub use hfsplus_core::names::NameNormalization;
 pub use symlink::{Symlink, SymlinkError};
 
 use tree::{Position, Query, Tree};
@@ -186,7 +187,7 @@ impl<S: ReadAt> Catalog<'_, S> {
 		self.resolve_public(id, &mut query)
 	}
 
-	/// Finds one child name after historical HFS+ decomposition.
+	/// Finds one child name using mounted macOS HFS+ normalization.
 	/// # Errors
 	/// Returns an error if the parent is unavailable or the catalog, name, or
 	/// visited metadata cannot be read within the admitted profile.
@@ -195,7 +196,21 @@ impl<S: ReadAt> Catalog<'_, S> {
 		parent: CatalogId,
 		name: &str,
 	) -> Result<Option<Entry>, CatalogError<S::Error>> {
-		let name = normalize(name).map_err(CatalogError::Name)?;
+		self.lookup_with_normalization(parent, name, NameNormalization::Kernel)
+	}
+
+	/// Finds one child under an explicitly selected text normalization policy.
+	/// One call searches one normalized key. Use [`Self::lookup_raw`] when the
+	/// stored UTF-16 units are already available.
+	/// # Errors
+	/// Returns a name, parent, or catalog failure as in [`Self::lookup`].
+	pub fn lookup_with_normalization(
+		&self,
+		parent: CatalogId,
+		name: &str,
+		policy: NameNormalization,
+	) -> Result<Option<Entry>, CatalogError<S::Error>> {
+		let name = policy.normalize(name).map_err(CatalogError::Name)?;
 		self.lookup_raw(parent, name.as_units())
 	}
 

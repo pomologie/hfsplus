@@ -7,6 +7,10 @@ use hfsplus_format::{
 	catalog::{Record, ThreadKind, Value},
 	volume::{CatalogId, Geometry, Header, PRIMARY_HEADER_OFFSET},
 };
+use hfsplus_reader::{
+	Volume,
+	catalog::{CatalogLimits, NameNormalization, ROOT_ID},
+};
 
 const ALLOCATION_BLOCK_BYTES: u32 = 4096;
 const VOLUME_BLOCKS: u32 = 2048;
@@ -17,6 +21,8 @@ const GENERATED: &str = "CAFÉ/Ébauche";
 const IGNORABLE_DISPLAY: &str = "Æ\u{200d}ne";
 const REGULAR_MODE: u16 = 0o644;
 const DIRECTORY_MODE: u16 = 0o755;
+const COMPOSED_MUSIC: &str = "\u{1d15e}";
+const SCALAR_STORED_MUSIC: &str = "\u{1d157}\u{1d165}";
 
 fn geometry() -> Geometry {
 	Geometry::new(ALLOCATION_BLOCK_BYTES, VOLUME_BLOCKS, VOLUME_BYTES).unwrap()
@@ -219,18 +225,30 @@ fn enforces_the_limit_after_decomposition_and_utf16_encoding() {
 	let options = || VolumeOptions::new(LABEL, geometry());
 	let max_supplementary = "😀".repeat(MAX_NAME_UNITS / 2) + "界";
 	let max_label = "界".repeat(MAX_NAME_UNITS);
-	plan(
-		VolumeOptions::new(&max_label, geometry()),
-		vec![file(&max_supplementary)],
-	)
-	.unwrap()
-	.seal()
-	.unwrap();
+	for name in [
+		"a".repeat(MAX_NAME_UNITS),
+		max_supplementary,
+		"é".repeat(MAX_NAME_UNITS / 2) + "a",
+	] {
+		plan(
+			VolumeOptions::new(&max_label, geometry()),
+			vec![file(&name)],
+		)
+		.unwrap()
+		.seal()
+		.unwrap();
+	}
 	let beyond_after_decomposition = "é".repeat(MAX_NAME_UNITS.div_ceil(2));
-	assert!(matches!(
-		plan(options(), vec![file(&beyond_after_decomposition)]),
-		Err(VolumeError::Normalization(NameError::TooLong))
-	));
+	for name in [
+		"a".repeat(MAX_NAME_UNITS + 1),
+		"😀".repeat(MAX_NAME_UNITS.div_ceil(2)),
+		beyond_after_decomposition.clone(),
+	] {
+		assert!(matches!(
+			plan(options(), vec![file(&name)]),
+			Err(VolumeError::Normalization(NameError::TooLong))
+		));
+	}
 	assert!(matches!(
 		plan::<&[u8]>(
 			VolumeOptions::new(&beyond_after_decomposition, geometry()),
@@ -238,4 +256,47 @@ fn enforces_the_limit_after_decomposition_and_utf16_encoding() {
 		),
 		Err(VolumeError::Normalization(NameError::TooLong))
 	));
+}
+
+#[test]
+fn preserves_native_supplementary_siblings_and_explicit_optical_lookup() {
+	let entries = vec![file(COMPOSED_MUSIC), file(SCALAR_STORED_MUSIC)];
+	let plan = plan(VolumeOptions::new(LABEL, geometry()), entries)
+		.unwrap()
+		.seal()
+		.unwrap();
+	let mut image = Vec::new();
+	plan.write_to(&mut image).unwrap();
+	let volume = Volume::open(image.as_slice()).unwrap();
+	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
+	let composed = catalog.lookup(ROOT_ID, COMPOSED_MUSIC).unwrap().unwrap();
+	let scalar = catalog
+		.lookup(ROOT_ID, SCALAR_STORED_MUSIC)
+		.unwrap()
+		.unwrap();
+	assert_ne!(composed.metadata.id, scalar.metadata.id);
+	assert!(
+		composed
+			.name
+			.iter()
+			.copied()
+			.eq(COMPOSED_MUSIC.encode_utf16())
+	);
+	assert!(
+		scalar
+			.name
+			.iter()
+			.copied()
+			.eq(SCALAR_STORED_MUSIC.encode_utf16())
+	);
+	assert_eq!(
+		catalog.lookup_raw(ROOT_ID, &composed.name).unwrap(),
+		Some(composed)
+	);
+	assert_eq!(
+		catalog
+			.lookup_with_normalization(ROOT_ID, COMPOSED_MUSIC, NameNormalization::Unicode32Scalars)
+			.unwrap(),
+		Some(scalar)
+	);
 }

@@ -1,18 +1,25 @@
 use std::{cmp::Ordering, collections::BTreeSet};
 
 use hfsplus_core::names::{
-	MAX_NAME_UNITS, NameCollation, NameError, NameFragment, NormalizedName, normalize,
-	normalize_utf16,
+	MAX_NAME_UNITS, NameCollation, NameError, NameFragment, NameNormalization, NormalizedName,
+	normalize, normalize_utf16,
 };
 use proptest::{
 	prelude::*,
 	test_runner::{RngSeed, TestCaseError},
 };
 
+#[path = "names/kernel.rs"]
+mod kernel;
+
 const NATIVE_NAMES: &str = include_str!("fixtures/native-normalization.tsv");
 const NATIVE_COLLATION: &str = include_str!("fixtures/native-collation.tsv");
 const NATIVE_CATALOG_ORDER: &str = include_str!("fixtures/native-catalog-order.txt");
 const COLLATION_MODES: [NameCollation; 2] = [NameCollation::CaseFolded, NameCollation::Binary];
+const NORMALIZATIONS: [NameNormalization; 2] = [
+	NameNormalization::Kernel,
+	NameNormalization::Unicode32Scalars,
+];
 const PROPERTY_CASES: u32 = 4096;
 const PROPERTY_SEED: u64 = 0x4846_532b;
 const MAX_GENERATED_SCALARS: usize = 64;
@@ -48,12 +55,22 @@ fn native_names() -> impl Iterator<Item = (OracleComparison, Vec<u16>, Vec<u16>)
 
 #[test]
 fn decomposed_names_match_native_hfsplus_catalogs_for_shared_unicode_cases() {
+	let policy = NameNormalization::Unicode32Scalars;
 	for (_, original, expected) in native_names().filter(|row| row.0 == OracleComparison::Agreement)
 	{
 		let original_str = String::from_utf16(&original).expect("fixture input UTF-16");
-		assert_eq!(normalize(&original_str).unwrap().as_units(), expected);
-		assert_eq!(normalize_utf16(&original).unwrap().as_units(), expected);
-		assert_eq!(normalize_utf16(&expected).unwrap().as_units(), expected);
+		assert_eq!(
+			policy.normalize(&original_str).unwrap().as_units(),
+			expected
+		);
+		assert_eq!(
+			policy.normalize_utf16(&original).unwrap().as_units(),
+			expected
+		);
+		assert_eq!(
+			policy.normalize_utf16(&expected).unwrap().as_units(),
+			expected
+		);
 	}
 }
 
@@ -65,7 +82,12 @@ fn preserves_version_boundary_exposed_by_newer_optical_oracle() {
 		// These characters were unassigned in Unicode 3.2. Native optical
 		// generation uses newer decomposition and combining-class data.
 		assert_ne!(original, observed);
-		assert_eq!(normalize_utf16(&original).unwrap().as_units(), original);
+		for policy in NORMALIZATIONS {
+			assert_eq!(
+				policy.normalize_utf16(&original).unwrap().as_units(),
+				original
+			);
+		}
 	}
 }
 
@@ -274,13 +296,13 @@ fn historical_inputs() -> BTreeSet<String> {
 		.collect()
 }
 
-fn repeated_name(input: &str) -> Result<NormalizedName, TestCaseError> {
-	let stored = normalize(input).unwrap();
+fn repeated_name(policy: NameNormalization, input: &str) -> Result<NormalizedName, TestCaseError> {
+	let stored = policy.normalize(input).unwrap();
 	let original: Vec<_> = input.encode_utf16().collect();
-	let from_utf16 = normalize_utf16(&original).unwrap();
-	let repeated = normalize_utf16(stored.as_units()).unwrap();
+	let from_utf16 = policy.normalize_utf16(&original).unwrap();
+	let repeated = policy.normalize_utf16(stored.as_units()).unwrap();
 	let rendered = String::from_utf16(stored.as_units()).unwrap();
-	let from_rendered = normalize(&rendered).unwrap();
+	let from_rendered = policy.normalize(&rendered).unwrap();
 	prop_assert_eq!(
 		&stored,
 		&from_utf16,
@@ -346,41 +368,43 @@ fn transitive(first_second: Ordering, second_third: Ordering, first_third: Order
 
 #[test]
 fn historical_name_corpus_has_idempotent_keys_and_all_ordered_triples_obey_the_laws() {
-	let names: BTreeSet<_> = historical_inputs()
-		.iter()
-		.map(|name| repeated_name(name).unwrap().into_units())
-		.collect();
-	let names: Vec<_> = names.into_iter().collect();
-	assert!(!names.is_empty());
-	for mode in COLLATION_MODES {
-		let relations: Vec<Vec<_>> = names
+	for policy in NORMALIZATIONS {
+		let names: BTreeSet<_> = historical_inputs()
 			.iter()
-			.map(|left| {
-				names
-					.iter()
-					.map(|right| compare_pair(mode, left, right).unwrap())
-					.collect()
-			})
+			.map(|name| repeated_name(policy, name).unwrap().into_units())
 			.collect();
-		for (first, row) in relations.iter().enumerate() {
-			assert_eq!(row[first], Ordering::Equal);
-			for (second, &first_second) in row.iter().enumerate() {
-				for (third, &second_third) in relations[second].iter().enumerate() {
-					assert!(
-						transitive(first_second, second_third, row[third]),
-						"{mode:?}: {:?}, {:?}, {:?}",
-						names[first],
-						names[second],
-						names[third]
-					);
+		let names: Vec<_> = names.into_iter().collect();
+		assert!(!names.is_empty());
+		for mode in COLLATION_MODES {
+			let relations: Vec<Vec<_>> = names
+				.iter()
+				.map(|left| {
+					names
+						.iter()
+						.map(|right| compare_pair(mode, left, right).unwrap())
+						.collect()
+				})
+				.collect();
+			for (first, row) in relations.iter().enumerate() {
+				assert_eq!(row[first], Ordering::Equal);
+				for (second, &first_second) in row.iter().enumerate() {
+					for (third, &second_third) in relations[second].iter().enumerate() {
+						assert!(
+							transitive(first_second, second_third, row[third]),
+							"{mode:?}: {:?}, {:?}, {:?}",
+							names[first],
+							names[second],
+							names[third]
+						);
+					}
 				}
 			}
+			println!(
+				"{policy:?} / {mode:?} passed {} triples over {} stored names",
+				names.len().pow(3),
+				names.len()
+			);
 		}
-		println!(
-			"{mode:?} passed {} triples over {} stored names",
-			names.len().pow(3),
-			names.len()
-		);
 	}
 }
 
@@ -393,7 +417,9 @@ fn generated_name() -> impl Strategy<Value = String> {
 	prop::collection::vec(scalar, 0..=MAX_GENERATED_SCALARS)
 		.prop_map(|units| units.into_iter().collect::<String>())
 		.prop_filter("normalized length must fit the name limit", |input| {
-			!matches!(normalize(input), Err(NameError::TooLong))
+			NORMALIZATIONS
+				.into_iter()
+				.all(|policy| !matches!(policy.normalize(input), Err(NameError::TooLong)))
 		})
 }
 
@@ -408,14 +434,16 @@ proptest! {
 	fn generated_unicode_triples_preserve_comparison_laws_and_repeated_keys(
 		first in generated_name(), second in generated_name(), third in generated_name(),
 	) {
-		let first = repeated_name(&first)?;
-		let second = repeated_name(&second)?;
-		let third = repeated_name(&third)?;
-		for mode in COLLATION_MODES {
-			let first_second = compare_pair(mode, first.as_units(), second.as_units())?;
-			let second_third = compare_pair(mode, second.as_units(), third.as_units())?;
-			let first_third = compare_pair(mode, first.as_units(), third.as_units())?;
-			prop_assert!(transitive(first_second, second_third, first_third));
+		for policy in NORMALIZATIONS {
+			let first = repeated_name(policy, &first)?;
+			let second = repeated_name(policy, &second)?;
+			let third = repeated_name(policy, &third)?;
+			for mode in COLLATION_MODES {
+				let first_second = compare_pair(mode, first.as_units(), second.as_units())?;
+				let second_third = compare_pair(mode, second.as_units(), third.as_units())?;
+				let first_third = compare_pair(mode, first.as_units(), third.as_units())?;
+				prop_assert!(transitive(first_second, second_third, first_third));
+			}
 		}
 	}
 }

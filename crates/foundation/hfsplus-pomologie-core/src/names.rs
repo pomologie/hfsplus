@@ -31,6 +31,19 @@ const HANGUL_SYLLABLE_COUNT: u32 = HANGUL_LEADING_COUNT * HANGUL_VOWEL_TRAILING_
 const STARTER_CLASS: u8 = 0;
 const MAX_UNITS_PER_SCALAR: usize = 2;
 
+/// How to derive stored name units from Unicode text.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[non_exhaustive]
+pub enum NameNormalization {
+	/// Mounted macOS HFS+ behavior. Supplementary UTF-16 pairs remain intact
+	/// and their positions separate runs of BMP combining marks.
+	#[default]
+	Kernel,
+	/// Unicode 3.2 scalar decomposition and ordering with HFS+ exclusions.
+	/// Supports the supplementary storage forms in the optical fixture.
+	Unicode32Scalars,
+}
+
 /// A canonically decomposed sequence within the HFS+ name length limit.
 #[derive(Debug, Eq, PartialEq)]
 pub struct NormalizedName(Vec<u16>);
@@ -80,31 +93,57 @@ impl Error for NameError {
 	}
 }
 
-/// Decomposes a Unicode string to the HFS+ Unicode 3.2 storage form.
+/// Normalizes a Unicode string for mounted macOS HFS+ name lookup.
 ///
 /// # Errors
 /// Returns a typed error if the decomposed name exceeds the storage limit or
 /// the result cannot be allocated.
 pub fn normalize(name: &str) -> Result<NormalizedName, NameError> {
-	normalize_scalars(name.chars().map(Ok))
+	NameNormalization::Kernel.normalize(name)
 }
 
-/// Decomposes a UTF-16 sequence to the HFS+ Unicode 3.2 storage form.
+/// Normalizes a UTF-16 sequence for mounted macOS HFS+ name lookup.
 ///
 /// # Errors
 /// Returns a typed error for invalid UTF-16, a name above the decomposed
 /// storage limit, or a failure to allocate the result.
 pub fn normalize_utf16(units: &[u16]) -> Result<NormalizedName, NameError> {
-	normalize_scalars(
-		char::decode_utf16(units.iter().copied())
-			.map(|scalar| scalar.map_err(|_| NameError::InvalidUtf16)),
-	)
+	NameNormalization::Kernel.normalize_utf16(units)
+}
+
+impl NameNormalization {
+	/// Normalizes a Unicode string under the selected HFS+ name policy.
+	///
+	/// # Errors
+	/// Returns an error if the stored name exceeds the unit limit or its memory
+	/// cannot be allocated.
+	pub fn normalize(self, name: &str) -> Result<NormalizedName, NameError> {
+		normalize_scalars(self, name.chars().map(Ok))
+	}
+
+	/// Normalizes a UTF-16 sequence under the selected HFS+ name policy.
+	///
+	/// # Errors
+	/// Returns an error for unpaired surrogates, a stored name above the unit
+	/// limit, or a failure to allocate its memory.
+	pub fn normalize_utf16(self, units: &[u16]) -> Result<NormalizedName, NameError> {
+		normalize_scalars(
+			self,
+			char::decode_utf16(units.iter().copied())
+				.map(|scalar| scalar.map_err(|_| NameError::InvalidUtf16)),
+		)
+	}
+
+	fn uses_scalar_tables(self, scalar: char) -> bool {
+		matches!(self, Self::Unicode32Scalars) || scalar.len_utf16() == 1
+	}
 }
 
 fn normalize_scalars(
+	policy: NameNormalization,
 	scalars: impl Iterator<Item = Result<char, NameError>>,
 ) -> Result<NormalizedName, NameError> {
-	let mut buffer = CanonicalBuffer::new();
+	let mut buffer = CanonicalBuffer::new(policy);
 	for scalar in scalars {
 		buffer.decompose(scalar?)?;
 	}
@@ -118,14 +157,16 @@ struct OrderedScalar {
 }
 
 struct CanonicalBuffer {
+	policy: NameNormalization,
 	scalars: [OrderedScalar; MAX_NAME_UNITS],
 	count: usize,
 	units: usize,
 }
 
 impl CanonicalBuffer {
-	fn new() -> Self {
+	fn new(policy: NameNormalization) -> Self {
 		Self {
+			policy,
 			scalars: [OrderedScalar {
 				value: '\0',
 				class: STARTER_CLASS,
@@ -153,7 +194,9 @@ impl CanonicalBuffer {
 			return Ok(());
 		}
 
-		if let Ok(index) = unicode32::DECOMPOSITIONS.binary_search_by_key(&scalar, |entry| entry.0)
+		if self.policy.uses_scalar_tables(scalar)
+			&& let Ok(index) =
+				unicode32::DECOMPOSITIONS.binary_search_by_key(&scalar, |entry| entry.0)
 		{
 			for &component in unicode32::DECOMPOSITIONS[index].1 {
 				self.append(component)?;
@@ -169,9 +212,13 @@ impl CanonicalBuffer {
 		if units > MAX_NAME_UNITS {
 			return Err(NameError::TooLong);
 		}
-		let class = unicode32::COMBINING_CLASSES
-			.binary_search_by_key(&value, |entry| entry.0)
-			.map_or(STARTER_CLASS, |index| unicode32::COMBINING_CLASSES[index].1);
+		let class = if self.policy.uses_scalar_tables(value) {
+			unicode32::COMBINING_CLASSES
+				.binary_search_by_key(&value, |entry| entry.0)
+				.map_or(STARTER_CLASS, |index| unicode32::COMBINING_CLASSES[index].1)
+		} else {
+			STARTER_CLASS
+		};
 		let mut index = self.count;
 		if class != STARTER_CLASS {
 			// A starter or equal class stops the stable insertion. Scalar values

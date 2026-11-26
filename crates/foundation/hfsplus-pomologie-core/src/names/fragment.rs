@@ -4,7 +4,7 @@ extern crate alloc;
 
 use alloc::vec::Vec;
 
-use super::{MAX_NAME_UNITS, NameCollation, NameError, normalize};
+use super::{MAX_NAME_UNITS, NameCollation, NameError, NameNormalization};
 
 /// A normalized text fragment for matching exact stored name units.
 #[derive(Debug)]
@@ -17,7 +17,7 @@ impl NameFragment {
 	/// Maximum UTF-16 length of the decomposed fragment.
 	pub const MAX_UNITS: usize = MAX_NAME_UNITS;
 
-	/// Compiles text using historical HFS+ decomposition and the volume collation.
+	/// Compiles text using mounted HFS+ normalization and the volume collation.
 	///
 	/// An empty fragment, including one entirely ignored by the collation,
 	/// returns `None`.
@@ -26,7 +26,21 @@ impl NameFragment {
 	/// Returns an error if the fragment exceeds the decomposed name limit or
 	/// allocating its comparison key fails.
 	pub fn new(collation: NameCollation, fragment: &str) -> Result<Option<Self>, NameError> {
-		let stored = normalize(fragment)?;
+		Self::with_normalization(collation, fragment, NameNormalization::Kernel)
+	}
+
+	/// Compiles text using an explicit normalization policy and volume collation.
+	///
+	/// Returns `None` for an empty or entirely ignored fragment.
+	///
+	/// # Errors
+	/// Returns a name length or allocation error as in [`Self::new`].
+	pub fn with_normalization(
+		collation: NameCollation,
+		fragment: &str,
+		policy: NameNormalization,
+	) -> Result<Option<Self>, NameError> {
+		let stored = policy.normalize(fragment)?;
 		let weights = collation.key(stored.as_units())?;
 		Ok((!weights.is_empty()).then_some(Self { collation, weights }))
 	}
