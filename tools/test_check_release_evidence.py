@@ -9,7 +9,7 @@ import tempfile
 import unittest
 
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
-from hfsplus_btree_evidence import verify_packed_wire_differential
+from hfsplus_btree_evidence import verify_packed_live_native, verify_packed_wire_differential
 from hfsplus_evidence_transcript import (
     verify_differential, verify_interleaved_native, verify_native, verify_volume_wire_differential,
     verify_volume_wire_fuzz,
@@ -72,6 +72,70 @@ Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and bo
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_live_packed_nodes_require_native_readback_and_each_exact_leaf_summary(self):
+        policy = Path(__file__).resolve().parents[1] / POLICY_PATH
+        profile = json.loads(policy.read_text())["profiles"]["btree-packed-live-native"]
+        transcript = """Python 3.14.0
+cargo 1.99.1
+rustc 1.99.1
+macOS 14.7.2 build 23H311 arch arm64
+Native HFS+ tree manifest SHA-256 1eee1861229521bac7a26f9c80cff2a54bcf378a270683aad0ce362632999c85
+** /dev/disk4 (NO WRITE)
+   Executing fsck_hfs (version hfs-650.140.2).
+** Checking non-journaled HFS Plus Volume.
+   The volume name is Pomologie Overflow
+** Checking extents overflow file.
+** Checking catalog file.
+** Checking multi-linked files.
+** Checking catalog hierarchy.
+** Checking extended attributes file.
+** Checking volume bitmap.
+** Checking volume information.
+** The volume Pomologie Overflow appears to be OK.
+Apple no-write check detached
+Mounted data.bin SHA-256 923206bf9a96d84ae3070863629b94d8420feba8cb74f7dd60038949198e4c8b
+Mounted resource.bin SHA-256 c3c39e51782df4571b267ba261a4dc8e6b2a807aa71c5cc9abb6a83e5ce2c86d
+Native mount matched 5 stored names, shared inode 20, UF_NODUMP, and exact attributes and link target
+Apple read-only mount detached
+Native raw image bytes 67108864
+Native raw image SHA-256 59d93320f29d4d777d6346075f1c34c09958fa87a337500bbe3ee273a5a002e1
+Native HFS+ tree matched the pinned paths, attributes, symlink and fork payloads
+running 1 test
+test tree::native_nested_tree_matches_mounted_entries ... ok
+successes:
+---- tree::native_nested_tree_matches_mounted_entries stdout ----
+data.bin: matched 5242880 native bytes across 20 extents
+resource.bin: matched 5242880 native bytes across 20 extents
+data.bin: matched 5242880 native bytes across 20 extents
+resource.bin: matched 5242880 native bytes across 20 extents
+Matched native tree names, metadata, hard-link identities, attributes and symlink bytes
+successes:
+    tree::native_nested_tree_matches_mounted_entries
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.04s
+running 1 test
+test packed_live::fresh_native_leaf_chains_match_packed_records ... ok
+successes:
+---- packed_live::fresh_native_leaf_chains_match_packed_records stdout ----
+Native packed catalog leaf nodes 1 records 18 ordered pairs 153
+Native packed extents leaf nodes 1 records 4 ordered pairs 6
+Native packed attributes leaf nodes 1 records 6 ordered pairs 15
+successes:
+    packed_live::fresh_native_leaf_chains_match_packed_records
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 0.00s
+"""
+        verify_packed_live_native(transcript, profile)
+        for before, after in (
+            ("** Checking extended attributes file.\n", ""),
+            ("Apple read-only mount detached", "Apple read-only mount still attached"),
+            ("resource.bin: matched 5242880 native bytes across 20 extents", "resource.bin: skipped"),
+            ("records 18 ordered pairs 153", "records 17 ordered pairs 136"),
+            ("Native packed extents leaf nodes 1 records 4 ordered pairs 6\n", ""),
+            ("Native packed attributes leaf nodes 1 records 6 ordered pairs 15", "attributes skipped"),
+            ("test packed_live::fresh_native_leaf_chains_match_packed_records ... ok", "test other ... ok"),
+        ):
+            with self.subTest(before=before), self.assertRaises(EvidenceError):
+                verify_packed_live_native(transcript.replace(before, after, 1), profile)
+
     def test_packed_wire_comparison_requires_exact_descriptor_and_record_rows(self):
         rows = ("HFS+ node catalog|1|4096|leaf|1|0|0|1\n"
                 "HFS+ record catalog|1|0|14|46|2|[]|folder-thread|1|[65]")

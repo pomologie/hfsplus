@@ -13,7 +13,7 @@ from hfsplus_evidence_transcript import (
     EvidenceError, require, verify_differential, verify_draft_state_machine, verify_fault_tests, verify_kani,
     verify_native, verify_property_test, verify_volume_wire_differential, verify_volume_wire_fuzz,
 )
-from hfsplus_btree_evidence import verify_packed_wire_differential
+from hfsplus_btree_evidence import verify_packed_live_native, verify_packed_wire_differential
 from hfsplus_fork_evidence import FORK_VALIDATORS
 from hfsplus_name_evidence import NAME_VALIDATORS
 
@@ -37,7 +37,7 @@ METHOD_VALIDATORS = {
 }
 OBLIGATION_VALIDATORS = {
     "H-V01": {"differential": verify_volume_wire_differential, "fuzz": verify_volume_wire_fuzz},
-    "H-V02": {"differential": verify_packed_wire_differential},
+    "H-V02": {"differential": verify_packed_wire_differential, "native": verify_packed_live_native},
     "H-V03": NAME_VALIDATORS, "H-V04": FORK_VALIDATORS,
 }
 METHOD_TOOLS = {

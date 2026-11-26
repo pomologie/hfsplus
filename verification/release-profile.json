@@ -122,6 +122,35 @@
       },
       "harnesses": {"retained-btree-wire": 249}
     },
+    "btree-packed-live-native": {
+      "obligation": "H-V02",
+      "method": "native",
+      "features": [],
+      "command": ["env", "-u", "TMPDIR", "python3", "-B", "crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py", "native", "--packed-nodes"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0", "macos": "14.7.2", "macos_build": "23H311", "fsck_hfs": "650.140.2"},
+      "bounds": {
+        "macos_arch": "arm64",
+        "volume_label": "Pomologie Overflow",
+        "raw_image_bytes": 67108864,
+        "fixture_sha256": "1eee1861229521bac7a26f9c80cff2a54bcf378a270683aad0ce362632999c85",
+        "stored_names": 5,
+        "hard_link_names": 2,
+        "forks": {
+          "data": {"bytes": 5242880, "extents": 20, "sha256": "923206bf9a96d84ae3070863629b94d8420feba8cb74f7dd60038949198e4c8b"},
+          "resource": {"bytes": 5242880, "extents": 20, "sha256": "c3c39e51782df4571b267ba261a4dc8e6b2a807aa71c5cc9abb6a83e5ce2c86d"}
+        },
+        "max_leaves_per_tree": 32,
+        "packed_trees": {
+          "catalog": {"leaves": 1, "records": 18, "ordered_pairs": 153},
+          "extents": {"leaves": 1, "records": 4, "ordered_pairs": 6},
+          "attributes": {"leaves": 1, "records": 6, "ordered_pairs": 15}
+        }
+      },
+      "harnesses": {
+        "tree::native_nested_tree_matches_mounted_entries": 1,
+        "packed_live::fresh_native_leaf_chains_match_packed_records": 1
+      }
+    },
     "names-property": {
       "obligation": "H-V03",
       "method": "property",
