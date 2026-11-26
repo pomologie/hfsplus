@@ -1,6 +1,12 @@
 //! Native fragmented-fork witnesses for H-READ-01-T01 and H-READ-01-T02.
 
-use std::{env, fs::File, io::Read, path::PathBuf};
+use std::{
+	env,
+	fmt::Debug,
+	fs::File,
+	io::Read,
+	path::{Path, PathBuf},
+};
 
 use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt};
 use hfsplus_format::{
@@ -10,11 +16,13 @@ use hfsplus_format::{
 use hfsplus_reader::{
 	Error, SpecialFile, Volume,
 	catalog::{CatalogLimits, EntryKind, ROOT_ID},
-	overflow::{ForkKind, OverflowLimits},
+	overflow::{ForkKind, OverflowLimits, ResolvedFork},
 };
 
 #[path = "catalog/hosted.rs"]
 mod hosted;
+#[path = "native_overflow/tree.rs"]
+mod tree;
 
 const NATIVE: &[u8] = include_bytes!("fixtures/native-overflow.bin");
 const NATIVE_RECORD_INDEX: usize = 4;
@@ -40,8 +48,6 @@ fn native_full_forks_match_mounted_bytes() {
 		panic!("expected the native fragmented regular file");
 	};
 
-	let mut observed = [0; FULL_READ_BYTES];
-	let mut expected = [0; FULL_READ_BYTES];
 	for (kind, descriptor, name) in [
 		(ForkKind::Data, data, "data.bin"),
 		(ForkKind::Resource, resource, "resource.bin"),
@@ -55,33 +61,43 @@ fn native_full_forks_match_mounted_bytes() {
 				OverflowLimits::default(),
 			)
 			.unwrap();
-		let extents = fork.extents().count();
-		assert!(extents >= MIN_EXTENTS_WITH_TWO_CONTINUATIONS);
-		assert_eq!(fork.len(), ByteLen(NATIVE_FORK_BYTES));
-		let mut native = File::open(directory.join(name)).unwrap();
-		assert_eq!(native.metadata().unwrap().len(), fork.len().0);
-		for offset in (0..fork.len().0).step_by(FULL_READ_BYTES) {
-			let count =
-				usize::try_from((fork.len().0 - offset).min(FULL_READ_BYTES as u64)).unwrap();
-			fork.read_exact_at(ByteOffset(offset), &mut observed[..count])
-				.unwrap();
-			native.read_exact(&mut expected[..count]).unwrap();
-			assert_eq!(
-				&observed[..count],
-				&expected[..count],
-				"{kind:?} at {offset}"
-			);
-		}
-		assert_eq!(native.read(&mut observed[..1]).unwrap(), 0);
-		assert!(matches!(
-			fork.read_exact_at(ByteOffset(fork.len().0), &mut observed[..1]),
-			Err(Error::Bounds(RangeError::OutsideSource))
-		));
-		println!(
-			"{kind:?}: matched {} native bytes across {extents} extents",
-			fork.len().0
+		assert_native_fork(&fork, &directory.join(name));
+	}
+}
+
+fn assert_native_fork<S: ReadAt>(fork: &ResolvedFork<'_, S>, expected_path: &Path)
+where
+	S::Error: Debug,
+{
+	let extents = fork.extents().count();
+	assert!(extents >= MIN_EXTENTS_WITH_TWO_CONTINUATIONS);
+	assert_eq!(fork.len(), ByteLen(NATIVE_FORK_BYTES));
+	let mut native = File::open(expected_path).unwrap();
+	assert_eq!(native.metadata().unwrap().len(), fork.len().0);
+	let mut observed = [0; FULL_READ_BYTES];
+	let mut expected = [0; FULL_READ_BYTES];
+	for offset in (0..fork.len().0).step_by(FULL_READ_BYTES) {
+		let count = usize::try_from((fork.len().0 - offset).min(FULL_READ_BYTES as u64)).unwrap();
+		fork.read_exact_at(ByteOffset(offset), &mut observed[..count])
+			.unwrap();
+		native.read_exact(&mut expected[..count]).unwrap();
+		assert_eq!(
+			&observed[..count],
+			&expected[..count],
+			"{} at {offset}",
+			expected_path.display()
 		);
 	}
+	assert_eq!(native.read(&mut observed[..1]).unwrap(), 0);
+	assert!(matches!(
+		fork.read_exact_at(ByteOffset(fork.len().0), &mut observed[..1]),
+		Err(Error::Bounds(RangeError::OutsideSource))
+	));
+	println!(
+		"{}: matched {} native bytes across {extents} extents",
+		expected_path.file_name().unwrap().display(),
+		fork.len().0
+	);
 }
 
 #[test]

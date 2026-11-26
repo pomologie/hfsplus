@@ -119,8 +119,8 @@
       "scenario": "Read native-generated volume with nested dirs, fragmented/overflow data, hardlinks and attrs; compare bytes/name metadata; no host resolution.",
       "oracle": "native mounted tree; hfsplus reader",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/READ.md"
     },
     {
       "id": "H-READ-02-T01",
