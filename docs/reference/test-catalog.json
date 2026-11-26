@@ -515,8 +515,8 @@
       "scenario": "Native volume with fragmented file and resource fork",
       "oracle": "native reader",
       "expected": "Logical bytes match native data and fork",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/READ.md"
     },
     {
       "id": "H-READ-02-T02",

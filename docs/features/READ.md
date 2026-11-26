@@ -16,6 +16,14 @@ Call `Volume::check_structure_with_folder_counts` when a caller needs to regener
 
 Stored forks opened through `RegularFile::open_stored_fork` own their extent mapping and borrow the volume. The caller can release the catalog and lookup record before streaming either fork. The H-READ-01-T01 regression reads both forks from a native hard link after those scoped objects have been released. [Stored fork lifetime regression](../../crates/filesystem/hfsplus-reader/tests/hard_links/fork_lifetime.rs)
 
+H-READ-01-T02 passed on macOS 14.7.2 arm64 (23H311) with Rust 1.99.1. Apple generated a disposable 64 MiB nonjournaled HFS+ volume. Alternating and synchronizing 256 KiB writes created 20 extents in each of the data and resource forks. Apple's no-write `fsck_hfs` hfs-650.140.2 accepted the volume, and its read-only mount returned the complete synthetic inputs. The Rust reader located the file through its public catalog API and matched all 5,242,880 bytes of each fork against those mounted captures. It also returned a typed bounds error for a one-byte read at each fork's logical end. [Full replay test](../../crates/filesystem/hfsplus-reader/tests/native_overflow.rs)
+
+The regenerated data and resource fork digests matched the original records in the sparse fixture provenance. That checked-in fixture retains boundary samples, while the opt-in replay compares whole forks from the newly generated image. The raw replay SHA-256 was `87e4e00cdb1d13c19ad7596a3390446b8f1721f140acd5f299f17053400e078b`. The script removes generated images and captures after detaching them. [Sparse fixture provenance](../../crates/filesystem/hfsplus-reader/tests/fixtures/native-overflow.json) · [Native replay](../../crates/filesystem/hfsplus-reader/verification/check-fragmented-forks.py)
+
+```sh
+python3 -B crates/filesystem/hfsplus-reader/verification/check-fragmented-forks.py
+```
+
 `Catalog::symlink` admits a visible native symbolic link and reports its target size before reading the data fork. The target must fit both the caller's byte budget and the native profile. `Symlink::read` returns the exact nonempty, NUL-free stored bytes and never resolves the referent. [Catalog tests](../../crates/filesystem/hfsplus-reader/tests/catalog.rs)
 
 `Catalog::macos_finder_info` projects FinderInfo for a public catalog ID using the effective metadata of a regular hard-link inode. It masks private catalog fields and the stored symbolic-link type and creator, reports an all-zero result as an absent attribute, and reports missing or inaccessible owners separately. Raw FinderInfo remains available in catalog metadata for image preservation. [Projection tests](../../crates/filesystem/hfsplus-reader/src/catalog/finder_info/tests.rs)

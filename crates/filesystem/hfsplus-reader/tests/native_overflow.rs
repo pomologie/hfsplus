@@ -1,4 +1,6 @@
-//! H-READ-01-T01 fragmented-fork witness.
+//! Native fragmented-fork witnesses for H-READ-01-T01 and H-READ-01-T02.
+
+use std::{env, fs::File, io::Read, path::PathBuf};
 
 use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt};
 use hfsplus_format::{
@@ -7,8 +9,12 @@ use hfsplus_format::{
 };
 use hfsplus_reader::{
 	Error, SpecialFile, Volume,
+	catalog::{CatalogLimits, EntryKind, ROOT_ID},
 	overflow::{ForkKind, OverflowLimits},
 };
+
+#[path = "catalog/hosted.rs"]
+mod hosted;
 
 const NATIVE: &[u8] = include_bytes!("fixtures/native-overflow.bin");
 const NATIVE_RECORD_INDEX: usize = 4;
@@ -17,6 +23,66 @@ const NATIVE_FORK_BYTES: u64 = 5 * 1024 * 1024;
 const NATIVE_CHUNK_BYTES: u64 = 256 * 1024;
 const NATIVE_CONTINUATION_CHUNKS: [u64; 2] = [8, 16];
 const SAMPLE_BYTES: usize = 16;
+const FULL_WITNESS_ENV: &str = "POMOLOGIE_FULL_FORK_WITNESS";
+const FILE_NAME: &str = "fragmented";
+const FULL_READ_BYTES: usize = 64 * 1024 + 17;
+const MIN_EXTENTS_WITH_TWO_CONTINUATIONS: usize = 17;
+
+#[test]
+#[ignore = "requires the disposable Apple native volume and mounted fork captures"]
+fn native_full_forks_match_mounted_bytes() {
+	let directory = PathBuf::from(env::var_os(FULL_WITNESS_ENV).unwrap());
+	let raw = hosted::FixtureFile::open(&directory.join("native.cdr")).unwrap();
+	let volume = Volume::open(raw).unwrap();
+	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
+	let entry = catalog.lookup(ROOT_ID, FILE_NAME).unwrap().unwrap();
+	let EntryKind::File { data, resource } = entry.kind else {
+		panic!("expected the native fragmented regular file");
+	};
+
+	let mut observed = [0; FULL_READ_BYTES];
+	let mut expected = [0; FULL_READ_BYTES];
+	for (kind, descriptor, name) in [
+		(ForkKind::Data, data, "data.bin"),
+		(ForkKind::Resource, resource, "resource.bin"),
+	] {
+		assert!(descriptor.has_overflow());
+		let fork = volume
+			.open_fork(
+				entry.metadata.id,
+				kind,
+				&descriptor,
+				OverflowLimits::default(),
+			)
+			.unwrap();
+		let extents = fork.extents().count();
+		assert!(extents >= MIN_EXTENTS_WITH_TWO_CONTINUATIONS);
+		assert_eq!(fork.len(), ByteLen(NATIVE_FORK_BYTES));
+		let mut native = File::open(directory.join(name)).unwrap();
+		assert_eq!(native.metadata().unwrap().len(), fork.len().0);
+		for offset in (0..fork.len().0).step_by(FULL_READ_BYTES) {
+			let count =
+				usize::try_from((fork.len().0 - offset).min(FULL_READ_BYTES as u64)).unwrap();
+			fork.read_exact_at(ByteOffset(offset), &mut observed[..count])
+				.unwrap();
+			native.read_exact(&mut expected[..count]).unwrap();
+			assert_eq!(
+				&observed[..count],
+				&expected[..count],
+				"{kind:?} at {offset}"
+			);
+		}
+		assert_eq!(native.read(&mut observed[..1]).unwrap(), 0);
+		assert!(matches!(
+			fork.read_exact_at(ByteOffset(fork.len().0), &mut observed[..1]),
+			Err(Error::Bounds(RangeError::OutsideSource))
+		));
+		println!(
+			"{kind:?}: matched {} native bytes across {extents} extents",
+			fork.len().0
+		);
+	}
+}
 
 #[test]
 fn native_data_and_resource_forks_cross_both_continuations() {
