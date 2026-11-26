@@ -287,8 +287,133 @@ fn rejects_invalid_node_geometry_and_records_before_writing() {
 		Node::record_capacity(SMALL_NODE_BYTES, usize::MAX),
 		Err(Error::InvalidNode)
 	);
+	for unsupported_size in [SMALL_NODE_BYTES - 1, SMALL_NODE_BYTES + 1] {
+		assert_eq!(
+			Node::record_capacity(unsupported_size, 1),
+			Err(Error::InvalidNode)
+		);
+	}
+}
+
+#[test]
+fn offset_table_budget_includes_the_descriptor_even_without_record_bytes() {
+	const RECORDS_AT_DESCRIPTOR_BOUNDARY: usize = 248;
+	const RECORDS_BEYOND_NODE: usize = 256;
+
 	assert_eq!(
-		Node::record_capacity(SMALL_NODE_BYTES + 1, 1),
-		Err(Error::InvalidNode)
+		Node::record_capacity(SMALL_NODE_BYTES, RECORDS_AT_DESCRIPTOR_BOUNDARY - 1),
+		Ok(size_of::<u16>()),
 	);
+	assert_eq!(
+		Node::record_capacity(SMALL_NODE_BYTES, RECORDS_AT_DESCRIPTOR_BOUNDARY),
+		Ok(0),
+	);
+	for count in [RECORDS_AT_DESCRIPTOR_BOUNDARY + 1, RECORDS_BEYOND_NODE] {
+		assert_eq!(
+			Node::record_capacity(SMALL_NODE_BYTES, count),
+			Err(Error::InvalidNode),
+		);
+	}
+}
+
+#[test]
+fn typed_header_rejects_layout_and_topology_outside_its_node_budget() {
+	const FORK_NODES: u32 = 3;
+	const FIRST_LEAF: NodeId = NodeId(1);
+	const NODE_WIDTH: u16 = SMALL_NODE_BYTES as u16;
+	const TOO_MANY_LEVELS: u16 = u8::MAX as u16 + 1;
+
+	let layout = TreeLayout {
+		node_bytes: NODE_WIDTH,
+		max_key_bytes: 10,
+		total_nodes: FORK_NODES,
+		free_nodes: 1,
+	};
+	let topology = TreeTopology {
+		depth: u16::from(LEAF_HEIGHT),
+		root: Some(FIRST_LEAF),
+		leaf_records: 1,
+		first_leaf: Some(FIRST_LEAF),
+		last_leaf: Some(FIRST_LEAF),
+	};
+	let metadata = TreeMetadata::default();
+	let header = TreeHeader::new(layout, topology, metadata).unwrap();
+	assert_eq!(header.free_nodes, 1);
+	assert!(header.encode_record().is_ok());
+
+	for rejected_layout in [
+		TreeLayout {
+			node_bytes: NODE_WIDTH + 1,
+			..layout
+		},
+		TreeLayout {
+			max_key_bytes: NODE_WIDTH,
+			..layout
+		},
+		TreeLayout {
+			free_nodes: FORK_NODES,
+			..layout
+		},
+	] {
+		assert_eq!(
+			TreeHeader::new(rejected_layout, topology, metadata),
+			Err(Error::InvalidNode),
+		);
+	}
+	for rejected_topology in [
+		TreeTopology {
+			depth: TOO_MANY_LEVELS,
+			..topology
+		},
+		TreeTopology {
+			last_leaf: Some(NodeId(FORK_NODES)),
+			..topology
+		},
+		TreeTopology {
+			root: None,
+			..topology
+		},
+		TreeTopology {
+			leaf_records: 0,
+			..topology
+		},
+		TreeTopology {
+			leaf_records: 1,
+			..TreeTopology::default()
+		},
+	] {
+		assert_eq!(
+			TreeHeader::new(layout, rejected_topology, metadata),
+			Err(Error::InvalidNode),
+		);
+	}
+}
+
+#[test]
+fn typed_node_admission_refuses_inconsistent_levels_and_header_record_count() {
+	const SENTINEL: u8 = 0xa5;
+	let native_header = Node::decode(NATIVE_CATALOG_HEADER).unwrap();
+	let header_records: Vec<_> = native_header.records().collect();
+	let index_records: [&[u8]; 2] = [&[0, 2, 0, 1, 0, 0, 0, 8], &[0, 2, 0, 2, 0, 0, 0, 9]];
+	let map_bytes = vec![0; Node::continuation_map_bytes(NATIVE_CATALOG_HEADER.len()).unwrap()];
+	let map_records: [&[u8]; 1] = [&map_bytes];
+	let mut destination = vec![SENTINEL; NATIVE_CATALOG_HEADER.len()];
+	for (kind, height, records) in [
+		(Kind::Index, LEAF_HEIGHT, index_records.as_slice()),
+		(Kind::Map, LEAF_HEIGHT, map_records.as_slice()),
+		(Kind::Header, LEAF_HEIGHT, header_records.as_slice()),
+		(Kind::Header, METADATA_NODE_HEIGHT, &header_records[..2]),
+	] {
+		assert_eq!(
+			Node::encode(
+				&mut destination,
+				kind,
+				height,
+				NodeLinks::default(),
+				records
+			),
+			Err(Error::InvalidNode),
+		);
+		assert!(destination.iter().all(|&byte| byte == SENTINEL));
+	}
 }
