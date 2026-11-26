@@ -36,6 +36,14 @@ HFS+ property cases checked: {PROPERTY_CASES}
 
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.08s
 """
+FAULT_TRANSCRIPT = """cargo 1.99.1
+rustc 1.99.1
+running 2 tests
+test retry ... ok
+test source_failure ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.01s
+"""
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
@@ -91,26 +99,29 @@ class ReleaseEvidenceTests(unittest.TestCase):
         self.bundle.write_text(json.dumps(records), encoding="utf-8")
         return validate(self.root, self.bundle, requested_profile)
 
+    def set_rust_profile(self, name, method, harnesses):
+        profile = self.policy["profiles"].pop(PROFILE)
+        profile.update(
+            method=method, command=["bash", "check-rust-tests.sh"],
+            tool_versions={"cargo": "1.99.1", "rustc": "1.99.1"},
+            harnesses=harnesses,
+        )
+        self.policy["profiles"][name] = profile
+        self.registry["methods"][method] = f"{method} checks"
+        self.registry["obligations"][0]["required_methods"] = [method]
+        self.commit_policy()
+        self.record.update(
+            commit=self.commit, source_hash=self.digest, profile=name,
+            method=method, command=profile["command"], tool_versions=profile["tool_versions"],
+        )
+        self.record.pop("proof")
+
     def test_accepts_matching_candidate_and_transcript(self):
         self.assertEqual(self.check([self.record]), (1, "0.1.0", self.commit))
 
     def test_property_requires_the_exact_successful_test_and_case_count(self):
         property_profile = "sealed-positioned-property"
-        profile = self.policy["profiles"].pop(PROFILE)
-        profile.update(
-            method="property", command=["bash", "check-positioned-reads.sh"],
-            tool_versions={"cargo": "1.99.1", "rustc": "1.99.1"},
-            harnesses={PROPERTY_TEST: PROPERTY_CASES},
-        )
-        self.policy["profiles"][property_profile] = profile
-        self.registry["methods"]["property"] = "property checks"
-        self.registry["obligations"][0]["required_methods"] = ["property"]
-        self.commit_policy()
-        self.record.update(
-            commit=self.commit, source_hash=self.digest, profile=property_profile,
-            method="property", command=profile["command"], tool_versions=profile["tool_versions"],
-        )
-        self.record.pop("proof")
+        self.set_rust_profile(property_profile, "property", {PROPERTY_TEST: PROPERTY_CASES})
         self.set_transcript(PROPERTY_TRANSCRIPT)
         self.assertEqual(self.check([self.record], property_profile), (1, "0.1.0", self.commit))
 
@@ -126,6 +137,18 @@ class ReleaseEvidenceTests(unittest.TestCase):
                 self.set_transcript(PROPERTY_TRANSCRIPT.replace(old, new, 1))
                 with self.assertRaisesRegex(EvidenceError, message):
                     self.check([self.record], property_profile)
+
+    def test_fault_requires_each_exact_successful_test(self):
+        fault_profile = "sealed-stream-faults"
+        self.set_rust_profile(fault_profile, "fault", {"retry": 1, "source_failure": 1})
+        self.set_transcript(FAULT_TRANSCRIPT)
+        self.assertEqual(self.check([self.record], fault_profile), (1, "0.1.0", self.commit))
+        expected = "test source_failure ... ok"
+        for changed in ("", "test other ... ok", "test retry ... ok", "test source_failure ... ignored"):
+            with self.subTest(changed=changed):
+                self.set_transcript(FAULT_TRANSCRIPT.replace(expected, changed))
+                with self.assertRaisesRegex(EvidenceError, "exact fault test"):
+                    self.check([self.record], fault_profile)
 
     def test_archive_digest_ignores_worktree_line_ending_configuration(self):
         (self.root / ".gitattributes").write_text("*.txt text\n", encoding="utf-8")

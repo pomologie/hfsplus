@@ -17,9 +17,9 @@ KANI_SUMMARY = "Manual Harness Summary:"
 KANI_SUCCESS = "VERIFICATION:- SUCCESSFUL"
 KANI_PROPERTIES = re.compile(r"\*\* (\d+) of (\d+) failed(?: \((\d+) unreachable\))?")
 KANI_COVERS = re.compile(r"\*\* (\d+) of (\d+) cover properties satisfied")
-PROPERTY_RESULT = re.compile(r"test (\S+) \.\.\. (ok|FAILED|ignored)")
-PROPERTY_SUMMARY = re.compile(
-    r"test result: ok\. 1 passed; 0 failed; 0 ignored; 0 measured; \d+ filtered out; finished in \d+\.\d+s"
+RUST_TEST_RESULT = re.compile(r"test (\S+) \.\.\. (ok|FAILED|ignored)")
+RUST_TEST_SUMMARY = re.compile(
+    r"test result: ok\. (\d+) passed; 0 failed; 0 ignored; 0 measured; \d+ filtered out; finished in \d+\.\d+s"
 )
 PROPERTY_CASES = "HFS+ property cases checked: "
 
@@ -56,9 +56,7 @@ def verify_kani(transcript, harnesses, versions):
     require(seen == set(harnesses), "missing required Kani harnesses")
 
 
-def verify_property_test(transcript, harnesses, versions):
-    require(len(harnesses) == 1, "property transcript requires one exact test")
-    (name, count), = harnesses.items()
+def verify_rust_tests(transcript, harnesses, versions, method):
     lines = transcript.splitlines()
     for tool in ("cargo", "rustc"):
         observed = [line for line in lines if line.startswith(f"{tool} ")]
@@ -67,15 +65,31 @@ def verify_property_test(transcript, harnesses, versions):
                 f"transcript has the wrong {tool} version")
     starts = [index for index, line in enumerate(lines) if re.fullmatch(r"running \d+ tests?", line)]
     results = [(index, match.groups()) for index, line in enumerate(lines)
-               if (match := PROPERTY_RESULT.fullmatch(line))]
+               if (match := RUST_TEST_RESULT.fullmatch(line))]
     summaries = [index for index, line in enumerate(lines) if line.startswith("test result: ")]
-    require(len(starts) == 1 and lines[starts[0]] == "running 1 test"
-            and len(results) == 1 and results[0][1] == (name, "ok")
-            and len(summaries) == 1 and PROPERTY_SUMMARY.fullmatch(lines[summaries[0]]),
-            "missing, unexpected, or unsuccessful exact property test")
+    count = len(harnesses)
+    start = f"running {count} test" + ("s" if count != 1 else "")
+    summary = RUST_TEST_SUMMARY.fullmatch(lines[summaries[0]]) if len(summaries) == 1 else None
+    require(len(starts) == 1 and lines[starts[0]] == start
+            and len(results) == count and {result for _, result in results} == {(name, "ok") for name in harnesses}
+            and summary and int(summary[1]) == count
+            and all(starts[0] < index < summaries[0] for index, _ in results),
+            f"missing, unexpected, or unsuccessful exact {method} test")
+    return lines, [index for index, _ in results], summaries[0]
+
+
+def verify_property_test(transcript, harnesses, versions):
+    require(len(harnesses) == 1, "property transcript requires one exact test")
+    (name, count), = harnesses.items()
+    lines, results, summary = verify_rust_tests(transcript, harnesses, versions, "property")
     headers = [index for index, line in enumerate(lines) if line == f"---- {name} stdout ----"]
     cases = [index for index, line in enumerate(lines) if line.startswith(PROPERTY_CASES)]
     require(len(headers) == 1 and len(cases) == 1 and cases[0] == headers[0] + 1
-            and starts[0] < results[0][0] < headers[0] < cases[0] < summaries[0]
+            and results[0] < headers[0] < cases[0] < summary
             and lines[cases[0]] == f"{PROPERTY_CASES}{count}",
             "missing or incorrect property case count")
+
+
+def verify_fault_tests(transcript, harnesses, versions):
+    require(all(count == 1 for count in harnesses.values()), "fault transcript requires each exact test once")
+    verify_rust_tests(transcript, harnesses, versions, "fault")
