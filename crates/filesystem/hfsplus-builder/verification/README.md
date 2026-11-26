@@ -26,6 +26,18 @@ H-BUILD-02-T03 passed with two disposable variants of the native small witness. 
 
 H-BUILD-02-T04 passed on macOS 14.7.2 arm64 with Rust 1.99.1. A counting source describes a 10 GiB file with three data bytes and known-zero ranges using constant storage. Sealing read zero payload bytes under a 16-placement limit and a metadata budget of 345,088 bytes. The primary and alternate headers matched the reference geometry of 2,621,528 blocks, including 81 bitmap blocks and two free blocks. Positioned reads matched the three data bytes and a sampled zero range. A complete stream to a nonseekable counting sink read exactly 10 GiB from the source and emitted 10,737,778,688 image bytes with read and write chunks at most 32 KiB. The volume stores the input as one fully allocated data fork. The evidence covers bounded payload construction from a sparse logical source. `cargo test --locked --offline -p hfsplus-builder --test sparse_source` and strict Clippy for that target passed. [Sparse source test](../tests/sparse_source.rs)
 
+## Interleaved data and resource forks
+
+H-BUILD-03-T02 passed on macOS 14.7.2 arm64 (23H311) with Rust 1.99.1. The builder emitted an 8 MiB image with SHA-256 `16af9f39cddb01e6a2a5c182f70879d3a4e26969660cd3f887c6fd40a4d07182`. The independent byte-level reader found 134 unique catalog records at depth two and verified exactly four overflow records under catalog ID `81`. Each fork had eight embedded extents and two continuations at logical blocks `16` and `32`. The independent reader reconstructed both complete payloads from the 20 alternating runs per fork and verified their zero padding. [Oracle](interleaved_fork_oracle.py)
+
+The workspace reader matched each directory scan entry against name and thread lookups, reconciled all allocated blocks, and read both forks byte for byte. Tests also verified typed exhaustion of the placement budget, coalescing an unequal tail, and storing a hard-linked file's overflow under its backing inode ID. No-write `fsck_hfs` 650.140.2 checked the overflow file, catalog hierarchy, and allocation bitmap and reported the volume consistent. The native read-only mount matched all 64 directory names and both complete fork payloads. The canonical raw image replay matched its existing pinned SHA-256. [Fixture and reader tests](../tests/interleaved_forks.rs)
+
+```sh
+env -u TMPDIR python3 -B crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py --interleaved-forks --native-fsck
+```
+
+Omit `--native-fsck` for an independent raw check on any hosted platform.
+
 ## Canonical raw HFS+ image
 
 The [H-BUILD-05-T01 and T02 fixture](../tests/canonical_volume.rs) emits an 8 MiB clean nonjournaled HFS+ volume with fixed geometry and HFS dates, numeric ownership, and modes. Its synthetic app contains a Unicode guide, two names for one regular file, an inline attribute on that shared file, another inline attribute on the guide, a resource fork, and a relative symlink. The fixture never executes the synthetic app. Reversed manifest, link-name and attribute order must preserve the entire volume.

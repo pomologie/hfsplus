@@ -371,11 +371,37 @@ def verify_packed_mount(mount, names):
 	print(f"macOS matched all {len(names)} packed catalog files, both forks, and the maximum inline attribute")
 
 
+def verify_interleaved_forks(root, toolchain, compiler, options):
+	from interleaved_fork_oracle import DIRECTORY, ITEM_COUNT, PAIRED_FILE, check_interleaved_forks, payloads
+
+	image = root / "interleaved.hfs"
+	emit(image, toolchain, compiler, reverse=False, test="interleaved_forks",
+		emitter="emit_interleaved_forks", output_env="POMOLOGIE_INTERLEAVED_FORK_OUTPUT")
+	print(f"Interleaved image SHA-256 {image_digest(image)}")
+	check_interleaved_forks(image)
+	if options.native_fsck:
+		wrapped = wrap_and_check(image)
+		mount = root / "mount"
+		mount.mkdir()
+		with mounted_read_only(wrapped, mount, owners="off"):
+			catalog = sorted((mount / DIRECTORY).iterdir())
+			expected_names = [f"item-{index:02}" for index in range(ITEM_COUNT)]
+			if [file.name for file in catalog] != expected_names or any(file.stat().st_size for file in catalog):
+				raise ValueError("native catalog does not match the interleaved image manifest")
+			file = mount / PAIRED_FILE
+			data, resource = payloads()
+			if file.read_bytes() != data or (file / "..namedfork" / "rsrc").read_bytes() != resource:
+				raise ValueError("native data or resource fork differs from the interleaved fixture")
+			print(f"macOS matched all {ITEM_COUNT} directory names and both complete fragmented forks")
+
+
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--seven-zip", metavar="COMMAND", help="independent 7-Zip CLI command or path")
 	parser.add_argument("--native-fsck", action="store_true", help="check the disposable image on macOS")
-	parser.add_argument("--packed-catalog", action="store_true", help="check the 256 MiB catalog-map witness")
+	profile = parser.add_mutually_exclusive_group()
+	profile.add_argument("--packed-catalog", action="store_true", help="check the 256 MiB catalog-map witness")
+	profile.add_argument("--interleaved-forks", action="store_true", help="check the interleaved fork witness")
 	options = parser.parse_args()
 	if options.native_fsck and sys.platform != "darwin":
 		parser.error("--native-fsck requires macOS")
@@ -388,6 +414,9 @@ def main():
 			if options.packed_catalog:
 				verify_packed_catalog(root, toolchain, compiler, options)
 				return 0
+			if options.interleaved_forks:
+				verify_interleaved_forks(root, toolchain, compiler, options)
+				return 0
 			baseline = root / "canonical.hfs"
 			for path, reverse in ((baseline, False), (root / "reordered.hfs", True)):
 				emit(path, toolchain, compiler, reverse=reverse)
@@ -398,7 +427,7 @@ def main():
 				verify_mounted_image(baseline, wrap_and_check(baseline))
 			if options.seven_zip or options.native_fsck:
 				verify_frozen_draft(root, toolchain, compiler, options)
-	except (OSError, KeyError, ValueError, subprocess.TimeoutExpired) as error:
+	except (OSError, KeyError, ValueError, struct.error, subprocess.TimeoutExpired) as error:
 		print(error, file=sys.stderr)
 		return 1
 	return 0

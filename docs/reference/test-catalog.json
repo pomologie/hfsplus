@@ -455,8 +455,8 @@
       "scenario": "Packed catalog requiring multiple levels and extents-overflow entries",
       "oracle": "independent reader and fsck",
       "expected": "Every record reachable exactly once, search and scan agree",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-03-T03",
