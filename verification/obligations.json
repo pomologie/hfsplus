@@ -72,9 +72,9 @@
         "H-FMT-03",
         "H-BUILD-01"
       ],
-      "target": "hfsplus-format / historical comparison key",
+      "target": "hfsplus-pomologie-core name keys, hfsplus-builder planner, and hfsplus-reader catalog lookup",
       "property": "Name canonicalization is idempotent on admitted names; sibling equality agrees with historical HFS+ profile; comparator antisymmetry/transitivity, sorting and lookup agree; collisions rejected.",
-      "assumptions_and_initial_bounds": "Published historical tables/exclusions + native corpus; comparator laws cannot prove table fidelity alone; exhaustive pairs in selected alphabet + randomized Unicode.",
+      "assumptions_and_initial_bounds": "Exhaustive ordered triples for 94 kernel and 92 scalar canonical names, 4,096 seeded triples, planner ordering and 1,024 lookups across 16 exact separators. Live CoreServices checks 65,536 UTF-16 units, 40,000 seeded pairs and 76 directed pairs. One mounted 64 MiB HFS+ image supplies the native name corpus.",
       "required_methods": [
         "property",
         "differential",
@@ -82,8 +82,8 @@
       ],
       "negative_witness": "generic modern Unicode folding accepts an HFS+ collision",
       "mandatory_when_activated": true,
-      "status": "planned",
-      "evidence": []
+      "status": "pass",
+      "evidence": ["verification/README.md"]
     },
     {
       "id": "H-V04",

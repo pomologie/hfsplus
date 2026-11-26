@@ -61,12 +61,12 @@ H-VER-01-T01 remains open. Five of these files fall below at least one proposed 
 **Evidence:** kani, property, fuzz, differential, native; status planned.
 
 ### H-V03 — names
-**Target:** hfsplus-format / historical comparison key.\
+**Target:** hfsplus-pomologie-core name keys, hfsplus-builder planner, and hfsplus-reader catalog lookup.\
 **Property:** Name canonicalization is idempotent on admitted names; sibling equality agrees with historical HFS+ profile; comparator antisymmetry/transitivity, sorting and lookup agree; collisions rejected.\
-**Assumptions and initial bounds:** Published historical tables/exclusions + native corpus; comparator laws cannot prove table fidelity alone; exhaustive pairs in selected alphabet + randomized Unicode.\
+**Assumptions and initial bounds:** Exhaustive ordered triples for 94 kernel and 92 scalar canonical names, 4,096 seeded triples, planner ordering and 1,024 lookups across 16 exact separators. Live CoreServices checks 65,536 UTF-16 units, 40,000 seeded pairs and 76 directed pairs. One mounted 64 MiB HFS+ image supplies the native name corpus.\
 **Negative witness:** generic modern Unicode folding accepts an HFS+ collision.\
 **Requirement links:** H-FMT-03, H-BUILD-01.\
-**Evidence:** property, differential, native; status planned.
+**Evidence:** All three configured methods passed on clean revision `84a365f` within their recorded bounds. [Historical name evidence](../../verification/README.md#historical-name-release-evidence)
 
 ### H-V04 — metadata/forks/links
 **Target:** hfsplus-format, hfsplus-reader / forks and link resolver.\

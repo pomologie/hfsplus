@@ -18,6 +18,8 @@ python3 -B tools/check_release_evidence.py --root . --profile format-kani --bund
 
 Use `--profile btree-offset-kani` with a record of `bash crates/formats/hfsplus-format/verification/check-btree-offsets.sh` to check the offset-table proofs independently. The [format verification guide](../crates/formats/hfsplus-format/verification/README.md#btree-offset-tables) describes the assumptions and scope.
 
+### Historical name release evidence
+
 The H-V03 `names-property` profile binds exhaustive ordered triples under both normalization policies and both comparators, 4,096 seeded Unicode triples, planner ordering, and 16 exact index separators with 1,024 seeded lookups. The `names-differential` profile binds the live CoreServices HFS Extended oracle, the pinned Unicode tables, the optical name fixtures and the historical Georgian collision. The `names-native` profile binds the mounted 64 MiB HFS+ capture, successful detach, raw catalog key order, and the separate Rust fixture replay. Use the CoreServices pair TSV hash for the differential record's `fixture_hash` and the mounted name TSV hash for the native record's `fixture_hash`. [Name evidence and fixture provenance](../crates/foundation/hfsplus-pomologie-core/UNICODE32.md)
 
 ```sh
@@ -25,6 +27,16 @@ python3 -B crates/foundation/hfsplus-pomologie-core/verification/check-name-evid
 python3 -B crates/foundation/hfsplus-pomologie-core/verification/check-name-evidence.py differential
 env -u TMPDIR python3 -B crates/foundation/hfsplus-pomologie-core/verification/check-name-evidence.py native
 ```
+
+All three profiles passed the release checker at clean revision `84a365fff0eba8b353f824aebb9022fc48cd4179` on arm64 macOS 14.7.2 (23H311). The Git archive SHA-256 was `9e850e86c182eca023fd32733a24b8e4ec9f3a4249e6160637e606b84eb827bc`. The local evidence directory is `target/verification-evidence/v0.1.0/84a365f-names/` and its `bundle.json` SHA-256 is `761c5bc01421ca1dc170ae77090237236bfccc4e28b9a9d2b06a1f7385ddc9bd`. For an individual check, set `--bundle` to `property.json`, `differential.json`, or `native.json` in that directory and select the corresponding `--profile`.
+
+| Profile | Observed scope |
+| --- | --- |
+| `names-property` | 3,218,544 ordered comparisons across the historical corpora, 4,096 seeded triples, stable planner IDs and catalog order, 198 leaf records, and 1,024 seeded lookups. |
+| `names-differential` | 65,536 CoreServices singleton weights, 329 override checks, 16 ignorables, 40,000 seeded pairs, 76 directed pairs, and the historical Georgian collision distinguished from Unicode 16.0.0 folding. |
+| `names-native` | 63 normalization observations, 20 lookup pairs, six name-length cases, 25 ordered catalog keys, ten path observations, three mapped keys, and successful detach. |
+
+### Allocation and sealed output
 
 Use `--profile fresh-allocation-kani` with a record of `bash crates/filesystem/hfsplus-builder/verification/check-allocation.sh` to check the two bitmap and two reservation transition proofs independently. Each harness must reach both covers. [Builder verification guide](../crates/filesystem/hfsplus-builder/verification/README.md)
 
