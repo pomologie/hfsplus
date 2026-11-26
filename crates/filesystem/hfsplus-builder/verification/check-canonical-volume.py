@@ -380,9 +380,14 @@ def verify_interleaved_forks(root, toolchain, compiler, options):
 	image = root / "interleaved.hfs"
 	emit(image, toolchain, compiler, reverse=False, test="interleaved_forks",
 		emitter="emit_interleaved_forks", output_env="POMOLOGIE_INTERLEAVED_FORK_OUTPUT")
-	print(f"Interleaved image {image.stat().st_size} bytes SHA-256 {image_digest(image)}")
+	digest = image_digest(image)
+	print(f"Interleaved image {image.stat().st_size} bytes SHA-256 {digest}")
 	check_interleaved_forks(image)
-	if options.native_fsck:
+	if options.interleaved_fsck_only:
+		from readonly_fsck_oracle import verify_readonly_fsck
+
+		verify_readonly_fsck(image, digest, run)
+	elif options.native_fsck:
 		wrapped = wrap_and_check(image)
 		mount = root / "mount"
 		mount.mkdir()
@@ -430,10 +435,13 @@ def main():
 	profile = parser.add_mutually_exclusive_group()
 	profile.add_argument("--packed-catalog", action="store_true", help="check the 256 MiB catalog-map witness")
 	profile.add_argument("--interleaved-forks", action="store_true", help="check the interleaved fork witness")
+	profile.add_argument("--interleaved-fsck-only", action="store_true", help="check the interleaved image without mounting it")
 	profile.add_argument("--metadata-dates", action="store_true", help="check native timestamp projection")
 	options = parser.parse_args()
-	if (options.native_fsck or options.metadata_dates) and sys.platform != "darwin":
+	if (options.native_fsck or options.metadata_dates or options.interleaved_fsck_only) and sys.platform != "darwin":
 		parser.error("native volume checks require macOS")
+	if options.interleaved_fsck_only and options.native_fsck:
+		parser.error("--interleaved-fsck-only cannot be combined with --native-fsck")
 	try:
 		with (ROOT / "rust-toolchain.toml").open("rb") as config:
 			toolchain = tomllib.load(config)["toolchain"]["channel"]
@@ -443,7 +451,7 @@ def main():
 			if options.packed_catalog:
 				verify_packed_catalog(root, toolchain, compiler, options)
 				return 0
-			if options.interleaved_forks:
+			if options.interleaved_forks or options.interleaved_fsck_only:
 				verify_interleaved_forks(root, toolchain, compiler, options)
 				return 0
 			if options.metadata_dates:

@@ -131,6 +131,28 @@
       "harnesses": {
         "interleaved-forks": 1
       }
+    },
+    "sealed-image-native": {
+      "obligation": "H-V07",
+      "method": "native",
+      "features": [],
+      "command": ["env", "-u", "TMPDIR", "python3", "-B", "crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py", "--interleaved-fsck-only"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0", "fsck_hfs": "650.140.2"},
+      "bounds": {
+        "image_bytes": 8388608,
+        "image_sha256": "16af9f39cddb01e6a2a5c182f70879d3a4e26969660cd3f887c6fd40a4d07182",
+        "catalog_records": 134,
+        "catalog_depth": 2,
+        "continuation_keys": [[0, 16], [0, 32], [255, 16], [255, 32]],
+        "fork_lengths_bytes": [159761, 159775],
+        "volume_label": "Interleaved Forks",
+        "native_subprocess_timeout_seconds": 30,
+        "attachment_argv": ["/usr/bin/hdiutil", "attach", "-readonly", "-nomount", "-nobrowse", "-noautoopen", "-plist", "-imagekey", "diskimage-class=CRawDiskImage", "<fixture>"],
+        "fsck_argv": ["/sbin/fsck_hfs", "-fn"]
+      },
+      "harnesses": {
+        "interleaved-forks": 1
+      }
     }
   }
 }
