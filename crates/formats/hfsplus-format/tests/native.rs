@@ -1,7 +1,7 @@
 use hfsplus_format::{
 	Error,
 	btree::{Kind, Node},
-	volume::{AllocationBlock, Header, Signature},
+	volume::{ALTERNATE_HEADER_FROM_END, AllocationBlock, Header, Signature},
 };
 
 const PRIMARY: &[u8] = include_bytes!("fixtures/native-primary.bin");
@@ -9,6 +9,67 @@ const ALTERNATE: &[u8] = include_bytes!("fixtures/native-alternate.bin");
 const CATALOG_HEADER: &[u8] = include_bytes!("fixtures/native-catalog-header.bin");
 const CATALOG_LEAF: &[u8] = include_bytes!("fixtures/native-catalog-leaf.bin");
 const RAW_SIZE: u64 = 8 * 1024 * 1024;
+
+#[test]
+fn admits_native_header_matrix_and_rejects_changed_geometry() {
+	const INVALID_SIGNATURE: [u8; 2] = *b"XX";
+	const ALLOCATION_BLOCK_BYTES_OFFSET: usize = 40;
+	const TOTAL_BLOCKS_OFFSET: usize = 44;
+	const CATALOG_FIRST_START_OFFSET: usize = 288;
+	const CATALOG_FIRST_COUNT_OFFSET: usize = 292;
+	const ALLOCATION_BLOCK_BYTES: u32 = 4096;
+	let fixtures = [
+		(
+			include_bytes!("fixtures/native-512k-primary.bin"),
+			524_288,
+			128u32,
+		),
+		(
+			include_bytes!("fixtures/native-8m-primary.bin"),
+			8_388_608,
+			2048,
+		),
+		(
+			include_bytes!("fixtures/native-128m-primary.bin"),
+			134_217_728,
+			32_768,
+		),
+	];
+	for (bytes, image_bytes, blocks) in fixtures {
+		let header = Header::decode(bytes, image_bytes).unwrap();
+		assert_eq!(header.signature, Signature::HfsPlus);
+		assert!(header.unmounted_cleanly());
+		assert_eq!(header.journal_info, None);
+		assert_eq!(header.geometry.block_size(), ALLOCATION_BLOCK_BYTES);
+		assert_eq!(header.geometry.total_blocks(), blocks);
+		assert_eq!(header.geometry.allocation_bytes(), image_bytes);
+		assert_eq!(
+			header.geometry.alternate_header_offset(),
+			image_bytes - ALTERNATE_HEADER_FROM_END,
+		);
+
+		let mut bad_signature = *bytes;
+		bad_signature[..INVALID_SIGNATURE.len()].copy_from_slice(&INVALID_SIGNATURE);
+		assert_eq!(
+			Header::decode(&bad_signature, image_bytes),
+			Err(Error::InvalidSignature)
+		);
+		assert_eq!(
+			Header::decode(bytes, image_bytes - 1),
+			Err(Error::InvalidGeometry)
+		);
+		for (offset, value, expected) in [
+			(ALLOCATION_BLOCK_BYTES_OFFSET, 0, Error::InvalidGeometry),
+			(TOTAL_BLOCKS_OFFSET, blocks + 1, Error::InvalidGeometry),
+			(CATALOG_FIRST_START_OFFSET, blocks, Error::InvalidFork),
+			(CATALOG_FIRST_COUNT_OFFSET, blocks + 1, Error::InvalidFork),
+		] {
+			let mut malformed = *bytes;
+			malformed[offset..][..size_of::<u32>()].copy_from_slice(&value.to_be_bytes());
+			assert_eq!(Header::decode(&malformed, image_bytes), Err(expected));
+		}
+	}
+}
 
 #[test]
 fn decodes_native_primary_and_alternate_headers() {

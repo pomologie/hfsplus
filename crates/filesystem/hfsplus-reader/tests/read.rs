@@ -1,4 +1,7 @@
-use std::cell::{Cell, RefCell};
+use std::{
+	cell::{Cell, RefCell},
+	collections::BTreeSet,
+};
 
 use hfsplus_core::{ByteLen, ByteOffset, RangeError, ReadAt};
 use hfsplus_format::{
@@ -136,9 +139,17 @@ fn identifies_alternate_copies_without_using_them_for_fork_reads() {
 	let mut old = primary;
 	old.writes = primary.writes + 1;
 	image[alternate_range.clone()].copy_from_slice(&old.encode().unwrap());
-	let volume = Volume::open(image.as_slice()).unwrap();
+	let source = InstrumentedSource::new(&image);
+	let volume = Volume::open(&source).unwrap();
 	assert_eq!(volume.header(), &primary);
 	assert_eq!(volume.alternate_header(), AlternateHeader::Differs(&old));
+	assert_eq!(
+		&*source.reads.borrow(),
+		&[
+			(ByteOffset(PRIMARY_HEADER_OFFSET), HEADER_BYTES),
+			(ByteOffset(alternate_start as u64), HEADER_BYTES),
+		],
+	);
 	assert!(volume.open_special_fork(SpecialFile::Catalog).is_ok());
 
 	image[alternate_range.clone()].fill(0);
@@ -300,16 +311,27 @@ enum Fault {
 	ShortRead,
 }
 
-struct InstrumentedSource {
+struct InstrumentedSource<'a> {
+	bytes: &'a [u8],
 	failure: Cell<Option<(ByteOffset, Fault)>>,
 	reads: RefCell<Vec<(ByteOffset, usize)>>,
 }
 
-impl ReadAt for InstrumentedSource {
+impl<'a> InstrumentedSource<'a> {
+	fn new(bytes: &'a [u8]) -> Self {
+		Self {
+			bytes,
+			failure: Cell::new(None),
+			reads: RefCell::default(),
+		}
+	}
+}
+
+impl ReadAt for InstrumentedSource<'_> {
 	type Error = Fault;
 
 	fn len(&self) -> ByteLen {
-		OPTICAL.len().into()
+		self.bytes.len().into()
 	}
 
 	fn read_exact_at(&self, offset: ByteOffset, destination: &mut [u8]) -> Result<(), Self::Error> {
@@ -319,18 +341,73 @@ impl ReadAt for InstrumentedSource {
 		{
 			return Err(error);
 		}
-		OPTICAL
+		self.bytes
 			.read_exact_at(offset, destination)
 			.map_err(Fault::UnchangedBounds)
 	}
 }
 
 #[test]
+fn verifies_catalog_fork_coverage_before_reading_native_volume() {
+	// These values come from the native raw fixture, independent of Header::decode.
+	const BLOCK_BYTES: u64 = 2048;
+	const VOLUME_BLOCKS: u32 = 10;
+	const CATALOG_BLOCKS: u32 = 4;
+	const CATALOG_START: u32 = 1;
+	const LOGICAL_BYTES: u64 = 8192;
+	const CATALOG_LOGICAL_BYTES_OFFSET: usize = PRIMARY + 272;
+	const CATALOG_FIRST_EXTENT_OFFSET: usize = CATALOG_LOGICAL_BYTES_OFFSET + 16;
+	const NATIVE_ALTERNATE: u64 = 19_456;
+
+	let available: BTreeSet<_> = (0..u64::from(VOLUME_BLOCKS)).collect();
+	let cases = [
+		(CATALOG_START, LOGICAL_BYTES),
+		(VOLUME_BLOCKS - 1, LOGICAL_BYTES),
+		(u32::MAX, LOGICAL_BYTES),
+		(CATALOG_START, LOGICAL_BYTES + 1),
+	];
+	for (start, logical_bytes) in cases {
+		let first = u64::from(start);
+		let end = first + u64::from(CATALOG_BLOCKS);
+		let claimed: BTreeSet<_> = (first..end).collect();
+		let covered =
+			claimed.is_subset(&available) && logical_bytes <= claimed.len() as u64 * BLOCK_BYTES;
+
+		let mut image = OPTICAL.to_vec();
+		image[CATALOG_LOGICAL_BYTES_OFFSET..][..size_of::<u64>()]
+			.copy_from_slice(&logical_bytes.to_be_bytes());
+		image[CATALOG_FIRST_EXTENT_OFFSET..][..size_of::<u32>()]
+			.copy_from_slice(&start.to_be_bytes());
+		let source = InstrumentedSource::new(&image);
+		let primary_read = (ByteOffset(PRIMARY_HEADER_OFFSET), HEADER_BYTES);
+		match Volume::open(&source) {
+			Ok(volume) => {
+				assert!(covered, "admitted uncovered catalog extent or logical size");
+				let catalog = volume.open_special_fork(SpecialFile::Catalog).unwrap();
+				let mut prefix = [0; BTREE_PROBE_BYTES];
+				catalog.read_exact_at(ByteOffset(0), &mut prefix).unwrap();
+				assert_eq!(TreeHeader::node_size_hint(&prefix), Ok(4096));
+				assert_eq!(
+					&*source.reads.borrow(),
+					&[
+						primary_read,
+						(ByteOffset(NATIVE_ALTERNATE), HEADER_BYTES),
+						(ByteOffset(first * BLOCK_BYTES), BTREE_PROBE_BYTES),
+					],
+				);
+			}
+			Err(error) => {
+				assert!(!covered, "native fixture rejected: {error:?}");
+				assert!(matches!(error, Error::Format(FormatError::InvalidFork)));
+				assert_eq!(&*source.reads.borrow(), &[primary_read]);
+			}
+		}
+	}
+}
+
+#[test]
 fn discovery_is_bounded_and_source_failures_preserve_offset_and_cause() {
-	let source = InstrumentedSource {
-		failure: Cell::new(None),
-		reads: RefCell::default(),
-	};
+	let source = InstrumentedSource::new(OPTICAL);
 	let volume = Volume::open(&source).unwrap();
 	let geometry = volume.header().geometry;
 	let alternate = ByteOffset(geometry.alternate_header_offset());
@@ -361,4 +438,29 @@ fn discovery_is_bounded_and_source_failures_preserve_offset_and_cause() {
 		Volume::open(&source),
 		Err(Error::Source { offset, error: Fault::ShortRead }) if offset == alternate
 	));
+}
+
+#[test]
+fn rejects_truncation_before_any_read_can_escape_the_source() {
+	let header_end = PRIMARY + HEADER_BYTES;
+	for length in [0, header_end - 1] {
+		let tiny = InstrumentedSource::new(&OPTICAL[..length]);
+		assert!(matches!(
+			Volume::open(&tiny),
+			Err(Error::Bounds(RangeError::OutsideSource))
+		));
+		assert!(tiny.reads.borrow().is_empty());
+	}
+	const NATIVE_SECTOR_BYTES: usize = 512;
+	for missing in [1, NATIVE_SECTOR_BYTES] {
+		let truncated = InstrumentedSource::new(&OPTICAL[..OPTICAL.len() - missing]);
+		assert!(matches!(
+			Volume::open(&truncated),
+			Err(Error::Format(FormatError::InvalidGeometry))
+		));
+		assert_eq!(
+			&*truncated.reads.borrow(),
+			&[(ByteOffset(PRIMARY_HEADER_OFFSET), HEADER_BYTES)],
+		);
+	}
 }

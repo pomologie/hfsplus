@@ -1,0 +1,119 @@
+{
+  "source": "Empty, partitionless, nonjournaled HFS+ images initialized directly by Apple newfs_hfs",
+  "license": "Apache-2.0; synthetic data only",
+  "date": "2026-11-26",
+  "os": "14.7.2",
+  "build": "23H311",
+  "architecture": "arm64",
+  "commands": [
+    [
+      "/usr/bin/hdiutil",
+      "attach",
+      "-plist",
+      "-readwrite",
+      "-nomount",
+      "-imagekey",
+      "diskimage-class=CRawDiskImage",
+      "SIZE.raw"
+    ],
+    [
+      "/sbin/newfs_hfs",
+      "-v",
+      "Header Gate",
+      "VIRTUAL_DEVICE"
+    ],
+    [
+      "/usr/bin/hdiutil",
+      "detach",
+      "VIRTUAL_DEVICE"
+    ],
+    [
+      "/usr/bin/hdiutil",
+      "attach",
+      "-plist",
+      "-readonly",
+      "-nomount",
+      "-imagekey",
+      "diskimage-class=CRawDiskImage",
+      "SIZE.raw"
+    ],
+    [
+      "/sbin/fsck_hfs",
+      "-f",
+      "-n",
+      "VIRTUAL_DEVICE"
+    ],
+    [
+      "/usr/bin/hdiutil",
+      "detach",
+      "VIRTUAL_DEVICE"
+    ]
+  ],
+  "fsck_hfs_version": "hfs-650.140.2",
+  "header_bytes": 512,
+  "primary_offset": 1024,
+  "alternate_offset_from_end": 1024,
+  "allocation_block_bytes": 4096,
+  "fixtures": {
+    "native-512k-primary.bin": {
+      "size_arg": "512k",
+      "raw_bytes": 524288,
+      "raw_sha256": "61cd7c7a998ae175750a9db8d34e7ce21a3621b17b59366ac447de99c1e8acbb",
+      "header_sha256": "5fa738567d671af44f784031d389a92cf77f5a8a80eca47f95137ebc6b8dd7bd",
+      "allocation_block_bytes": 4096,
+      "allocation_blocks": 128,
+      "both_headers_match": true,
+      "fsck_status": 0
+    },
+    "native-8m-primary.bin": {
+      "size_arg": "8m",
+      "raw_bytes": 8388608,
+      "raw_sha256": "e9c1725722e2996bf2976dd0b17d1f23b4faf80a5964e3670c14c810917cde32",
+      "header_sha256": "743d102fecbad50b3fd18677706f842a762fcaab771ff711435fe2ec3b619256",
+      "allocation_block_bytes": 4096,
+      "allocation_blocks": 2048,
+      "both_headers_match": true,
+      "fsck_status": 0
+    },
+    "native-128m-primary.bin": {
+      "size_arg": "128m",
+      "raw_bytes": 134217728,
+      "raw_sha256": "a70a0d0c18bc4cd5bcd682e11d7b7320a98382670859f523d1d0f27c1363206d",
+      "header_sha256": "4e560bc743973b4e86f4708e23894a0edaef2883222bc7d022c84e3a99564ad5",
+      "allocation_block_bytes": 4096,
+      "allocation_blocks": 32768,
+      "both_headers_match": true,
+      "fsck_status": 0
+    }
+  },
+  "formatter_size_probes": {
+    "refused_on_this_host": [
+      "8k",
+      "16k",
+      "32k",
+      "64k",
+      "128k",
+      "256k"
+    ],
+    "smallest_successful_test_input": "512k"
+  },
+  "mutations_of_8m_raw_image": {
+    "attach": [
+      "/usr/bin/hdiutil",
+      "attach",
+      "-plist",
+      "-readonly",
+      "-nomount",
+      "-imagekey",
+      "diskimage-class=CRawDiskImage",
+      "MUTATION.raw"
+    ],
+    "alternate_write_count_incremented_at_byte_8387652": {
+      "fsck_status": 0
+    },
+    "final_512_byte_sector_removed": {
+      "fsck_status": 8,
+      "diagnostic": "Invalid number of allocation blocks"
+    }
+  }
+}

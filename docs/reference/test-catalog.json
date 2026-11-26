@@ -11,8 +11,8 @@
       "scenario": "Native min/normal/large HFS+ volume and alternate header; mutate signature, size, offset/count, inconsistent primary/alternate; typed bounded error.",
       "oracle": "newfs_hfs; fsck_hfs; unit",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/FORMAT.md"
     },
     {
       "id": "H-FMT-02-T01",
@@ -239,8 +239,8 @@
       "scenario": "Primary and alternate volume headers disagree; tiny/truncated image",
       "oracle": "native fsck; bounds spy",
       "expected": "Reject strict view or explicit diagnostic; no reads outside source",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/FORMAT.md"
     },
     {
       "id": "H-FMT-01-T03",
@@ -263,8 +263,8 @@
       "scenario": "Fork physical start+count beyond volume; logical size exceeds coverage",
       "oracle": "native fixture; set model",
       "expected": "Corrupt, no zero-fill",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/FORMAT.md"
     },
     {
       "id": "H-FMT-02-T02",
