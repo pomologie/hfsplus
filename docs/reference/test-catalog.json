@@ -323,8 +323,8 @@
       "scenario": "Record largest admissible size and one byte beyond node capacity",
       "oracle": "independent packed layout ledger",
       "expected": "Valid pack or explicit capacity failure",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/formats/hfsplus-format/verification/README.md#packed-record-capacity"
     },
     {
       "id": "H-FMT-03-T02",

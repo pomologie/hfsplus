@@ -9,3 +9,9 @@ The second harness checks `Geometry::block_range` for every `u32` start and coun
 In a disposable checkout, raising the production minimum block size from 512 to 1024 caused the first harness to fail its admission assertion.
 
 Install Kani 0.68.0 and run `cargo kani setup`. Then run `bash crates/formats/hfsplus-format/verification/check.sh` from the repository root. The harnesses cover volume and block-range arithmetic. The broader H-V01 obligation also covers fork arrays, truncated header decoding, and the required property, fuzz, and differential runs. [Harnesses](kani/volume_geometry.rs) · [H-V01](../../../../verification/obligations.json)
+
+## Packed record capacity
+
+H-FMT-02-T06 passed on arm64 macOS with Rust 1.99.1. An independent wire ledger reserves the 14-byte descriptor and two trailing 16-bit offsets. At all seven supported node sizes from 512 to 32,768 bytes, a single leaf record fills the remaining space. The test compares the descriptor, record bytes, and both offsets directly before checking the decoder's result. One byte above the limit fails the alignment check, and the first aligned size above the limit fails the capacity check. Both failures leave the destination bytes intact. [Packed-record test](../tests/encode_btree.rs) · [Apple TN1150](https://developer.apple.com/library/archive/technotes/tn/tn1150.html)
+
+All five B-tree encoder tests, strict focused Clippy, and formatting passed. This case covers physical node capacity. H-V02 separately tracks tree-specific record and traversal checks.

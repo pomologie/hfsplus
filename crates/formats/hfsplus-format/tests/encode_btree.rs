@@ -15,6 +15,70 @@ const SMALL_NODE_BYTES: usize = 512;
 const HEADER_ALLOCATED_BIT: u8 = 0x80;
 
 #[test]
+fn exact_single_record_capacity_matches_the_wire_layout() {
+	// TN1150 defines a 14-byte descriptor followed by the records. The
+	// trailing two u16 offsets describe the free space and the first record.
+	const LEAF_DESCRIPTOR: [u8; 14] = [0, 0, 0, 0, 0, 0, 0, 0, 0xff, 1, 0, 1, 0, 0];
+	const OFFSET_TABLE_BYTES: usize = 4;
+	const LEAF_RECORD_COUNT: usize = 1;
+	const RECORD_BYTE: u8 = 0xa5;
+	const SENTINEL: u8 = 0x5a;
+
+	for node_bytes in [512, 1024, 2048, 4096, 8192, 16_384, 32_768] {
+		let table_start = node_bytes - OFFSET_TABLE_BYTES;
+		let capacity = table_start - LEAF_DESCRIPTOR.len();
+		let expected_offsets = [
+			u16::try_from(table_start).unwrap().to_be_bytes(),
+			u16::try_from(LEAF_DESCRIPTOR.len()).unwrap().to_be_bytes(),
+		]
+		.concat();
+		assert_eq!(
+			Node::record_capacity(node_bytes, LEAF_RECORD_COUNT),
+			Ok(capacity)
+		);
+
+		let data = vec![RECORD_BYTE; capacity + 2];
+		let mut destination = vec![SENTINEL; node_bytes];
+		let exact_record = &data[..capacity];
+		Node::encode(
+			&mut destination,
+			Kind::Leaf,
+			LEAF_HEIGHT,
+			NodeLinks::default(),
+			&[exact_record],
+		)
+		.unwrap();
+
+		assert_eq!(&destination[..LEAF_DESCRIPTOR.len()], &LEAF_DESCRIPTOR);
+		assert_eq!(
+			&destination[LEAF_DESCRIPTOR.len()..table_start],
+			exact_record
+		);
+		assert_eq!(&destination[table_start..], &expected_offsets);
+		assert_eq!(
+			Node::decode(&destination).unwrap().record(0),
+			Some(exact_record)
+		);
+
+		let oversized = [&data[..capacity + 1], data.as_slice()];
+		for record in oversized {
+			destination.fill(SENTINEL);
+			assert_eq!(
+				Node::encode(
+					&mut destination,
+					Kind::Leaf,
+					LEAF_HEIGHT,
+					NodeLinks::default(),
+					&[record],
+				),
+				Err(Error::InvalidNode)
+			);
+			assert!(destination.iter().all(|byte| *byte == SENTINEL));
+		}
+	}
+}
+
+#[test]
 fn reconstructs_native_catalog_header_and_leaf_nodes_byte_for_byte() {
 	let node = Node::decode(NATIVE_CATALOG_HEADER).unwrap();
 	let native_header = TreeHeader::decode(&node, TREE_FORK_BYTES).unwrap();
