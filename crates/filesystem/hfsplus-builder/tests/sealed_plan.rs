@@ -1,13 +1,18 @@
 use std::{
 	cell::{Cell, RefCell},
 	io::{self, Read, Write},
+	num::NonZeroU32,
 	thread,
 };
 
 use hfsplus_builder::{
 	Limits, PlanBuilder, PlanError, RangeKind, ReadError, SealedPlan, WriteError,
+	volume::{
+		EntryKind, EntryMetadata, ForkSource, ManifestEntry, VolumeOptions, plan as plan_volume,
+	},
 };
 use hfsplus_core::{ByteLen, ByteOffset, RangeError, ReadAt, WindowError};
+use hfsplus_format::volume::Geometry;
 
 const REFERENCE: &[u8] = b"meta\0\0filedata";
 
@@ -325,6 +330,91 @@ fn reader_retries_a_failed_range_and_stops_reading_the_source_at_eof() {
 	assert_eq!(&data[..PAYLOAD.len()], PAYLOAD);
 	assert_eq!(reader.read(&mut data).unwrap(), 0);
 	assert_eq!(*source.reads.borrow(), [(ByteOffset(0), PAYLOAD.len()); 2]);
+}
+
+#[test]
+fn interleaved_resource_retry_preserves_the_image_and_source_offsets() {
+	const BLOCK_BYTES: usize = 4096;
+	const IMAGE_BLOCKS: u32 = 32;
+	const RESOURCE_PREFIX: &[u8] = b"prefix";
+	const RESOURCE_TAIL: &[u8; 2] = b"ok";
+	let data_bytes = [0x5a; BLOCK_BYTES + 1];
+	let mut resource_bytes = RESOURCE_PREFIX.to_vec();
+	resource_bytes.resize(RESOURCE_PREFIX.len() + BLOCK_BYTES, 0x2a);
+	resource_bytes.extend(RESOURCE_TAIL);
+	let data = ObservedSource {
+		bytes: &data_bytes,
+		reads: RefCell::default(),
+		fail_once: Cell::new(false),
+	};
+	let resource = ObservedSource {
+		bytes: &resource_bytes,
+		reads: RefCell::default(),
+		fail_once: Cell::new(true),
+	};
+	let source_start = ByteLen::from(RESOURCE_PREFIX.len());
+	let resource_fork = ForkSource::new(
+		&resource,
+		ByteOffset(source_start.0),
+		ByteLen::from(BLOCK_BYTES + RESOURCE_TAIL.len()),
+	)
+	.unwrap();
+	let geometry = Geometry::new(
+		BLOCK_BYTES as u32,
+		IMAGE_BLOCKS,
+		u64::from(IMAGE_BLOCKS) * ByteLen::from(BLOCK_BYTES).0,
+	)
+	.unwrap();
+	let mut draft = plan_volume(
+		VolumeOptions::new("Interleaved retry", geometry),
+		vec![ManifestEntry {
+			path: "Paired",
+			metadata: EntryMetadata::new(0o644),
+			kind: EntryKind::File {
+				data: ForkSource::whole(&data),
+				resource: Some(resource_fork),
+			},
+		}],
+	)
+	.unwrap();
+	draft.interleave_paired_forks(NonZeroU32::MIN);
+	let plan = draft.seal().unwrap();
+	let sources: Vec<_> = plan
+		.ranges()
+		.filter_map(|(range, kind)| (kind == RangeKind::Source).then_some(range))
+		.collect();
+	let [data_first, resource_first, data_tail, resource_tail] = sources.as_slice() else {
+		panic!("expected two separately placed ranges for each fork");
+	};
+	assert_eq!(
+		(
+			data_first.len(),
+			resource_first.len(),
+			data_tail.len(),
+			resource_tail.len()
+		),
+		(
+			BLOCK_BYTES.into(),
+			BLOCK_BYTES.into(),
+			1usize.into(),
+			RESOURCE_TAIL.len().into()
+		)
+	);
+	let mut observed = [0; RESOURCE_TAIL.len()];
+	let start = resource_tail.start();
+	assert!(matches!(
+		plan.read_exact_at(start, &mut observed),
+		Err(ReadError::Source { offset, error: WindowError::Source(cause) })
+			if offset == start && cause.kind() == io::ErrorKind::UnexpectedEof
+	));
+	plan.read_exact_at(start, &mut observed).unwrap();
+	assert_eq!(&observed, RESOURCE_TAIL);
+	assert!(data.reads.borrow().is_empty());
+	let expected_offset = ByteOffset(source_start.0 + ByteLen::from(BLOCK_BYTES).0);
+	assert_eq!(
+		*resource.reads.borrow(),
+		[(expected_offset, observed.len()); 2]
+	);
 }
 
 #[test]

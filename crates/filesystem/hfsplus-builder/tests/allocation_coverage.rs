@@ -1,12 +1,14 @@
 //! Large-layout and block-set checks for H-BUILD-02-T01.
 
 use std::{
+	error::Error,
 	io::{Seek, SeekFrom, Write},
 	path::PathBuf,
 };
 
 use hfsplus_builder::{
 	RangeKind, SealedPlan,
+	allocation::Allocation,
 	volume::{
 		CapacityError, CapacityPolicy, EntryKind, EntryMetadata, ForkSource, ManifestEntry,
 		VolumeOptions, plan,
@@ -14,7 +16,7 @@ use hfsplus_builder::{
 };
 use hfsplus_core::{ByteLen, ByteOffset, ByteRange, RangeError, ReadAt};
 use hfsplus_format::volume::{
-	ALTERNATE_HEADER_FROM_END, HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET,
+	ALTERNATE_HEADER_FROM_END, Geometry, HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET,
 };
 
 #[path = "allocation_coverage/failures.rs"]
@@ -27,6 +29,59 @@ const NATIVE_OUTPUT: &str = "POMOLOGIE_HFS_LAYOUT_WITNESSES";
 const SMALL_FIXTURE: &str = "small";
 const BITS_PER_BYTE: usize = 8;
 const FIRST_BITMAP_BIT: u8 = 0x80;
+
+#[test]
+fn allocation_failures_report_their_limits_and_preserve_available_space() {
+	const BLOCK_COUNT: u32 = 17;
+	const BITMAP_BYTES: usize = 3;
+	let geometry = |blocks, bytes| Geometry::new(BLOCK_BYTES as u32, blocks, bytes).unwrap();
+	let incomplete = Allocation::new(geometry(1, 2 * BLOCK_BYTES)).unwrap_err();
+	assert_eq!(
+		incomplete.to_string(),
+		"HFS+ geometry omits full allocation blocks"
+	);
+	assert!(incomplete.source().is_none());
+
+	let mut allocation =
+		Allocation::new(geometry(BLOCK_COUNT, u64::from(BLOCK_COUNT) * BLOCK_BYTES)).unwrap();
+	let start = allocation.next_allocation();
+	let free = allocation.free_blocks();
+	let too_large = u64::from(free + 1) * BLOCK_BYTES;
+	let space = allocation.allocate(too_large).unwrap_err();
+	assert_eq!(
+		space.to_string(),
+		format!(
+			"requested {} allocation blocks with {free} available",
+			free + 1
+		)
+	);
+	assert!(space.source().is_none());
+	assert_eq!(
+		(allocation.next_allocation(), allocation.free_blocks()),
+		(start, free)
+	);
+
+	let limit = BITMAP_BYTES - 1;
+	let budget = allocation.encode_bitmap(limit).unwrap_err();
+	assert_eq!(
+		budget.to_string(),
+		format!("allocation bitmap requires {BITMAP_BYTES} bytes with a limit of {limit}")
+	);
+	assert!(budget.source().is_none());
+	assert_eq!(
+		allocation
+			.allocate(u64::from(free) * BLOCK_BYTES)
+			.unwrap()
+			.unwrap()
+			.start,
+		start
+	);
+	assert_eq!(allocation.free_blocks(), 0);
+	assert_eq!(
+		&*allocation.encode_bitmap(BITMAP_BYTES).unwrap(),
+		&[0xff, 0xff, 0x80]
+	);
+}
 
 #[derive(Clone, Copy)]
 struct Case {
