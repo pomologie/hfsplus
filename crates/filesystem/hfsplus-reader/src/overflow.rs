@@ -6,6 +6,7 @@ use core::fmt;
 use hfsplus_core::{ByteLen, ByteOffset, ByteRange, ReadAt};
 use hfsplus_format::{
 	Error as FormatError,
+	extents::{EXTENT_BYTES, EXTENTS_PER_RECORD, RECORD_VALUE_BYTES},
 	volume::{AllocationBlock, CatalogId, Extent, Fork, Geometry},
 };
 
@@ -23,19 +24,7 @@ const DEFAULT_NODE_BYTES: u16 = 32_768;
 const DEFAULT_METADATA_READS: usize = 4096;
 const DEFAULT_OVERFLOW_RECORDS: usize = 4096;
 
-pub(super) const EXTENTS_PER_RECORD: usize = 8;
-const EXTENT_BYTES: usize = size_of::<u32>() * 2;
-pub(super) const RECORD_VALUE_BYTES: usize = EXTENTS_PER_RECORD * EXTENT_BYTES;
-
-/// Which stored fork an overflow key identifies.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-#[repr(u8)]
-pub enum ForkKind {
-	/// Data fork.
-	Data = 0,
-	/// Resource fork.
-	Resource = 0xff,
-}
+pub use hfsplus_format::extents::ForkKind;
 
 /// Resource limits for resolving all allocated blocks in one fork.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

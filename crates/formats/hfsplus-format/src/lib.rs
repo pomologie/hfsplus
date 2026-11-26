@@ -8,6 +8,7 @@ pub mod btree;
 pub mod catalog;
 pub mod date;
 mod error;
+pub mod extents;
 pub mod hard_links;
 pub mod journal;
 pub mod symlink;

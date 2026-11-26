@@ -6,12 +6,11 @@ use hfsplus_format::{
 		BIG_KEYS_MASK, HEADER_USER_DATA_BYTES, HFS_BTREE_TYPE, Kind, LEAF_HEIGHT, Node, NodeId,
 		TreeHeader, VARIABLE_INDEX_KEYS_MASK,
 	},
+	extents::{KEY_BYTES, KEY_LENGTH, Key, LEAF_RECORD_BYTES, RECORD_VALUE_BYTES},
 	volume::CatalogId,
 };
 
-use super::{
-	ForkKind, ForkReader, OverflowError, OverflowLimit, OverflowLimits, RECORD_VALUE_BYTES,
-};
+use super::{ForkKind, ForkReader, OverflowError, OverflowLimit, OverflowLimits};
 
 const HEADER_PREFIX_BYTES: usize = 34;
 const HEADER_USER_DATA_RECORD: usize = 1;
@@ -19,47 +18,8 @@ const HEADER_MAP_RECORD: usize = 2;
 const MAP_RECORD: usize = 0;
 const HEADER_NODE: NodeId = NodeId(0);
 
-const KEY_LENGTH: u16 = 10;
-const KEY_BYTES: usize = size_of::<u16>() + KEY_LENGTH as usize;
-const KEY_FORK_KIND: usize = size_of::<u16>();
-const KEY_CATALOG_ID: usize = KEY_FORK_KIND + 2; // fork type plus padding.
-const KEY_START_BLOCK: usize = KEY_CATALOG_ID + size_of::<u32>();
 const INDEX_RECORD_BYTES: usize = KEY_BYTES + size_of::<u32>();
-const LEAF_RECORD_BYTES: usize = KEY_BYTES + RECORD_VALUE_BYTES;
 const MOST_SIGNIFICANT_BIT: u8 = 0x80;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-struct Key {
-	id: CatalogId,
-	kind: ForkKind,
-	start_block: u32,
-}
-
-impl Key {
-	fn decode(record: &[u8]) -> Result<Self, FormatError> {
-		let key = record.get(..KEY_BYTES).ok_or(FormatError::InvalidNode)?;
-		let length = key
-			.first_chunk::<{ size_of::<u16>() }>()
-			.ok_or(FormatError::InvalidNode)?;
-		if u16::from_be_bytes(*length) != KEY_LENGTH {
-			return Err(FormatError::InvalidNode);
-		}
-		let kind = match key[KEY_FORK_KIND] {
-			value if value == ForkKind::Data as u8 => ForkKind::Data,
-			value if value == ForkKind::Resource as u8 => ForkKind::Resource,
-			_ => return Err(FormatError::InvalidNode),
-		};
-		Ok(Self {
-			id: CatalogId(read_u32(&key[KEY_CATALOG_ID..])?),
-			kind,
-			start_block: read_u32(&key[KEY_START_BLOCK..])?,
-		})
-	}
-
-	fn owner(self) -> (CatalogId, ForkKind) {
-		(self.id, self.kind)
-	}
-}
 
 struct Route {
 	child: NodeId,
