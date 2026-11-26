@@ -132,6 +132,55 @@
         "preserves_reference_ids_across_generated_binding_states_and_seal": 72
       }
     },
+    "forks-differential": {
+      "obligation": "H-V04",
+      "method": "differential",
+      "features": [],
+      "command": ["python3", "-B", "crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py", "differential"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0"},
+      "bounds": {
+        "image_bytes": 8388608,
+        "image_sha256": "16af9f39cddb01e6a2a5c182f70879d3a4e26969660cd3f887c6fd40a4d07182",
+        "catalog_records": 134,
+        "catalog_depth": 2,
+        "continuation_keys": [[0, 16], [0, 32], [255, 16], [255, 32]],
+        "fork_lengths_bytes": [159761, 159775],
+        "retained_fixtures": {
+          "native-overflow.bin": "b218ac13bc132eeb649cb4de6a0e0fc262e8a2c6cbd29409123daf78e60cd988",
+          "native-hardlink-resolution.json": "e8b0c1e2c167ed8eea0e1903c6aedc5ad6b0efa57ee9ea57220290b2449411c5",
+          "native-chained-hardlinks.bin": "e22a68bd293506a479b24e14ce8851bc26fb914ba4d126e1c4f1e9726455765a",
+          "native-chain-free-hardlinks.bin": "02285cd4522a096c8eb4ff217ba2246f0c935f6f298b477d9119eda8ee222403"
+        }
+      },
+      "harnesses": {
+        "interleaved-forks": 1,
+        "native_data_and_resource_forks_cross_both_continuations": 1,
+        "native_and_chain_free_aliases_resolve_identity_metadata_and_distinct_forks": 1,
+        "fork_lifetime::native_stored_forks_outlive_the_catalog_lookup": 1
+      }
+    },
+    "forks-native": {
+      "obligation": "H-V04",
+      "method": "native",
+      "features": [],
+      "command": ["env", "-u", "TMPDIR", "python3", "-B", "crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py", "native"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0", "macos": "14.7.2", "macos_build": "23H311", "fsck_hfs": "650.140.2"},
+      "bounds": {
+        "macos_arch": "arm64",
+        "volume_label": "Pomologie Overflow",
+        "raw_image_bytes": 67108864,
+        "fixture_sha256": "1eee1861229521bac7a26f9c80cff2a54bcf378a270683aad0ce362632999c85",
+        "stored_names": 5,
+        "hard_link_names": 2,
+        "forks": {
+          "data": {"bytes": 5242880, "extents": 20, "sha256": "923206bf9a96d84ae3070863629b94d8420feba8cb74f7dd60038949198e4c8b"},
+          "resource": {"bytes": 5242880, "extents": 20, "sha256": "c3c39e51782df4571b267ba261a4dc8e6b2a807aa71c5cc9abb6a83e5ce2c86d"}
+        }
+      },
+      "harnesses": {
+        "tree::native_nested_tree_matches_mounted_entries": 1
+      }
+    },
     "fresh-allocation-kani": {
       "obligation": "H-V06",
       "method": "kani",

@@ -13,12 +13,12 @@ from hfsplus_evidence_transcript import (
     EvidenceError, require, verify_differential, verify_draft_state_machine, verify_fault_tests, verify_kani,
     verify_native, verify_property_test,
 )
+from hfsplus_fork_evidence import FORK_VALIDATORS
 from hfsplus_name_evidence import NAME_VALIDATORS
 
 
 POLICY_PATH = "verification/release-profile.json"
 REGISTRY_PATH = "verification/obligations.json"
-NAME_OBLIGATION = "H-V03"
 SCHEMA_VERSION = 1
 UNSCHEDULED = {"later", "stretch"}
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -34,6 +34,7 @@ METHOD_VALIDATORS = {
     "differential": verify_differential, "state-machine": verify_draft_state_machine,
     "native": verify_native,
 }
+OBLIGATION_VALIDATORS = {"H-V03": NAME_VALIDATORS, "H-V04": FORK_VALIDATORS}
 METHOD_TOOLS = {
     "kani": {"kani", "cbmc"}, "property": {"cargo", "rustc"}, "fault": {"cargo", "rustc"},
     "differential": {"cargo", "rustc", "python"}, "state-machine": {"cargo", "rustc"},
@@ -101,8 +102,9 @@ def positive_integer(value):
 
 
 def transcript_validator(profile):
-    validators = NAME_VALIDATORS if profile["obligation"] == NAME_OBLIGATION else METHOD_VALIDATORS
-    return validators.get(profile["method"])
+    method = profile["method"]
+    overrides = OBLIGATION_VALIDATORS.get(profile["obligation"], {})
+    return overrides.get(method, METHOD_VALIDATORS.get(method))
 
 
 def required_matrix(policy, registry, requested_profile):
@@ -212,8 +214,8 @@ def validate_record(record, name, profile, commit, digest, artifacts_root):
     elif record["method"] in {"property", "fault", "state-machine"}:
         require("proof" not in record, "Rust test evidence must not declare a theorem")
     elif record["method"] in {"differential", "native"}:
-        digest_field = "fixture_sha256" if profile["obligation"] == NAME_OBLIGATION else "image_sha256"
-        fixture_hash = profile["bounds"][digest_field]
+        bounds = profile["bounds"]
+        fixture_hash = bounds.get("fixture_sha256", bounds.get("image_sha256"))
         require(isinstance(fixture_hash, str) and SHA256.fullmatch(fixture_hash)
                 and record.get("fixture_hash") == fixture_hash and "proof" not in record,
                 "check record does not match the pinned fixture")

@@ -4,6 +4,7 @@
 import argparse
 from contextlib import contextmanager
 import hashlib
+import json
 import os
 from pathlib import Path
 import plistlib
@@ -39,6 +40,7 @@ FOLDER_ATTRIBUTE = "org.pomologie.fragment.folder"
 SHARED_VALUE = b"shared\0attribute\xff"
 FOLDER_VALUE = b"nested folder metadata"
 NANOSECONDS_PER_SECOND = 1_000_000_000
+TREE_MANIFEST = Path(__file__).with_name("native-fork-tree.json")
 
 
 def run(*args, env=None, timeout=60):
@@ -62,7 +64,10 @@ def attached(image, *, readonly, mount=None, owners="off"):
 	try:
 		if len(devices) != 1:
 			raise ValueError("expected one whole device for the disposable image")
-		if mount is not None:
+		if mount is None:
+			if any(entry.get("mount-point") for entry in entries):
+				raise ValueError("the no-write check requires an unmounted device")
+		else:
 			if not any(entry.get("mount-point") == str(mount) for entry in entries):
 				raise ValueError("the disposable image was not attached at its scratch mount point")
 			if bool(os.statvfs(mount).f_flag & os.ST_RDONLY) != readonly:
@@ -96,6 +101,7 @@ def populate(image, mount, *, tree):
 def capture_forks(image, mount, scratch, *, tree):
 	with attached(image, readonly=True) as device:
 		print(run(FSCK_HFS, "-fn", device).decode("utf-8", errors="replace").strip())
+	print("Apple no-write check detached")
 	with attached(image, readonly=True, mount=mount, owners="on" if tree else "off"):
 		path = mount / (TREE_FILE if tree else FILE)
 		for source, output, initial in [
@@ -110,6 +116,7 @@ def capture_forks(image, mount, scratch, *, tree):
 			print(f"Mounted {output} SHA-256 {hashlib.sha256(payload).hexdigest()}")
 		if tree:
 			capture_tree(mount, scratch)
+	print("Apple read-only mount detached")
 
 
 def capture_tree(mount, scratch):
@@ -157,12 +164,34 @@ def compare(scratch, *, tree):
 	}
 	test = "tree::native_nested_tree_matches_mounted_entries" if tree else "native_full_forks_match_mounted_bytes"
 	output = run(
-		"rustup", "run", toolchain, "cargo", "test", "--locked", "--no-default-features",
+		"rustup", "run", toolchain, "cargo", "test", "--color", "never", "--locked", "--no-default-features",
 		"-p", "hfsplus-reader", "--test", "native_overflow", "--",
-		"--exact", "--ignored", "--nocapture", test,
+		"--exact", "--ignored", "--show-output", test,
 		env=environment,
 	)
 	print(output.decode("utf-8").strip())
+
+
+def check_tree_manifest(scratch):
+	manifest = json.loads(TREE_MANIFEST.read_bytes())
+	paths = [line.split("\t", maxsplit=1)[0]
+		for line in (scratch / "tree.tsv").read_text(encoding="utf-8").splitlines()]
+	if paths != manifest["stored_paths"]:
+		raise ValueError("native tree did not preserve the pinned stored paths")
+	for attribute, file in ((SHARED_ATTRIBUTE, "shared.attr"), (FOLDER_ATTRIBUTE, "folder.attr")):
+		if (scratch / file).read_bytes().hex() != manifest["attributes"][attribute]:
+			raise ValueError(f"native attribute {attribute} differs from the pinned manifest")
+	if (scratch / "symlink.bin").read_bytes() != manifest["symlink_target"].encode():
+		raise ValueError("native symlink target differs from the pinned manifest")
+	for kind, expected in manifest["forks"].items():
+		payload = scratch / f"{kind}.bin"
+		with payload.open("rb") as source:
+			digest = hashlib.file_digest(source, "sha256").hexdigest()
+		if payload.stat().st_size != expected["bytes"] or digest != expected["sha256"]:
+			raise ValueError(f"native {kind} fork differs from the pinned manifest")
+	if (scratch / "native.cdr").stat().st_size != manifest["raw_image_bytes"]:
+		raise ValueError("native raw image length differs from the pinned manifest")
+	print("Native HFS+ tree matched the pinned paths, attributes, symlink and fork payloads")
 
 
 def compare_fstool(scratch, command):
@@ -196,8 +225,11 @@ def main():
 		populate(image, mount, tree=options.tree)
 		capture_forks(image, mount, scratch, tree=options.tree)
 		run(HDIUTIL, "convert", image, "-format", "UDTO", "-o", scratch / "native", "-quiet")
+		print(f"Native raw image bytes {(scratch / 'native.cdr').stat().st_size}")
 		with (scratch / "native.cdr").open("rb") as source:
 			print(f"Native raw image SHA-256 {hashlib.file_digest(source, 'sha256').hexdigest()}")
+		if options.tree:
+			check_tree_manifest(scratch)
 		compare(scratch, tree=options.tree)
 		if options.fstool:
 			compare_fstool(scratch, options.fstool)

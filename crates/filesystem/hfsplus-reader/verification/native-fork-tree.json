@@ -1,0 +1,15 @@
+{
+  "volume_name": "Pomologie Overflow",
+  "raw_image_bytes": 67108864,
+  "stored_paths": ["Résumé", "Résumé/Alias", "Résumé/Documents", "Résumé/Documents/Fragmenté", "Résumé/Documents/Unresolved"],
+  "hard_link_names": 2,
+  "attributes": {
+    "org.pomologie.fragment.folder": "6e657374656420666f6c646572206d65746164617461",
+    "org.pomologie.fragment.shared": "73686172656400617474726962757465ff"
+  },
+  "symlink_target": "../missing/target",
+  "forks": {
+    "data": {"bytes": 5242880, "extents": 20, "sha256": "923206bf9a96d84ae3070863629b94d8420feba8cb74f7dd60038949198e4c8b"},
+    "resource": {"bytes": 5242880, "extents": 20, "sha256": "c3c39e51782df4571b267ba261a4dc8e6b2a807aa71c5cc9abb6a83e5ce2c86d"}
+  }
+}

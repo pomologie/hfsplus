@@ -36,6 +36,17 @@ All three profiles passed the release checker at clean revision `84a365fff0eba8b
 | `names-differential` | 65,536 CoreServices singleton weights, 329 override checks, 16 ignorables, 40,000 seeded pairs, 76 directed pairs, and the historical Georgian collision distinguished from Unicode 16.0.0 folding. |
 | `names-native` | 63 normalization observations, 20 lookup pairs, six name-length cases, 25 ordered catalog keys, ten path observations, three mapped keys, and successful detach. |
 
+### Fork and metadata release evidence
+
+Use `--profile forks-differential` for the standalone byte reader on the pinned interleaved image and the exact production-reader replays for the retained Apple fixtures. It checks four continuation keys, both complete interleaved payloads, three exact Rust tests, and the matching fixture digests. Set `fixture_hash` to the interleaved image digest.
+
+Use `--profile forks-native` for a freshly generated 64 MiB Apple HFS+ tree. The command checks the device with no-write `fsck_hfs`, mounts read-only to capture native metadata, and detaches before Rust reads back the raw image. Rust verifies both 5 MiB forks across 20 extents through each of two hard-link names, plus directory listings, attributes, and a literal dangling symlink. Set `fixture_hash` to the stable tree manifest digest. The generated image's digest is recorded separately because its timestamps and ownership come from the native run. [Native metadata fixture provenance](../docs/features/FORMAT.md)
+
+```sh
+python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py differential
+env -u TMPDIR python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py native
+```
+
 ### Allocation and sealed output
 
 Use `--profile draft-identity-state-machine` with a record of `bash crates/filesystem/hfsplus-builder/verification/check-draft-identity.sh` and Rust 1.99.1 on `PATH`. The exact test compares draft and sealed identities against a 16-object reference catalog for all binding orders and payload-length rotations. The checker requires the actual counts of 54 pending and 18 sealed histories. The property, differential, and native methods are separate H-V05 release requirements.
