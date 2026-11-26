@@ -50,7 +50,9 @@ python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py 
 env -u TMPDIR python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py native
 ```
 
-Both profiles passed the release checker at clean revision `b82a34fc34b27c40792b6f1cd303434b6d889304` on arm64 macOS 14.7.2 (23H311). The Git archive SHA-256 was `995bcf1d79afff2ea6a064439e18cf77060aea4267baf8d0bc1565908680f80a`. The local evidence directory is `target/verification-evidence/v0.1.0/b82a34f-forks/`. Its `bundle.json` SHA-256 is `298cb783b80d3eed052b0abbe20e3ab5009128bc05b3572d01cf6cf808fbffd6`. Select `differential.json` or `native.json` for an individual check. H-V04 still requires separate property and fuzz evidence.
+The differential and native profiles passed the release checker at clean revision `b82a34fc34b27c40792b6f1cd303434b6d889304` on arm64 macOS 14.7.2 (23H311). The Git archive SHA-256 was `995bcf1d79afff2ea6a064439e18cf77060aea4267baf8d0bc1565908680f80a`. The local evidence directory is `target/verification-evidence/v0.1.0/b82a34f-forks/`. Its `bundle.json` SHA-256 is `298cb783b80d3eed052b0abbe20e3ab5009128bc05b3572d01cf6cf808fbffd6`. Select `differential.json` or `native.json` for an individual check.
+
+The property profile passed at clean revision `269f9c149223c03cc56e0e7390d2443d75b5355d` with Rust 1.99.1 on arm64 macOS. The Git archive SHA-256 was `1adecd6b343b12ffb3e80829dfdc2ac5c4ef5bdf14fcd9d43dd0209006cf887c`. The local evidence directory is `target/verification-evidence/v0.1.0/269f9c1-fork-property/`, with bundle SHA-256 `831a880800d9d9cd877e43c44d891223ec74df91a0f5971e2a37784e321bc48b`. H-V04 still requires separate fuzz evidence.
 
 ### Allocation and sealed output
 
