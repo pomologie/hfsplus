@@ -1,4 +1,4 @@
-use std::{cell::Cell, cmp::Ordering, collections::BTreeSet};
+use std::{cell::Cell, cmp::Ordering, collections::BTreeSet, error::Error};
 
 use hfsplus_core::names::{
 	MAX_NAME_UNITS, NameCollation, NameError, NameFragment, NameNormalization, NormalizedName,
@@ -112,7 +112,13 @@ fn counts_utf16_after_expansion() {
 	let valid = supplementary.to_string().repeat(available_scalars) + "a";
 	assert_eq!(normalize(&valid).unwrap().as_units().len(), MAX_NAME_UNITS);
 	let too_long = supplementary.to_string().repeat(available_scalars) + decomposable;
-	assert!(matches!(normalize(&too_long), Err(NameError::TooLong)));
+	let error = normalize(&too_long).unwrap_err();
+	assert!(matches!(error, NameError::TooLong));
+	assert_eq!(
+		error.to_string(),
+		format!("HFS+ name exceeds {MAX_NAME_UNITS} UTF-16 units")
+	);
+	assert!(error.source().is_none());
 }
 
 #[test]
@@ -162,10 +168,10 @@ fn rejects_fragments_and_stored_names_outside_the_name_profile() {
 #[test]
 fn rejects_malformed_utf16_and_preserves_an_empty_thread_key() {
 	const UNPAIRED_SURROGATE: u16 = 0xd800;
-	assert!(matches!(
-		normalize_utf16(&[UNPAIRED_SURROGATE]),
-		Err(NameError::InvalidUtf16)
-	));
+	let error = normalize_utf16(&[UNPAIRED_SURROGATE]).unwrap_err();
+	assert!(matches!(error, NameError::InvalidUtf16));
+	assert_eq!(error.to_string(), "invalid UTF-16 in HFS+ name");
+	assert!(error.source().is_none());
 	assert!(normalize_utf16(&[]).unwrap().as_units().is_empty());
 }
 
