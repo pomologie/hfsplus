@@ -45,3 +45,5 @@ cmp /tmp/hfsplus-native-catalog-order.txt tests/fixtures/native-catalog-order.tx
 ```
 
 The SHA-256 for `src/names/collation/ordinal_overrides.rs` is `ed9e6063e5d6aa6295a7b31cb43f6ac68966ab8c952944cc3963940df585cadb`.
+
+H-FMT-03-T02 passed on macOS 14.7.2 arm64 (23H311) with Rust 1.99.1. The optical recapture reproduced all normalization rows and all catalog order rows byte for byte. It confirmed canonical decomposition and retention of excluded characters including U+212B, U+F900, and U+2F800. The public CoreServices recapture reproduced the case-folding table and targeted pair fixture, including equality for uppercase and lowercase decomposed acute-accent names. The core replay matched those observations, and the builder reported both spellings of canonically equivalent names in `PathCollision` before sealing. All 12 core name tests and four builder Unicode tests passed, with strict Clippy for both targets. This case uses optical catalog and CoreServices evidence. The separate native kernel lookup qualification remains open. [Core name tests](tests/names.rs) · [Builder Unicode tests](../../filesystem/hfsplus-builder/tests/unicode_volume.rs)

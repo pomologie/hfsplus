@@ -335,8 +335,8 @@
       "scenario": "Decomposed Unicode and historical excluded characters; case pairs",
       "oracle": "native name oracle",
       "expected": "Expected native comparison and canonical collision",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/foundation/hfsplus-pomologie-core/UNICODE32.md"
     },
     {
       "id": "H-FMT-03-T03",
