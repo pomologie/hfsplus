@@ -26,7 +26,19 @@ python3 tools/capture_native_names.py /tmp/hfsplus-native-normalization.tsv
 cmp /tmp/hfsplus-native-normalization.tsv tests/fixtures/native-normalization.tsv
 ```
 
-The fixture has 17 agreement cases for canonical decomposition, excluded characters, Hangul, supplementary scalars, and combining classes. Three probes expose newer Unicode behavior in the optical image tool. It assigns a combining class to U+1AB0 and decomposes U+1B06 and U+1109A, which Unicode 3.2 leaves unchanged. Tests preserve the pinned contract and the observed divergence. Native kernel-created volume comparisons remain pending.
+The fixture has 17 agreement cases for canonical decomposition, excluded characters, Hangul, supplementary scalars, and combining classes. Three probes expose newer Unicode behavior in the optical image tool. It assigns a combining class to U+1AB0 and decomposes U+1B06 and U+1109A, which Unicode 3.2 leaves unchanged. Tests preserve the pinned contract and the observed divergence. The mounted witness below measures the kernel's behavior directly.
+
+### Mounted HFS+ name witness
+
+`tests/fixtures/native-kernel-names.tsv` records macOS 14.7.2 (23H311), arm64, from a disposable 64 MiB partitionless HFS+ image. The capture tool creates the image with `hdiutil`, mounts it writable, and compares exclusive creation results and inode identities through normal filesystem calls. It detaches the device before exporting the raw disk and walking the catalog leaf chain independently. Three runs reproduced 63 normalization rows, 20 lookup pairs, six UTF-16 length cases, 25 native catalog keys, ten path and private-namespace observations, and three mapped raw keys. The tracked TSV SHA-256 is `eb7324ef5034f99805e8adc864aae3054fed46ae0152149926e64d305eaeecc3`. [Capture tool](tools/capture_kernel_names.py) · [Mounted name fixture](tests/fixtures/native-kernel-names.tsv)
+
+The kernel stored all thirteen non-BMP canonical mappings outside the HFS+ exclusion range without decomposition. Each mapping and its scalar-decomposed form produced distinct files. The thirty supplementary combining marks in Unicode 3.2 preserved their positions between surrounding BMP combining marks. The separate optical witness expands U+1D15E and reorders U+1D165. The three newer-optical probes above remained unchanged in the kernel witness. The 25 catalog keys had the same raw order in both captures.
+
+ASCII, supplementary, and decomposition cases admitted exactly 255 stored UTF-16 units and rejected 256. Dot and dot-dot were existing path entries. A POSIX string could not contain NUL. Slash addressed a child in a separate directory. The kernel stored a submitted colon as a slash, the NUL symbol as a zero unit, and U+FFFF as `%EF%BF%BF`. Exclusive creation of the two private namespaces returned `ENOENT` after creating an ordinary hard link. The builder's existing path rules refuse these mapped and private names. Lookup and normalization qualification for H-FMT-03-T01 remains open while the portable APIs are aligned to the two witnessed storage forms.
+
+```sh
+env -u TMPDIR python3 -B tools/capture_kernel_names.py --check
+```
 
 ## Historical collation
 

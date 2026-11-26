@@ -61,17 +61,9 @@ def number(data, offset, width):
     return int.from_bytes(data[offset:offset + width], "big")
 
 
-def catalog_file_names(image):
-    partition_block = number(image, DRIVER_BLOCK_BYTES_OFFSET, OFFSET_BYTES)
-    entry_count = number(image, partition_block + PARTITION_MAP_ENTRY_COUNT_OFFSET, U32_BYTES)
-    for index in range(1, entry_count + 1):
-        entry_start = index * partition_block
-        entry = image[entry_start:entry_start + partition_block]
-        if entry[PARTITION_TYPE].rstrip(b"\0") == HFS_PARTITION_TYPE:
-            volume = number(entry, PARTITION_FIRST_BLOCK_OFFSET, U32_BYTES) * partition_block
-            break
-    else:
-        raise RuntimeError("no HFS+ partition in generated image")
+def catalog_file_names(image, *, volume=None, parent=None):
+    if volume is None:
+        volume = hfs_volume_offset(image)
 
     header = volume + VOLUME_HEADER_OFFSET
     block_size = number(image, header + VOLUME_BLOCK_BYTES_OFFSET, U32_BYTES)
@@ -91,10 +83,23 @@ def catalog_file_names(image):
             key_length = number(image, at, KEY_LENGTH_BYTES)
             if number(image, at + key_length + KEY_LENGTH_BYTES, OFFSET_BYTES) != FILE_RECORD_TYPE:
                 continue
+            if parent is not None and number(image, at + KEY_LENGTH_BYTES, U32_BYTES) != parent:
+                continue
             unit_count = number(image, at + RECORD_NAME_UNITS_OFFSET, OFFSET_BYTES)
             start = at + RECORD_NAME_OFFSET
             yield image[start:start + unit_count * UTF16_UNIT_BYTES].decode("utf-16be")
         leaf = number(image, node + NODE_FORWARD_LINK_OFFSET, U32_BYTES)
+
+
+def hfs_volume_offset(image):
+    partition_block = number(image, DRIVER_BLOCK_BYTES_OFFSET, OFFSET_BYTES)
+    entry_count = number(image, partition_block + PARTITION_MAP_ENTRY_COUNT_OFFSET, U32_BYTES)
+    for index in range(1, entry_count + 1):
+        entry_start = index * partition_block
+        entry = image[entry_start:entry_start + partition_block]
+        if entry[PARTITION_TYPE].rstrip(b"\0") == HFS_PARTITION_TYPE:
+            return number(entry, PARTITION_FIRST_BLOCK_OFFSET, U32_BYTES) * partition_block
+    raise RuntimeError("no HFS+ partition in generated image")
 
 
 def units(value):
