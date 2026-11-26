@@ -10,7 +10,7 @@ import subprocess
 import sys
 
 from hfsplus_evidence_transcript import (
-    EvidenceError, require, verify_fault_tests, verify_interleaved_differential, verify_kani,
+    EvidenceError, require, verify_differential, verify_fault_tests, verify_kani,
     verify_native, verify_property_test,
 )
 
@@ -29,7 +29,7 @@ OPTIONAL_RECORD_FIELDS = {"seed", "trace_hash", "fixture_hash", "proof"}
 PROFILE_FIELDS = {"obligation", "method", "features", "command", "tool_versions", "bounds", "harnesses"}
 METHOD_VALIDATORS = {
     "kani": verify_kani, "property": verify_property_test, "fault": verify_fault_tests,
-    "differential": verify_interleaved_differential,
+    "differential": verify_differential,
     "native": verify_native,
 }
 METHOD_TOOLS = {

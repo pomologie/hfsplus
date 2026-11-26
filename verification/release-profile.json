@@ -78,6 +78,29 @@
         "independent_block_set_matches_empty_small_large_and_many_file_layouts": 4
       }
     },
+    "fresh-allocation-differential": {
+      "obligation": "H-V06",
+      "method": "differential",
+      "features": [],
+      "command": ["python3", "-B", "crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py", "--allocation-differential"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0"},
+      "bounds": {
+        "image_bytes": 8388608,
+        "image_sha256": "16af9f39cddb01e6a2a5c182f70879d3a4e26969660cd3f887c6fd40a4d07182",
+        "catalog_records": 134,
+        "catalog_depth": 2,
+        "continuation_keys": [[0, 16], [0, 32], [255, 16], [255, 32]],
+        "fork_lengths_bytes": [159761, 159775],
+        "total_blocks": 2048,
+        "reserved_blocks": 2,
+        "metadata_blocks": 11,
+        "file_blocks": 80,
+        "free_blocks": 1955
+      },
+      "harnesses": {
+        "interleaved-allocation": 1
+      }
+    },
     "fresh-allocation-native": {
       "obligation": "H-V06",
       "method": "native",

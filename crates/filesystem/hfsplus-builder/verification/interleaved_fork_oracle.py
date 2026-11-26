@@ -25,6 +25,7 @@ TREE_SUMMARY = struct.Struct(">HIIIIH")
 RECORD_OFFSET = struct.Struct(">H")
 OVERFLOW_KEY = struct.Struct(">HBBII")
 CATALOG_KEY = struct.Struct(">HIH")
+FILE_RECORD = 2
 FILE_CATALOG_ID_OFFSET = 8
 FILE_FORKS = (88, 168)
 DATA_KIND, RESOURCE_KIND = 0, 0xff
@@ -99,11 +100,16 @@ def catalog_forks(image):
 		if key in seen:
 			raise ValueError(f"duplicate catalog record {key!r}")
 		seen.add(key)
+		file = record[RECORD_OFFSET.size + width:]
+		if RECORD_OFFSET.unpack_from(file)[0] != FILE_RECORD:
+			continue
+		file_forks = tuple(fork(file, offset) for offset in FILE_FORKS)
 		if key == (EXPECTED_IDS["root"], PAIRED_FILE):
-			file = record[RECORD_OFFSET.size + width:]
 			if int.from_bytes(file[FILE_CATALOG_ID_OFFSET:FILE_CATALOG_ID_OFFSET + 4]) != EXPECTED_IDS["catalog"]:
 				raise ValueError("paired file has an unexpected catalog ID")
-			paired = tuple(fork(file, offset) for offset in FILE_FORKS)
+			paired = file_forks
+		elif any(length or total or extents for length, total, extents in file_forks):
+			raise ValueError("unexpected populated fork outside the paired file")
 	if paired is None:
 		raise ValueError("paired file missing from independent catalog scan")
 	print(f"Independent raw reader found {len(records)} unique catalog records at depth {depth}")
@@ -127,6 +133,7 @@ def check_interleaved_forks(path):
 		for start in (GROUP_WIDTH * RUN_BLOCKS, 2 * GROUP_WIDTH * RUN_BLOCKS)]
 	if keys != expected_keys:
 		raise ValueError(f"expected exactly four ordered continuation records, got {keys!r}")
+	resolved = []
 	data_start = embedded[0][2][0][0]
 	for (kind, (length, total, inline), expected) in zip((DATA_KIND, RESOURCE_KIND), embedded, payloads()):
 		if len(inline) != GROUP_WIDTH or total != FORK_BLOCKS or length != len(expected):
@@ -145,5 +152,19 @@ def check_interleaved_forks(path):
 		physical = b"".join(image[start * BLOCK_BYTES:(start + count) * BLOCK_BYTES] for start, count in extents)
 		if physical[:length] != expected or any(physical[length:]):
 			raise ValueError("independent raw readback differs in fork contents or block padding")
+		resolved.extend(extents)
 	print(f"Independent raw reader matched all {len(records)} continuation keys {keys} "
 		f"and both complete forks ({DATA_BYTES}, {RESOURCE_BYTES} bytes)")
+	return image, resolved
+
+
+def check_mounted_interleaved_forks(mount):
+	catalog = sorted((mount / DIRECTORY).iterdir())
+	expected_names = [f"item-{index:02}" for index in range(ITEM_COUNT)]
+	if [file.name for file in catalog] != expected_names or any(file.stat().st_size for file in catalog):
+		raise ValueError("native catalog does not match the interleaved image manifest")
+	file = mount / PAIRED_FILE
+	data, resource = payloads()
+	if file.read_bytes() != data or (file / "..namedfork" / "rsrc").read_bytes() != resource:
+		raise ValueError("native data or resource fork differs from the interleaved fixture")
+	print(f"macOS matched all {ITEM_COUNT} directory names and both complete fragmented forks")

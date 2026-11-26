@@ -10,6 +10,8 @@ The `sealed-image-differential` release profile checks the independently decoded
 
 The Kani allocation harnesses cover part of H-V06 for volumes with up to 32 blocks, 512-byte and 4096-byte allocation sizes, and any partial device tail below one block. An exact initial reservation can reach any admitted cursor. From that state the transition harnesses compare a full-width `u64` request and resulting free count against an independent `u128` range model. The bitmap harnesses compare every encoded bit at any admitted cursor to the same model. The standalone `bash check-allocation.sh` invocation runs four named harnesses and the `fresh-allocation-kani` release profile requires both covers in each harness. Larger bitmaps and complete native volumes have separate test evidence. [Release evidence](../../../../verification/README.md)
 
+Run `python3 -B check-canonical-volume.py --allocation-differential` to compare the interleaved witness against an independent wire model for H-V06. The model reconstructs block ownership from the reserved regions, special forks, and both complete file extent chains. It requires disjoint, in-volume ownership, identical primary and alternate headers, and exact agreement with all 2,048 bitmap bits and the header's free count. This single witness allocates 2 reserved, 11 metadata, and 80 file blocks and leaves 1,955 free. The four-layout property test and the native free-count comparison use separate fixtures. [Independent allocation oracle](interleaved_allocation_oracle.py)
+
 Install Kani 0.68.0 and run `cargo kani setup` before running `bash check.sh` from this directory.
 
 ## Frozen catalog identities

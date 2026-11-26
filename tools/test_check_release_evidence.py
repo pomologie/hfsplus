@@ -9,7 +9,9 @@ import tempfile
 import unittest
 
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
-from hfsplus_evidence_transcript import verify_interleaved_differential, verify_interleaved_native, verify_native
+from hfsplus_evidence_transcript import (
+    verify_differential, verify_interleaved_native, verify_native,
+)
 
 
 PROFILE = "format-kani"
@@ -173,14 +175,30 @@ class ReleaseEvidenceTests(unittest.TestCase):
     def test_differential_requires_the_exact_fixture_and_both_fork_results(self):
         profile, transcript = interleaved_fixture()
         digest = profile["bounds"]["image_sha256"]
-        verify_interleaved_differential(transcript, profile)
+        verify_differential(transcript, profile)
         for old, new in ((digest, "0" * len(digest)), ("134 unique", "133 unique"),
                          ("(0, 32)", "(0, 31)"), ("159775 bytes", "159774 bytes")):
             with self.subTest(replacement=new):
                 with self.assertRaisesRegex(EvidenceError, "incorrect interleaved fixture"):
-                    verify_interleaved_differential(transcript.replace(old, new), profile)
+                    verify_differential(transcript.replace(old, new), profile)
         with self.assertRaisesRegex(EvidenceError, "incorrect interleaved fixture"):
-            verify_interleaved_differential(transcript.rsplit("\n", 2)[0], profile)
+            verify_differential(transcript.rsplit("\n", 2)[0], profile)
+
+    def test_allocation_differential_requires_block_ownership_and_both_headers(self):
+        profile, transcript = interleaved_fixture()
+        profile["harnesses"] = {"interleaved-allocation": 1}
+        profile["bounds"].update(total_blocks=2048, reserved_blocks=2, metadata_blocks=11,
+                                 file_blocks=80, free_blocks=1955)
+        comparison = ("Independent allocation matched both headers and bitmap across 2048 blocks: "
+                      "2 reserved, 11 metadata, 80 file, 1955 free")
+        transcript += comparison + "\n"
+        verify_differential(transcript, profile)
+        for changed in ("", comparison.replace("both headers", "one header"),
+                        comparison.replace("11 metadata", "12 metadata"),
+                        comparison.replace("1955 free", "1954 free")):
+            with self.subTest(changed=changed):
+                with self.assertRaisesRegex(EvidenceError, "incorrect independent allocation"):
+                    verify_differential(transcript.replace(comparison, changed), profile)
 
     def test_native_requires_no_mount_no_write_and_matching_device_and_digest(self):
         profile, transcript = interleaved_fixture()

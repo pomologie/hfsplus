@@ -368,7 +368,7 @@ def report_tool_versions(toolchain, compiler):
 
 
 def verify_interleaved_forks(root, toolchain, compiler, options):
-	from interleaved_fork_oracle import DIRECTORY, ITEM_COUNT, PAIRED_FILE, check_interleaved_forks, payloads
+	from interleaved_fork_oracle import check_interleaved_forks, check_mounted_interleaved_forks
 
 	report_tool_versions(toolchain, compiler)
 	image = root / "interleaved.hfs"
@@ -376,8 +376,12 @@ def verify_interleaved_forks(root, toolchain, compiler, options):
 		emitter="emit_interleaved_forks", output_env="POMOLOGIE_INTERLEAVED_FORK_OUTPUT")
 	digest = image_digest(image)
 	print(f"Interleaved image {image.stat().st_size} bytes SHA-256 {digest}")
-	check_interleaved_forks(image)
-	if options.interleaved_fsck_only:
+	raw, file_extents = check_interleaved_forks(image)
+	if options.allocation_differential:
+		from interleaved_allocation_oracle import check_interleaved_allocation
+
+		check_interleaved_allocation(raw, file_extents)
+	elif options.interleaved_fsck_only:
 		from readonly_fsck_oracle import verify_readonly_fsck
 
 		verify_readonly_fsck(image, digest, run)
@@ -386,15 +390,7 @@ def verify_interleaved_forks(root, toolchain, compiler, options):
 		mount = root / "mount"
 		mount.mkdir()
 		with mounted_read_only(wrapped, mount, owners="off"):
-			catalog = sorted((mount / DIRECTORY).iterdir())
-			expected_names = [f"item-{index:02}" for index in range(ITEM_COUNT)]
-			if [file.name for file in catalog] != expected_names or any(file.stat().st_size for file in catalog):
-				raise ValueError("native catalog does not match the interleaved image manifest")
-			file = mount / PAIRED_FILE
-			data, resource = payloads()
-			if file.read_bytes() != data or (file / "..namedfork" / "rsrc").read_bytes() != resource:
-				raise ValueError("native data or resource fork differs from the interleaved fixture")
-			print(f"macOS matched all {ITEM_COUNT} directory names and both complete fragmented forks")
+			check_mounted_interleaved_forks(mount)
 
 
 def verify_metadata_dates(root, toolchain, compiler):
@@ -450,13 +446,14 @@ def main():
 	profile.add_argument("--interleaved-forks", action="store_true", help="check the interleaved fork witness")
 	profile.add_argument("--interleaved-fsck-only", action="store_true", help="check the interleaved image without mounting it")
 	profile.add_argument("--metadata-dates", action="store_true", help="check native timestamp projection")
+	profile.add_argument("--allocation-differential", action="store_true", help="compare raw allocation against fork ownership")
 	profile.add_argument("--allocation-counts-only", action="store_true", help="compare native allocation counts")
 	options = parser.parse_args()
 	native = options.native_fsck or options.metadata_dates or options.interleaved_fsck_only or options.allocation_counts_only
 	if native and sys.platform != "darwin":
 		parser.error("native volume checks require macOS")
-	if options.interleaved_fsck_only and options.native_fsck:
-		parser.error("--interleaved-fsck-only cannot be combined with --native-fsck")
+	if options.native_fsck and (options.allocation_differential or options.interleaved_fsck_only):
+		parser.error("allocation differential and interleaved fsck-only modes exclude --native-fsck")
 	try:
 		with (ROOT / "rust-toolchain.toml").open("rb") as config:
 			toolchain = tomllib.load(config)["toolchain"]["channel"]
@@ -466,7 +463,7 @@ def main():
 			if options.packed_catalog:
 				verify_packed_catalog(root, toolchain, compiler, options)
 				return 0
-			if options.interleaved_forks or options.interleaved_fsck_only:
+			if options.interleaved_forks or options.interleaved_fsck_only or options.allocation_differential:
 				verify_interleaved_forks(root, toolchain, compiler, options)
 				return 0
 			if options.metadata_dates:

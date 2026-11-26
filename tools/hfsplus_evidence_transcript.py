@@ -108,7 +108,6 @@ def verify_fault_tests(transcript, profile):
 
 
 def verify_interleaved_differential(transcript, profile):
-    require(profile["harnesses"] == {"interleaved-forks": 1}, "unknown differential oracle")
     lines = transcript.splitlines()
     versions = profile["tool_versions"]
     for tool in ("Python", "cargo", "rustc"):
@@ -123,6 +122,28 @@ def verify_interleaved_differential(transcript, profile):
         f"and both complete forks ({data}, {resource} bytes)",
     ]
     require(lines[3:] == expected, "incorrect interleaved fixture digest, catalog, or complete fork evidence")
+
+
+def verify_allocation_differential(transcript, profile):
+    lines = transcript.splitlines()
+    verify_interleaved_differential("\n".join(lines[:DIFFERENTIAL_LINE_COUNT]), profile)
+    bounds = profile["bounds"]
+    expected = (
+        f"Independent allocation matched both headers and bitmap across {bounds['total_blocks']} blocks: "
+        f"{bounds['reserved_blocks']} reserved, {bounds['metadata_blocks']} metadata, "
+        f"{bounds['file_blocks']} file, {bounds['free_blocks']} free"
+    )
+    require(lines[DIFFERENTIAL_LINE_COUNT:] == [expected], "incorrect independent allocation comparison")
+
+
+def verify_differential(transcript, profile):
+    harnesses = profile["harnesses"]
+    require(len(harnesses) == 1, "differential transcript requires one exact oracle")
+    (name, count), = harnesses.items()
+    oracles = {"interleaved-forks": verify_interleaved_differential,
+               "interleaved-allocation": verify_allocation_differential}
+    require(count == 1 and name in oracles, "unknown differential oracle")
+    oracles[name](transcript, profile)
 
 
 def verify_interleaved_native(transcript, profile):
