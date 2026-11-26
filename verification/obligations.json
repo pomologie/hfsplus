@@ -38,8 +38,8 @@
       ],
       "negative_witness": "allocation block index multiplied by size overflows",
       "mandatory_when_activated": true,
-      "status": "planned",
-      "evidence": []
+      "status": "pass",
+      "evidence": ["crates/formats/hfsplus-format/verification/README.md"]
     },
     {
       "id": "H-V02",

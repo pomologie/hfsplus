@@ -16,9 +16,15 @@ On clean revision `2cef430`, the `format-wire-property` profile checked 171 fork
 
 Run `bash crates/formats/hfsplus-format/verification/check-volume-wire-properties.sh` with Rust 1.99.1. The combined records and transcripts are in `target/verification-evidence/v0.1.0/2cef430-volume-format/`. The bundle SHA-256 is `ada0dec2e7ba700cd4cc8a4ab07d86ca34b248abf157330e8d5a0d453e77a593`. [Release profiles](../../../../verification/release-profile.json)
 
-The `format-native-wire-differential` profile passed on clean revision `b583af2`. An independent Python decoder compared six checksum-verified native volume headers and all 30 embedded fork descriptors with Rust's production results. It matched allocation geometry, free and next-allocation counters, alternate-header offsets, fork sizes, and ordered extent descriptors. Rust also encoded each captured header back to its exact original bytes. The checker accepted the differential, property, and Kani records from the same clean revision. Fuzz evidence remains open for H-V01.
+The `format-native-wire-differential` profile passed on clean revision `b583af2`. An independent Python decoder compared six native volume headers from digest-verified fixtures and all 30 embedded fork descriptors with Rust's production results. It matched allocation geometry, free and next-allocation counters, alternate-header offsets, fork sizes, and ordered extent descriptors. Rust also encoded each captured header back to its exact original bytes. The checker accepted the differential, property, and Kani records from the same clean revision.
 
 Run `python3 -B crates/formats/hfsplus-format/verification/check-native-volume-wire.py` with Rust 1.99.1 and Python 3.14.0. The three records and transcripts are in `target/verification-evidence/v0.1.0/b583af2-volume-format/`. The bundle SHA-256 is `9b5bfabcf10a87f10bd76e58a15145f0ee54068c626d488289683a8e42813a3e`.
+
+## H-V01 release evidence
+
+All four H-V01 profiles passed the release evidence checker on clean revision `bbd197227335e14666d0ac5413e1c16d16859cde` on arm64 macOS. The replay verified two Kani geometry harnesses with six reached cover properties, 763 property cases, and 36 differential rows from native header fixtures. The AddressSanitizer campaign exercised the production header, fork, and geometry codecs in memory. It processed 20,000 inputs of at most 512 bytes with seed 7 and four initial corpus files. It reported no sanitizer findings or failure artifacts.
+
+Install nightly `2026-11-04` and `cargo-fuzz` 0.13.2, fetch the locked dependencies for `fuzz/Cargo.toml`, and run `bash crates/formats/hfsplus-format/verification/fuzz/check-volume-wire.sh` from the repository root. The four records and transcripts are in `target/verification-evidence/v0.1.0/bbd1972-volume-format/`. The source archive SHA-256 is `63f92d8c6d0c5a501db78e84e73c8159ef7bb49c3238d4145ed6650f7aed98ee`. The evidence bundle SHA-256 is `9a151cbb0a8b4c2d90397a880da9917a4e7aee8941d836ff0a751fe5cb0dc716`. [Profile bounds](../../../../verification/release-profile.json)
 
 ## Packed record capacity
 

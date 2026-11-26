@@ -50,7 +50,7 @@ H-VER-01-T01 remains open. Five of these files fall below at least one proposed 
 **Assumptions and initial bounds:** Kani full u64 values, arrays up to 8 extents, arbitrary truncated byte buffers; native min/max admissible profiles.\
 **Negative witness:** allocation block index multiplied by size overflows.\
 **Requirement links:** H-FMT-01, H-READ-01.\
-**Evidence:** kani, property, fuzz, differential; status planned.
+**Evidence:** All four configured methods passed on clean revision `bbd1972` within their recorded bounds. [Volume format release evidence](../../crates/formats/hfsplus-format/verification/README.md#h-v01-release-evidence)
 
 ### H-V02 — catalog/extent/attributes
 **Target:** hfsplus-format / packed node codec.\
