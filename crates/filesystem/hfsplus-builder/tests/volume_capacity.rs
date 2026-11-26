@@ -10,7 +10,9 @@ use hfsplus_builder::{
 	},
 };
 use hfsplus_core::{ByteLen, ByteOffset, ReadAt};
-use hfsplus_format::volume::{HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET};
+use hfsplus_format::volume::{
+	ALTERNATE_HEADER_FROM_END, HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET,
+};
 
 const LABEL: &str = "Capacity";
 const LARGE_BLOCK: u32 = 4096;
@@ -141,6 +143,42 @@ fn shrink_limit_rejects_the_sector_below_the_minimum() {
 	assert!(matches!(
 		draft.capacity(auto(u64::MAX)),
 		Err(CapacityError::AllocationLimit)
+	));
+}
+
+#[test]
+fn seals_at_exact_capacity_and_rejects_one_allocation_block_less() {
+	const PAYLOAD_BYTES: u64 = 11;
+	const FILE_BLOCKS: u64 = 1;
+	let block = u64::from(LARGE_BLOCK);
+	let occupied = BOOT_AND_HEADER_BLOCKS + BITMAP_BLOCKS + EMPTY_TREE_NODES + FILE_BLOCKS;
+	let minimum = ByteLen(occupied * block);
+	let exact = |bytes| CapacityPolicy::Exact {
+		bytes,
+		free_space: ByteLen(0),
+	};
+	let draft = || plan(blank_options(LARGE_BLOCK), vec![file(PAYLOAD_BYTES, None)]).unwrap();
+	let image = draft().seal_with_capacity(exact(minimum)).unwrap();
+	assert_eq!(image.image_len(), minimum);
+	let primary = header(&image, PRIMARY_HEADER_OFFSET);
+	let alternate = header(&image, minimum.0 - ALTERNATE_HEADER_FROM_END);
+	assert_eq!(primary, alternate);
+	assert_eq!(u64::from(primary.geometry.total_blocks()), occupied);
+	assert_eq!(primary.free_blocks, 0);
+
+	let bitmap = primary.forks.allocation.extents().next().unwrap();
+	let bitmap_offset = u64::from(bitmap.start.0) * block;
+	let mut bits = [0];
+	image
+		.read_exact_at(ByteOffset(bitmap_offset), &mut bits)
+		.unwrap();
+	assert_eq!(bits, [u8::MAX << (u64::from(u8::BITS) - occupied)]);
+
+	let short = ByteLen(minimum.0 - block);
+	assert!(matches!(
+		draft().seal_with_capacity(exact(short)),
+		Err(CapacityError::InsufficientSpace { required, available })
+			if required == minimum && available == short
 	));
 }
 

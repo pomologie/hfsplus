@@ -419,8 +419,8 @@
       "scenario": "Image barely fits metadata and alternate header, one block short",
       "oracle": "explicit block set",
       "expected": "Valid plan or capacity error before writes",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-02-T03",
