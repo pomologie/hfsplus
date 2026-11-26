@@ -178,6 +178,26 @@ fn reports_both_colliding_paths_before_emission() {
 }
 
 #[test]
+fn rejects_the_historical_georgian_collision() {
+	const CAPITAL: &str = "\u{10a0}";
+	const HISTORICAL_SMALL: &str = "\u{10d0}";
+	const MODERN_SMALL: &str = "\u{2d00}";
+	let options = || VolumeOptions::new(LABEL, geometry());
+	for [left, right] in [[CAPITAL, HISTORICAL_SMALL], [HISTORICAL_SMALL, CAPITAL]] {
+		assert!(matches!(
+			plan(options(), vec![file(left), file(right)]),
+			Err(VolumeError::PathCollision { first, second })
+				if [first.as_str(), second.as_str()] == [CAPITAL, HISTORICAL_SMALL]
+		));
+	}
+	let draft = plan(options(), vec![file(CAPITAL), file(MODERN_SMALL)]).unwrap();
+	assert_ne!(
+		draft.catalog_id(CAPITAL).unwrap(),
+		draft.catalog_id(MODERN_SMALL).unwrap()
+	);
+}
+
+#[test]
 fn rejects_unaddressable_components_and_private_names() {
 	let options = || VolumeOptions::new(LABEL, geometry());
 	for path in [
