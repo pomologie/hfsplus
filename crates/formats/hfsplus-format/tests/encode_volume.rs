@@ -1,8 +1,8 @@
 use hfsplus_format::{
 	Error,
 	volume::{
-		AllocationBlock, CatalogId, Extent, FORK_BYTES, Fork, Geometry, HEADER_BYTES, Header,
-		Signature, SpecialFiles,
+		ALTERNATE_HEADER_FROM_END, AllocationBlock, CatalogId, Extent, FORK_BYTES, Fork, Geometry,
+		HEADER_BYTES, Header, PRIMARY_HEADER_OFFSET, Signature, SpecialFiles,
 	},
 };
 
@@ -166,6 +166,119 @@ fn fork_encoding_checks_capacity_of_the_receiving_geometry() {
 	assert_eq!(Fork::decode(&encoded, original), Ok(fork));
 	assert_eq!(fork.validate_geometry(receiving), Err(Error::InvalidFork));
 	assert_eq!(fork.encode(receiving), Err(Error::InvalidFork));
+}
+
+#[test]
+fn volume_geometry_checks_block_granularity_and_header_footprint() {
+	const SECTOR_BYTES: u32 = 512;
+	const MINIMUM_VOLUME_BYTES: u64 =
+		PRIMARY_HEADER_OFFSET + HEADER_BYTES as u64 + ALTERNATE_HEADER_FROM_END;
+	let sectors = u32::try_from(MINIMUM_VOLUME_BYTES / u64::from(SECTOR_BYTES)).unwrap();
+	let geometry = Geometry::new(SECTOR_BYTES, sectors, MINIMUM_VOLUME_BYTES).unwrap();
+	assert_eq!(geometry.allocation_bytes(), MINIMUM_VOLUME_BYTES);
+	assert_eq!(
+		geometry.alternate_header_offset(),
+		PRIMARY_HEADER_OFFSET + HEADER_BYTES as u64
+	);
+	assert_eq!(
+		geometry
+			.block_range(AllocationBlock(sectors - 1), 1)
+			.unwrap(),
+		MINIMUM_VOLUME_BYTES - u64::from(SECTOR_BYTES)..MINIMUM_VOLUME_BYTES
+	);
+
+	for (block_bytes, blocks, device_bytes) in [
+		(SECTOR_BYTES / 2, sectors * 2, MINIMUM_VOLUME_BYTES),
+		(3 * SECTOR_BYTES, sectors, 3 * MINIMUM_VOLUME_BYTES),
+		(SECTOR_BYTES, sectors - 1, MINIMUM_VOLUME_BYTES),
+		(SECTOR_BYTES, sectors, MINIMUM_VOLUME_BYTES - 1),
+	] {
+		assert_eq!(
+			Geometry::new(block_bytes, blocks, device_bytes),
+			Err(Error::InvalidGeometry)
+		);
+	}
+}
+
+#[test]
+fn embedded_fork_requires_a_contiguous_prefix_of_allocated_slots() {
+	const EMPTY: Extent = Extent {
+		start: AllocationBlock(0),
+		blocks: 0,
+	};
+	const ALLOCATED: Extent = Extent {
+		start: AllocationBlock(9),
+		blocks: 1,
+	};
+	const MISPLACED_EMPTY: Extent = Extent {
+		start: ALLOCATED.start,
+		blocks: 0,
+	};
+	let geometry =
+		Geometry::new(NATIVE_BLOCK_BYTES, NATIVE_BLOCK_COUNT, NATIVE_VOLUME_BYTES).unwrap();
+	let logical = u64::from(NATIVE_BLOCK_BYTES);
+	let ordinary = Fork::new(logical, 0, 1, &[ALLOCATED, EMPTY], geometry).unwrap();
+	assert_eq!(ordinary.extents().collect::<Vec<_>>(), [ALLOCATED]);
+	assert!(!ordinary.has_overflow());
+	assert_eq!(
+		Fork::decode(&ordinary.encode(geometry).unwrap(), geometry),
+		Ok(ordinary)
+	);
+	for (description, count, extents) in [
+		(
+			"unused slot with a starting block",
+			1,
+			[ALLOCATED, MISPLACED_EMPTY],
+		),
+		(
+			"allocated extent after an unused slot",
+			1,
+			[EMPTY, ALLOCATED],
+		),
+		(
+			"continuation before eight embedded extents",
+			2,
+			[ALLOCATED, EMPTY],
+		),
+	] {
+		assert_eq!(
+			Fork::new(logical, 0, count, &extents, geometry),
+			Err(Error::InvalidFork),
+			"{description}"
+		);
+	}
+}
+
+#[test]
+fn header_encoding_checks_each_allocation_counter_before_writing() {
+	let geometry =
+		Geometry::new(NATIVE_BLOCK_BYTES, NATIVE_BLOCK_COUNT, NATIVE_VOLUME_BYTES).unwrap();
+	let mut header = Header::new_clean(
+		geometry,
+		SpecialFiles {
+			allocation: Fork::empty(),
+			extents: Fork::empty(),
+			catalog: Fork::empty(),
+			attributes: Fork::empty(),
+			startup: Fork::empty(),
+		},
+	)
+	.unwrap();
+	header.free_blocks = NATIVE_BLOCK_COUNT / 2;
+	header.next_allocation = AllocationBlock(NATIVE_BLOCK_COUNT);
+	let ordinary = header.encode().unwrap();
+	assert_eq!(Header::decode(&ordinary, NATIVE_VOLUME_BYTES), Ok(header));
+
+	let past_end = NATIVE_BLOCK_COUNT + 1;
+	for (free_blocks, next_allocation) in [
+		(past_end, header.next_allocation),
+		(header.free_blocks, AllocationBlock(past_end)),
+	] {
+		let mut invalid = header;
+		invalid.free_blocks = free_blocks;
+		invalid.next_allocation = next_allocation;
+		assert_eq!(invalid.encode(), Err(Error::InvalidGeometry));
+	}
 }
 
 #[test]
