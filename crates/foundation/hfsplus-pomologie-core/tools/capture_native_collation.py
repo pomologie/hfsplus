@@ -4,6 +4,7 @@
 import argparse
 import ctypes
 from functools import cmp_to_key
+from hashlib import sha256
 from itertools import pairwise
 from pathlib import Path
 from random import Random
@@ -205,6 +206,13 @@ def main():
                 parser.error(f"native observation changed: {path.relative_to(CRATE)}")
         else:
             path.write_text(contents, encoding="utf-8")
+    if args.check:
+        ignored = sum(weight == IGNORABLE_WEIGHT for weight in overrides.values())
+        print(f"CoreServices HFS+ model: {MAX_UNIT + 1} singleton units, {len(overrides)} overrides, {ignored} ignorables")
+        print(f"CoreServices HFS+ samples: {2 * RANDOM_PAIRS} seeded pairs, {len(overrides)} embedded overrides, "
+              f"{2 * len(SCENARIOS)} directed pairs, at most {MAX_NAME_UNITS} units, seed {FUZZ_SEED:#x}")
+        print(f"CoreServices HFS+ rules SHA-256: {sha256(RULES.read_bytes()).hexdigest()}")
+        print(f"CoreServices HFS+ fixture SHA-256: {sha256(FIXTURE.read_bytes()).hexdigest()}")
 
 
 if __name__ == "__main__":

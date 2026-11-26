@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, collections::BTreeSet};
+use std::{cell::Cell, cmp::Ordering, collections::BTreeSet};
 
 use hfsplus_core::names::{
 	MAX_NAME_UNITS, NameCollation, NameError, NameFragment, NameNormalization, NormalizedName,
@@ -6,7 +6,7 @@ use hfsplus_core::names::{
 };
 use proptest::{
 	prelude::*,
-	test_runner::{RngSeed, TestCaseError},
+	test_runner::{RngSeed, TestCaseError, TestRunner},
 };
 
 #[path = "names/kernel.rs"]
@@ -423,27 +423,38 @@ fn generated_name() -> impl Strategy<Value = String> {
 		})
 }
 
-proptest! {
-	#![proptest_config(ProptestConfig {
+#[test]
+fn generated_unicode_triples_preserve_comparison_laws_and_repeated_keys() {
+	let mut runner = TestRunner::new(ProptestConfig {
 		cases: PROPERTY_CASES,
 		rng_seed: RngSeed::Fixed(PROPERTY_SEED),
 		failure_persistence: None,
 		..ProptestConfig::default()
-	})]
-	#[test]
-	fn generated_unicode_triples_preserve_comparison_laws_and_repeated_keys(
-		first in generated_name(), second in generated_name(), third in generated_name(),
-	) {
-		for policy in NORMALIZATIONS {
-			let first = repeated_name(policy, &first)?;
-			let second = repeated_name(policy, &second)?;
-			let third = repeated_name(policy, &third)?;
-			for mode in COLLATION_MODES {
-				let first_second = compare_pair(mode, first.as_units(), second.as_units())?;
-				let second_third = compare_pair(mode, second.as_units(), third.as_units())?;
-				let first_third = compare_pair(mode, first.as_units(), third.as_units())?;
-				prop_assert!(transitive(first_second, second_third, first_third));
-			}
-		}
-	}
+	});
+	let cases = Cell::new(0);
+	runner
+		.run(
+			&(generated_name(), generated_name(), generated_name()),
+			|(first, second, third)| {
+				for policy in NORMALIZATIONS {
+					let first = repeated_name(policy, &first)?;
+					let second = repeated_name(policy, &second)?;
+					let third = repeated_name(policy, &third)?;
+					for mode in COLLATION_MODES {
+						let first_second = compare_pair(mode, first.as_units(), second.as_units())?;
+						let second_third = compare_pair(mode, second.as_units(), third.as_units())?;
+						let first_third = compare_pair(mode, first.as_units(), third.as_units())?;
+						prop_assert!(transitive(first_second, second_third, first_third));
+					}
+				}
+				cases.set(cases.get() + 1);
+				Ok(())
+			},
+		)
+		.unwrap();
+	assert_eq!(cases.get(), PROPERTY_CASES);
+	println!(
+		"HFS+ generated name triples: {} at seed {PROPERTY_SEED:#x}, up to {MAX_GENERATED_SCALARS} scalars and {MAX_NAME_UNITS} stored units",
+		cases.get()
+	);
 }

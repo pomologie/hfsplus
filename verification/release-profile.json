@@ -41,6 +41,79 @@
         "btree::offset_proofs::table_admission_matches_full_width_wire_counts": 2
       }
     },
+    "names-property": {
+      "obligation": "H-V03",
+      "method": "property",
+      "features": [],
+      "command": ["python3", "-B", "crates/foundation/hfsplus-pomologie-core/verification/check-name-evidence.py", "property"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "kernel_names": 94,
+        "scalar_names": 92,
+        "seeded_triples": 4096,
+        "name_seed": 1212568363,
+        "max_generated_scalars": 64,
+        "max_name_units": 255,
+        "equal_separators": 16,
+        "leaf_records": 198,
+        "seeded_lookups": 1024,
+        "lookup_seed": 1397051457
+      },
+      "harnesses": {
+        "historical_name_corpus_has_idempotent_keys_and_all_ordered_triples_obey_the_laws": 3218544,
+        "generated_unicode_triples_preserve_comparison_laws_and_repeated_keys": 4096,
+        "preserves_display_units_and_catalog_order_with_stable_ids": 1,
+        "separators::exact_index_separators_follow_the_first_leaf_record": 16
+      }
+    },
+    "names-differential": {
+      "obligation": "H-V03",
+      "method": "differential",
+      "features": [],
+      "command": ["python3", "-B", "crates/foundation/hfsplus-pomologie-core/verification/check-name-evidence.py", "differential"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0", "macos": "14.7.2", "macos_build": "23H311", "unicode": "16.0.0"},
+      "bounds": {
+        "macos_arch": "arm64",
+        "singleton_units": 65536,
+        "overrides": 329,
+        "ignorables": 16,
+        "seeded_pairs": 40000,
+        "directed_pairs": 76,
+        "max_name_units": 255,
+        "seed": 1212568363,
+        "unicode_table_sha256": "76d7ed87e971178d1a0a6baf8df5054e33d997313e108b84f8b2286961d63c86",
+        "rules_sha256": "ed9e6063e5d6aa6295a7b31cb43f6ac68966ab8c952944cc3963940df585cadb",
+        "fixture_sha256": "b3191bd2f9e657cbca50085108c56418303c4201a52a145dd18064be5b5a7d40",
+        "georgian_keys": ["2d00", "10d0"]
+      },
+      "harnesses": {
+        "folded_comparison_matches_native_equivalence_and_order": 1,
+        "decomposed_names_match_native_hfsplus_catalogs_for_shared_unicode_cases": 1,
+        "preserves_version_boundary_exposed_by_newer_optical_oracle": 1,
+        "rejects_the_historical_georgian_collision": 1
+      }
+    },
+    "names-native": {
+      "obligation": "H-V03",
+      "method": "native",
+      "features": [],
+      "command": ["env", "-u", "TMPDIR", "python3", "-B", "crates/foundation/hfsplus-pomologie-core/verification/check-name-evidence.py", "native"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0", "macos": "14.7.2", "macos_build": "23H311"},
+      "bounds": {
+        "macos_arch": "arm64",
+        "image_bytes": 67108864,
+        "normalization_rows": 63,
+        "lookup_pairs": 20,
+        "length_cases": 6,
+        "ordered_keys": 25,
+        "path_observations": 10,
+        "mapped_keys": 3,
+        "fixture_sha256": "eb7324ef5034f99805e8adc864aae3054fed46ae0152149926e64d305eaeecc3"
+      },
+      "harnesses": {
+        "kernel::mounted_names_match_normalization_collisions_bounds_and_order": 1
+      }
+    },
     "fresh-allocation-kani": {
       "obligation": "H-V06",
       "method": "kani",

@@ -6,7 +6,7 @@ Run the checker with Git and Python 3.11 or later from a clean candidate worktre
 python3 -B tools/check_release_evidence.py --root . --bundle "$evidence_dir/bundle.json"
 ```
 
-The release command derives the mandatory methods for the milestone from the committed [obligation registry](obligations.json). It requires a configured invocation for every active obligation and method, and a passing evidence record for every configured invocation. The current [release policy](release-profile.json) includes `format-kani` for H-V01 geometry, `btree-offset-kani` for H-V02 offset tables, H-V06 profiles for allocation proofs, block-set properties, independent raw allocation comparison, and macOS counts, and five H-V07 profiles for range admission, bounded positioned reads, synthetic stream faults, independent image comparison, and native no-write checking. The release command reports the remaining unconfigured methods and rejects the bundle until the matrix is complete.
+The release command derives the mandatory methods for the milestone from the committed [obligation registry](obligations.json). It requires a configured invocation for every active obligation and method, and a passing evidence record for every configured invocation. The current [release policy](release-profile.json) includes `format-kani` for H-V01 geometry, `btree-offset-kani` for H-V02 offset tables, three H-V03 name profiles, H-V06 profiles for allocation proofs, block-set properties, independent raw allocation comparison, and macOS counts, and five H-V07 profiles for range admission, bounded positioned reads, synthetic stream faults, independent image comparison, and native no-write checking. The release command reports the remaining unconfigured methods and rejects the bundle until the matrix is complete.
 
 Use `--profile format-kani` to check the geometry proofs separately. Run the policy's proof command from an isolated checkout of the candidate with Kani 0.68.0 and CBMC 6.11.0. Capture both output streams together. The [geometry verification guide](../crates/formats/hfsplus-format/verification/README.md) explains the proof scope and bounds.
 
@@ -17,6 +17,14 @@ python3 -B tools/check_release_evidence.py --root . --profile format-kani --bund
 ```
 
 Use `--profile btree-offset-kani` with a record of `bash crates/formats/hfsplus-format/verification/check-btree-offsets.sh` to check the offset-table proofs independently. The [format verification guide](../crates/formats/hfsplus-format/verification/README.md#btree-offset-tables) describes the assumptions and scope.
+
+The H-V03 `names-property` profile binds exhaustive ordered triples under both normalization policies and both comparators, 4,096 seeded Unicode triples, planner ordering, and 16 exact index separators with 1,024 seeded lookups. The `names-differential` profile binds the live CoreServices HFS Extended oracle, the pinned Unicode tables, the optical name fixtures and the historical Georgian collision. The `names-native` profile binds the mounted 64 MiB HFS+ capture, successful detach, raw catalog key order, and the separate Rust fixture replay. Use the CoreServices pair TSV hash for the differential record's `fixture_hash` and the mounted name TSV hash for the native record's `fixture_hash`. [Name evidence and fixture provenance](../crates/foundation/hfsplus-pomologie-core/UNICODE32.md)
+
+```sh
+python3 -B crates/foundation/hfsplus-pomologie-core/verification/check-name-evidence.py property
+python3 -B crates/foundation/hfsplus-pomologie-core/verification/check-name-evidence.py differential
+env -u TMPDIR python3 -B crates/foundation/hfsplus-pomologie-core/verification/check-name-evidence.py native
+```
 
 Use `--profile fresh-allocation-kani` with a record of `bash crates/filesystem/hfsplus-builder/verification/check-allocation.sh` to check the two bitmap and two reservation transition proofs independently. Each harness must reach both covers. [Builder verification guide](../crates/filesystem/hfsplus-builder/verification/README.md)
 

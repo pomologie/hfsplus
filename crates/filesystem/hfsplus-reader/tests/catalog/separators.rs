@@ -1,7 +1,7 @@
 //! Exact separator routing through the public catalog lookup APIs.
 
 use std::{
-	cell::RefCell,
+	cell::{Cell, RefCell},
 	collections::{BTreeMap, BTreeSet},
 };
 
@@ -205,6 +205,7 @@ fn exact_index_separators_follow_the_first_leaf_record() {
 		failure_persistence: None,
 		..ProptestConfig::default()
 	});
+	let checked = Cell::new(0);
 	runner
 		.run(
 			&(
@@ -228,8 +229,14 @@ fn exact_index_separators_follow_the_first_leaf_record() {
 					.map_err(|error| TestCaseError::fail(error.to_string()))?
 					.map(ExpectedEntry::from);
 				prop_assert_eq!(actual.as_ref(), expected, "query {:?}", query);
+				checked.set(checked.get() + 1);
 				Ok(())
 			},
 		)
 		.unwrap();
+	assert_eq!(checked.get(), CASES);
+	println!(
+		"HFS+ generated separator lookups: {} at seed {SEED:#x}",
+		checked.get()
+	);
 }

@@ -13,10 +13,12 @@ from hfsplus_evidence_transcript import (
     EvidenceError, require, verify_differential, verify_fault_tests, verify_kani,
     verify_native, verify_property_test,
 )
+from hfsplus_name_evidence import NAME_VALIDATORS
 
 
 POLICY_PATH = "verification/release-profile.json"
 REGISTRY_PATH = "verification/obligations.json"
+NAME_OBLIGATION = "H-V03"
 SCHEMA_VERSION = 1
 UNSCHEDULED = {"later", "stretch"}
 SHA256 = re.compile(r"[0-9a-f]{64}")
@@ -98,6 +100,11 @@ def positive_integer(value):
     return type(value) is int and value > 0
 
 
+def transcript_validator(profile):
+    validators = NAME_VALIDATORS if profile["obligation"] == NAME_OBLIGATION else METHOD_VALIDATORS
+    return validators.get(profile["method"])
+
+
 def required_matrix(policy, registry, requested_profile):
     require(isinstance(policy, dict) and set(policy) == {"schema_version", "milestone", "profiles"}
             and type(policy["schema_version"]) is int and policy["schema_version"] == SCHEMA_VERSION,
@@ -132,7 +139,7 @@ def required_matrix(policy, registry, requested_profile):
                 f"invalid policy profile {name}")
         obligation, method = profile["obligation"], profile["method"]
         require(method in active.get(obligation, ()), f"inactive obligation or method in {name}")
-        require(method in METHOD_VALIDATORS, f"no transcript verifier for {name}")
+        require(transcript_validator(profile) is not None, f"no transcript verifier for {name}")
         require(text_list(profile["features"]) and len(set(profile["features"])) == len(profile["features"])
                 and text_list(profile["command"]) and profile["command"], f"invalid invocation for {name}")
         require(text_mapping(profile["tool_versions"]) and METHOD_TOOLS[method] <= profile["tool_versions"].keys(),
@@ -205,12 +212,13 @@ def validate_record(record, name, profile, commit, digest, artifacts_root):
     elif record["method"] in {"property", "fault"}:
         require("proof" not in record, "Rust test evidence must not declare a theorem")
     elif record["method"] in {"differential", "native"}:
-        fixture_hash = profile["bounds"]["image_sha256"]
+        digest_field = "fixture_sha256" if profile["obligation"] == NAME_OBLIGATION else "image_sha256"
+        fixture_hash = profile["bounds"][digest_field]
         require(isinstance(fixture_hash, str) and SHA256.fullmatch(fixture_hash)
                 and record.get("fixture_hash") == fixture_hash and "proof" not in record,
-                "image check record does not match the pinned fixture")
+                "check record does not match the pinned fixture")
     transcript = read_artifacts(artifacts_root, record["artifacts"])
-    METHOD_VALIDATORS[record["method"]](transcript, profile)
+    transcript_validator(profile)(transcript, profile)
 
 
 def validate(root, bundle, requested_profile):

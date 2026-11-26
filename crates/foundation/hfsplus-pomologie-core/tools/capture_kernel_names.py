@@ -2,8 +2,10 @@
 """Capture name operations on a disposable macOS HFS+ filesystem."""
 
 import argparse
+from collections import Counter
 from contextlib import contextmanager
 import errno
+from hashlib import sha256
 import os
 from pathlib import Path
 import plistlib
@@ -22,6 +24,7 @@ WHOLE_DEVICE = re.compile(r"/dev/disk[0-9]+")
 VOLUME = "Historical Name Witness"
 MAX_UNITS = 255
 IMAGE_SIZE = "64m"
+IMAGE_BYTES = 64 * 1024 * 1024
 TIMEOUT = 60
 SUPPLEMENTARY_RANGE = range(0x10000, 0x110000)
 EXCLUDED_SUPPLEMENTARY_RANGE = range(0x2F800, 0x2FB00)
@@ -187,6 +190,8 @@ def capture():
             rows, lengths, inputs, names_id, order_id, policy_id = populate(mount)
         run(HDIUTIL, "convert", image, "-format", "UDTO", "-o", root / "native", "-quiet")
         raw = (root / "native.cdr").read_bytes()
+        if len(raw) != IMAGE_BYTES:
+            raise ValueError("native witness has the wrong partitionless image size")
         observed_names = tuple(catalog_file_names(raw, volume=0, parent=names_id))
         if len(observed_names) != len(inputs):
             raise ValueError("wrong count of stored normalization witnesses")
@@ -219,8 +224,15 @@ def main():
     options = parser.parse_args()
     result = capture()
     if options.check:
-        if FIXTURE.read_text(encoding="utf-8") != result:
+        content = result.encode("utf-8")
+        if FIXTURE.read_bytes() != content:
             raise ValueError("native name evidence differs from the tracked fixture")
+        counts = Counter(row.partition("\t")[0] for row in result.splitlines() if not row.startswith("#"))
+        print(f"Mounted HFS+ image: {IMAGE_BYTES} bytes, partitionless, detached")
+        print(f"Mounted HFS+ names: {counts['normalize']} normalization rows, {counts['pair']} lookup pairs, "
+              f"{counts['length']} lengths, {counts['order']} ordered keys, {counts['policy']} path observations, "
+              f"{counts['policy-key']} mapped keys")
+        print(f"Mounted HFS+ fixture SHA-256: {sha256(content).hexdigest()}")
     elif options.output is not None:
         with options.output.open("x", encoding="utf-8", newline="\n") as output:
             output.write(result)
