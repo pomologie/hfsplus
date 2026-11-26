@@ -2,11 +2,13 @@
 """Check the pinned raw HFS+ witness for H-BUILD-05-T01 and T02."""
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import os
 from pathlib import Path
 import plistlib
 import re
+import stat
 import struct
 import subprocess
 import sys
@@ -27,18 +29,42 @@ CARGO_TIMEOUT = 120
 ORACLE_TIMEOUT = 30
 HDIUTIL = "/usr/bin/hdiutil"
 FSCK_HFS = "/sbin/fsck_hfs"
+XATTR = "/usr/bin/xattr"
 VOLUME_HEADER_OFFSET = 1024
 ALLOCATION_GEOMETRY_OFFSET = 40
 ALLOCATION_GEOMETRY = struct.Struct(">III")
 WHOLE_DEVICE = re.compile(r"/dev/disk[0-9]+")
 VOLUME = "Pomologie Fixture"
+MACOS_DIRECTORY = "Synthetic.app/Contents/MacOS"
 RESOURCES = "Synthetic.app/Contents/Resources"
 GUIDE_PATH = unicodedata.normalize("NFD", f"{RESOURCES}/Café.txt")
+PRIMARY = f"{MACOS_DIRECTORY}/Witness"
+ALIAS = f"{RESOURCES}/WitnessAlias"
+LINK = f"{RESOURCES}/Start"
+INFO = "Synthetic.app/Contents/Info.plist"
+OWNER = 1234
+GROUP = 567
+UNIX_DATE = 1704195296
+DIRECTORY_MODE = 0o755
+GUIDE_DATA = b"Unicode HFS Plus witness\n"
+EXECUTABLE_DATA = b"#!/bin/sh\nexit 0\n"
+FORK = "com.apple.ResourceFork"
+NATIVE_XATTRS = {
+	(PRIMARY, FORK): b"Pomologie\0resource fork\n",
+	(ALIAS, FORK): b"Pomologie\0resource fork\n",
+	(PRIMARY, "org.pomologie.witness.shared"): b"shared\0attribute\xff",
+	(ALIAS, "org.pomologie.witness.shared"): b"shared\0attribute\xff",
+	(GUIDE_PATH, "org.pomologie.witness.guide"): b"guide metadata",
+}
+NATIVE_DIRECTORIES = (
+	"Synthetic.app", "Synthetic.app/Contents", MACOS_DIRECTORY, RESOURCES,
+)
+NATIVE_FILE_MODES = {PRIMARY: 0o751, ALIAS: 0o751, INFO: 0o644, GUIDE_PATH: 0o644}
 # p7zip 17.05 cannot select the decomposed name as a literal argument.
 REFERENCE_FILES = {
-	f"{RESOURCES}/Caf*.txt": b"Unicode HFS Plus witness\n",
-	f"{RESOURCES}/Start": b"../MacOS/Witness",
-	"[HFS+ Private Data]/iNode100": b"#!/bin/sh\nexit 0\n",
+	f"{RESOURCES}/Caf*.txt": GUIDE_DATA,
+	LINK: b"../MacOS/Witness",
+	"[HFS+ Private Data]/iNode100": EXECUTABLE_DATA,
 }
 
 
@@ -108,10 +134,64 @@ def verify_native(image):
 	finally:
 		for device in devices:
 			run(HDIUTIL, "detach", device)
-	verify_mounted_allocation(image, wrapped)
+	verify_mounted_image(image, wrapped)
 
 
-def verify_mounted_allocation(image, wrapped):
+def verify_mounted_metadata(mount):
+	app = mount / "Synthetic.app"
+	entries = {str(path.relative_to(mount)) for path in app.rglob("*")}
+	entries.add(app.name)
+	expected = {*NATIVE_DIRECTORIES, *NATIVE_FILE_MODES, LINK}
+	if entries != expected:
+		raise ValueError(f"native app tree differs from the manifest: {entries ^ expected}")
+	for relative, mode in NATIVE_FILE_MODES.items():
+		entry = (mount / relative).lstat()
+		if not stat.S_ISREG(entry.st_mode) or stat.S_IMODE(entry.st_mode) != mode:
+			raise ValueError(f"native file type or mode differs at {relative}")
+		verify_native_metadata(relative, entry)
+	for relative in NATIVE_DIRECTORIES:
+		entry = (mount / relative).lstat()
+		if not stat.S_ISDIR(entry.st_mode) or stat.S_IMODE(entry.st_mode) != DIRECTORY_MODE:
+			raise ValueError(f"native directory type or mode differs at {relative}")
+		verify_native_metadata(relative, entry)
+	primary, alias = ((mount / path).lstat() for path in (PRIMARY, ALIAS))
+	if primary.st_ino != alias.st_ino or primary.st_nlink != 2 or alias.st_nlink != 2:
+		raise ValueError("native hard-link names do not share the expected inode and link count")
+	link = (mount / LINK).lstat()
+	if not stat.S_ISLNK(link.st_mode):
+		raise ValueError("native symbolic link is absent from the manifest path")
+	verify_native_metadata(LINK, link)
+	print("macOS matched the app tree, ownership, timestamps, modes, and hard-link identity")
+
+
+def verify_mounted_payloads(mount):
+	if os.readlink(mount / LINK).encode() != REFERENCE_FILES[LINK]:
+		raise ValueError("native symbolic-link bytes differ from the manifest")
+	if (mount / GUIDE_PATH).read_bytes() != GUIDE_DATA:
+		raise ValueError("native Unicode file data differs from the manifest")
+	for path in (PRIMARY, ALIAS):
+		if (mount / path).read_bytes() != EXECUTABLE_DATA:
+			raise ValueError(f"native executable data differs at {path}")
+	info = plistlib.loads((mount / INFO).read_bytes())
+	if info != {
+		"CFBundleExecutable": "Witness",
+		"CFBundleIdentifier": "org.pomologie.hfsplus.witness",
+		"CFBundlePackageType": "APPL",
+	}:
+		raise ValueError("native bundle Info.plist differs from the manifest")
+	for (path, name), expected in NATIVE_XATTRS.items():
+		observed = bytes.fromhex(run(XATTR, "-px", name, mount / path).decode("ascii"))
+		if observed != expected:
+			raise ValueError(f"native attribute {name} differs at {path}")
+	print("macOS matched data and resource forks, extended attributes, and symbolic-link bytes")
+
+
+def verify_native_metadata(path, entry):
+	if (entry.st_uid, entry.st_gid, entry.st_mtime, entry.st_birthtime) != (OWNER, GROUP, UNIX_DATE, UNIX_DATE):
+		raise ValueError(f"native ownership or timestamps differ at {path}")
+
+
+def verify_mounted_image(image, wrapped):
 	with image.open("rb") as stream:
 		stream.seek(VOLUME_HEADER_OFFSET + ALLOCATION_GEOMETRY_OFFSET)
 		block_bytes, total_blocks, free_blocks = ALLOCATION_GEOMETRY.unpack(
@@ -122,7 +202,25 @@ def verify_mounted_allocation(image, wrapped):
 
 	mount = image.parent / "mount"
 	mount.mkdir()
-	attachment = plistlib.loads(run(HDIUTIL, "attach", "-readonly", "-mountpoint", mount, "-plist", wrapped))
+	with mounted_read_only(wrapped, mount, owners="on") as mounted:
+		if (mounted.f_blocks * mounted.f_frsize, mounted.f_bfree * mounted.f_frsize) != (
+			total_blocks * block_bytes, free_blocks * block_bytes,
+		):
+			raise ValueError("native total or free bytes differ from the volume header")
+		print(f"macOS matched {total_blocks} total and {free_blocks} free {block_bytes}-byte allocation blocks")
+		verify_mounted_metadata(mount)
+	# The witness includes execute-only permissions for non-owners. Ignore
+	# ownership on a second read-only attachment to examine those payloads.
+	with mounted_read_only(wrapped, mount, owners="off"):
+		verify_mounted_payloads(mount)
+
+
+@contextmanager
+def mounted_read_only(wrapped, mount, owners):
+	attachment = plistlib.loads(run(
+		HDIUTIL, "attach", "-readonly", "-nobrowse", "-noautoopen", "-owners", owners,
+		"-mountpoint", mount, "-plist", wrapped,
+	))
 	entries = attachment["system-entities"]
 	devices = [entry["dev-entry"] for entry in entries if WHOLE_DEVICE.fullmatch(entry.get("dev-entry", ""))]
 	try:
@@ -131,11 +229,7 @@ def verify_mounted_allocation(image, wrapped):
 		mounted = os.statvfs(mount)
 		if not mounted.f_flag & os.ST_RDONLY:
 			raise ValueError("expected a read-only mounted volume")
-		if (mounted.f_blocks * mounted.f_frsize, mounted.f_bfree * mounted.f_frsize) != (
-			total_blocks * block_bytes, free_blocks * block_bytes,
-		):
-			raise ValueError("native total or free bytes differ from the volume header")
-		print(f"macOS matched {total_blocks} total and {free_blocks} free {block_bytes}-byte allocation blocks")
+		yield mounted
 	finally:
 		for device in devices:
 			run(HDIUTIL, "detach", device)
@@ -153,7 +247,7 @@ def main():
 			toolchain = tomllib.load(config)["toolchain"]["channel"]
 		compiler = os.fsdecode(run("rustup", "which", "--toolchain", toolchain, "rustc").strip())
 		with TemporaryDirectory(prefix="hfsplus-canonical.") as temporary:
-			root = Path(temporary)
+			root = Path(temporary).resolve()
 			baseline = root / "canonical.hfs"
 			emit(baseline, toolchain, compiler, reverse=False)
 			emit(root / "reordered.hfs", toolchain, compiler, reverse=True)

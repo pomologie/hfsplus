@@ -29,6 +29,14 @@ jobs:
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
       - run: cargo nextest run --locked --workspace --no-default-features
       - run: cargo test --locked --doc --workspace --no-default-features
+      - name: Check the canonical raw HFS+ image digest
+        if: runner.os != 'macOS'
+        run: python crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py
+      - name: Check the canonical raw image with native and independent readers
+        if: runner.os == 'macOS'
+        run: |
+          brew install p7zip
+          env -u TMPDIR python3 crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py --seven-zip 7z --native-fsck
 
   bare-metal:
     runs-on: ubuntu-24.04

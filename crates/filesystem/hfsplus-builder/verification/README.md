@@ -10,15 +10,17 @@ Install Kani 0.68.0 and run `cargo kani setup` before running `bash check.sh` fr
 
 The [H-BUILD-05-T01 and T02 fixture](../tests/canonical_volume.rs) emits an 8 MiB clean nonjournaled HFS+ volume with fixed geometry and HFS dates, numeric ownership, and modes. Its synthetic app contains a Unicode guide, two names for one regular file, an inline attribute on that shared file, another inline attribute on the guide, a resource fork, and a relative symlink. The fixture never executes the synthetic app. Reversed manifest, link-name and attribute order must preserve the entire volume.
 
-The hosted suite compares both outputs. The [opt-in verifier](check-canonical-volume.py) runs the producer in separate processes and checks each output against the same pinned SHA-256 on every host. Run it with Python 3.11 or later.
+The [canonical verifier](check-canonical-volume.py) runs the producer in separate processes and checks both outputs against the same pinned SHA-256. The hosted matrix runs this check on Linux, macOS, and Windows. The macOS job also runs the independent and native checks. Run the verifier locally with Python 3.11 or later.
 
 ```sh
 python3 crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py
 ```
 
-Pass `--seven-zip 7z` to check the decomposed catalog spelling and exact Unicode file data, symlink bytes, and backing link inode data with an independent reader. Pass `--native-fsck` on macOS to wrap the fixture in a temporary UDRO image and run `fsck_hfs -fn` on a read-only attachment. The check then mounts the same image read-only and compares the native total and free allocation bytes with the on-disk header.
+Pass `--seven-zip 7z` to check the decomposed catalog spelling and exact Unicode file data, symlink bytes, and backing link inode data with an independent reader. Pass `--native-fsck` on macOS to wrap the fixture in a temporary UDRO image and run `fsck_hfs -fn` on a read-only attachment. The native check compares the mounted allocation counts, app tree, ownership, dates, modes and hard-link identity with the expected manifest. It makes a second read-only mount with ownership ignored to compare file data, resource forks, extended attributes and the symbolic-link target under the fixture's restrictive permissions.
 
 On macOS 14.7.2 arm64 (23H311) with Rust 1.99.1, both images from `a1b870f` had SHA-256 `63e2f4d50df05f59a1e6dbe63c77e5d75b10e1e2780bae068af3eec4faeadba6`. p7zip 17.05 matched the three readbacks. `fsck_hfs` reported a raw-device permission warning, completed its no-write checks, and found the volume consistent. The mounted volume matched the header's 2,048 total and 2,033 free 4,096-byte blocks. The normalized native log has SHA-256 `af1e13ce08d5eaaa8eeef4522bd4f1279e4937a552eb982034ec265fe533afc1`. [Acceptance catalog](../../../../docs/reference/test-catalog.json)
+
+Replaying the expanded checker against the `244b82b` sources on the same macOS and toolchain matched the pinned raw digest for both input orders and passed all native manifest checks. The digest and native checks run together in the hosted matrix for standalone release acceptance.
 
 The same revision passed the placement proof and all four allocation proofs with Kani 0.68.0 and CBMC 6.11.0. The 42-test hosted builder run on nightly `2026-11-04` left three opt-in cases out of its coverage map. The 14 mapped source files cover 1,921 of 2,122 lines and 160 of 182 branch outcomes. `allocation.rs` and `plan.rs` each cover 12 of 12 reported branch outcomes. `stream.rs` covers four of six. The proof, native, and coverage records are in `target/verification-evidence/a1b870f-builder-audit/`. The `builder-coverage.json` SHA-256 is `9bcee4277faa45431d45c1f93530444657db862c97d31470d449724aebb261da`.
 
