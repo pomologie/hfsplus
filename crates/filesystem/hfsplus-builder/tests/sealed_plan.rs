@@ -212,6 +212,57 @@ impl ReadAt for ObservedSource<'_> {
 }
 
 #[test]
+fn reports_a_source_identity_change_after_sealing() {
+	const PAYLOAD: &[u8] = b"unchanged length";
+	const SNAPSHOT_GENERATION: u64 = 1;
+
+	struct CheckedSource {
+		current_generation: Cell<u64>,
+		admitted_generation: u64,
+	}
+
+	impl ReadAt for CheckedSource {
+		type Error = io::Error;
+
+		fn len(&self) -> ByteLen {
+			PAYLOAD.len().into()
+		}
+
+		fn read_exact_at(&self, offset: ByteOffset, destination: &mut [u8]) -> io::Result<()> {
+			if self.current_generation.get() != self.admitted_generation {
+				return Err(io::ErrorKind::InvalidData.into());
+			}
+			PAYLOAD
+				.read_exact_at(offset, destination)
+				.map_err(io::Error::other)
+		}
+	}
+
+	let source = CheckedSource {
+		current_generation: Cell::new(SNAPSHOT_GENERATION),
+		admitted_generation: SNAPSHOT_GENERATION,
+	};
+	let mut draft = PlanBuilder::new(source.len(), Limits::default());
+	draft
+		.push_source(ByteOffset(0), &source, ByteOffset(0), source.len())
+		.unwrap();
+	let plan = draft.seal().unwrap();
+	let mut output = Vec::new();
+	plan.write_to(&mut output).unwrap();
+	assert_eq!(output, PAYLOAD);
+	output.clear();
+	source.current_generation.set(SNAPSHOT_GENERATION + 1);
+	assert!(matches!(
+		plan.write_to(&mut output),
+		Err(WriteError::Read(ReadError::Source {
+			offset: ByteOffset(0),
+			error: WindowError::Source(error),
+		})) if error.kind() == io::ErrorKind::InvalidData
+	));
+	assert!(output.is_empty());
+}
+
+#[test]
 fn cancellation_around_the_next_chunk_preserves_only_the_completed_prefix() {
 	const IMAGE_BYTES: usize = 128 * 1024;
 	const CHECK_BEFORE_SECOND_READ: usize = 3;

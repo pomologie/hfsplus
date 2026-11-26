@@ -479,8 +479,8 @@
       "scenario": "Read slices at all interval boundaries and across two source extents",
       "oracle": "raw materialized reference",
       "expected": "Identical bytes to full sequential emission",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-04-T03",
@@ -491,8 +491,8 @@
       "scenario": "Source short read, changed identity after plan, sink error",
       "oracle": "fault device",
       "expected": "Explicit failure, no fabricated padding or valid output report",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-05-T02",
