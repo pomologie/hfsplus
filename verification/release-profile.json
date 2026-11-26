@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "milestone": "0.1.0",
+  "profiles": {
+    "format-kani": {
+      "obligation": "H-V01",
+      "method": "kani",
+      "features": [],
+      "command": ["bash", "crates/formats/hfsplus-format/verification/check.sh"],
+      "tool_versions": {"kani": "0.68.0", "cbmc": "6.11.0"},
+      "bounds": {
+        "allocation_block_size_bits": 32,
+        "allocation_block_count_bits": 32,
+        "device_length_bits": 64,
+        "range_start_bits": 32,
+        "range_count_bits": 32,
+        "allocation_model_bits": 128,
+        "range_endpoint_model_bits": 64
+      },
+      "harnesses": {
+        "volume_geometry_proofs::allocation_block_range_matches_widened_volume_model": 2,
+        "volume_geometry_proofs::geometry_matches_widened_volume_model": 4
+      }
+    }
+  }
+}
