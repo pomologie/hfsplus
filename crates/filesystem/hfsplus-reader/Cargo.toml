@@ -20,5 +20,9 @@ hfsplus-core.workspace = true
 # Compression
 miniz_oxide = { workspace = true, optional = true }
 
+[dev-dependencies]
+# Property testing
+proptest = { version = "=1.12.0", default-features = false, features = ["std"] }
+
 [lints]
 workspace = true

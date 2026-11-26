@@ -32,6 +32,12 @@ H-FMT-01-T04 passed against that optical fixture. An independent allocation-bloc
 
 Rust 1.99.1 passed both `cargo test --locked --offline --no-default-features -p hfsplus-format --test native` and `cargo test --locked --offline --no-default-features -p hfsplus-reader --test read`.
 
+### H-FMT-02 catalog separator evidence
+
+H-FMT-02-T05 passed on macOS 14.7.2 arm64 with Rust 1.99.1. A linear walk of the native optical fixture's leaf chain populated a sorted map of all 198 records without using the index. For each of the 16 index separators, the exact stored key matched ordinal zero in the child recorded by the map. The public reader returned the complete expected entry through root, named-child, or ID lookup and read the expected leaf. Proptest 1.12.0 exercised 1,024 seeded pairs of exact separators and present or absent names, including uppercase queries. All 11 catalog tests and strict Clippy passed with default features disabled. The reader's bare-metal normal graphs retained the same dependencies. [Separator tests](../../crates/filesystem/hfsplus-reader/tests/catalog/separators.rs) · [Native catalog provenance](../../crates/filesystem/hfsplus-reader/tests/fixtures/native-catalog-volume.json)
+
+The focused separator test failed in a temporary source copy when the index descent condition excluded exact equality.
+
 ### H-FMT-04 metadata evidence
 
 H-FMT-04-T03 passed using two native fixtures from macOS 14.7.2 arm64. The hard-link fixture matched the native inode metadata and the different nonempty data and resource fork bytes. The attribute fixture matched the lengths and every byte of the 4,097-byte contiguous value and the 118,808-byte fragmented value recorded by Darwin `getxattr`. All 18 tests passed with Rust 1.99.1 using `cargo test --locked --offline --no-default-features -p hfsplus-reader --test attribute_forks --test hard_links`. This case qualifies large attribute reads. The builder's attribute support is limited to inline values. [Hard-link provenance](../../crates/filesystem/hfsplus-reader/tests/fixtures/native-hardlink-resolution.json) · [Attribute provenance](../../crates/filesystem/hfsplus-reader/tests/fixtures/native-attribute-forks.json)

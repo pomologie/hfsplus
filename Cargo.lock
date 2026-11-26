@@ -91,6 +91,7 @@ dependencies = [
  "hfsplus-format",
  "hfsplus-pomologie-core",
  "miniz_oxide",
+ "proptest",
 ]
 
 [[package]]

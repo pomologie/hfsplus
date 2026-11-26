@@ -311,8 +311,8 @@
       "scenario": "Boundary leaf key exactly equals index separator",
       "oracle": "proptest",
       "expected": "Lookup matches reference sorted map",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/FORMAT.md"
     },
     {
       "id": "H-FMT-02-T06",

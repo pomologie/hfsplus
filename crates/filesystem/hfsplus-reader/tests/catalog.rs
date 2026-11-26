@@ -15,6 +15,8 @@ use hfsplus_reader::{
 
 #[path = "catalog/hosted.rs"]
 mod hosted;
+#[path = "catalog/separators.rs"]
+mod separators;
 #[path = "catalog/symlink.rs"]
 mod symlink;
 
