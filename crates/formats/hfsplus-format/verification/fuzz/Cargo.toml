@@ -1,0 +1,25 @@
+[package]
+name = "hfsplus-format-fuzz"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+# Workspace format codecs
+hfsplus-format = { path = "../..", default-features = false }
+
+# Hosted verification
+libfuzzer-sys = "=0.4.13"
+
+[workspace]
+resolver = "3"
+
+[[bin]]
+name = "volume_wire"
+path = "fuzz_targets/volume_wire.rs"
+test = false
+doc = false
+bench = false
