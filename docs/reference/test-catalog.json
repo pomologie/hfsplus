@@ -647,8 +647,8 @@
       "scenario": "Run same semantic fixtures against no_std-configured engine in hosted test harness and std-enabled engine; compare metadata, bytes and typed errors.",
       "oracle": "Shared native-derived fixtures and independent expectations",
       "expected": "Both configurations match the qualified semantics; no host-only logic substitute.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/architecture/VERIFICATION.md"
     },
     {
       "id": "H-PORT-01-T04",

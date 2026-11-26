@@ -334,7 +334,7 @@
         "H-PORT-01-T03",
         "H-PORT-01-T04"
       ],
-      "status": "planned",
+      "status": "pass",
       "mandatory": true
     }
   ]

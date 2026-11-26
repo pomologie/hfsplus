@@ -1,6 +1,6 @@
 //! Native HFS+ catalog coverage for H-READ-01 and seek invariants of H-V08.
 
-use std::num::NonZeroUsize;
+use std::{fmt::Debug, num::NonZeroUsize, path::Path};
 
 use hfsplus_core::{ByteOffset, ReadAt};
 use hfsplus_format::{
@@ -10,13 +10,16 @@ use hfsplus_format::{
 };
 use hfsplus_reader::{
 	Volume,
-	catalog::{CatalogError, CatalogLimits, Corruption, EntryKind, Limit, ROOT_ID},
+	catalog::{CatalogError, CatalogLimits, Corruption, Entry, EntryKind, Limit, ROOT_ID},
 };
 
+#[path = "catalog/hosted.rs"]
+mod hosted;
 #[path = "catalog/symlink.rs"]
 mod symlink;
 
 const NATIVE: &[u8] = include_bytes!("fixtures/native-catalog-volume.bin");
+const NATIVE_PATH: &str = "tests/fixtures/native-catalog-volume.bin";
 const LABEL: &str = "Pomologie Catalog";
 const NESTED: &str = "Nested";
 const FOLDED_FILE: &str = "RÉSUMÉ.TXT";
@@ -40,7 +43,19 @@ fn catalog_retains_its_exact_volume_view_identity() {
 
 #[test]
 fn resolves_native_multilevel_names_ids_and_payload() {
-	let volume = Volume::open(NATIVE).unwrap();
+	let file = Path::new(env!("CARGO_MANIFEST_DIR")).join(NATIVE_PATH);
+	let hosted = hosted::FixtureFile::open(&file).unwrap();
+	assert_eq!(
+		check_native_catalog_file(NATIVE),
+		check_native_catalog_file(hosted)
+	);
+}
+
+fn check_native_catalog_file<S: ReadAt>(source: S) -> Entry
+where
+	S::Error: Debug,
+{
+	let volume = Volume::open(source).unwrap();
 	let catalog = volume.open_catalog(CatalogLimits::default()).unwrap();
 	let root = catalog.root().unwrap();
 	assert_eq!(root.metadata.id, ROOT_ID);
@@ -65,14 +80,15 @@ fn resolves_native_multilevel_names_ids_and_payload() {
 		catalog.lookup(ROOT_ID, "\u{200c}"),
 		Err(CatalogError::InvalidName)
 	));
-	let EntryKind::File { data, resource } = file.kind else {
+	let EntryKind::File { data, resource } = &file.kind else {
 		panic!("expected a native regular file");
 	};
-	let fork = volume.open_embedded_fork(&data).unwrap();
+	let fork = volume.open_embedded_fork(data).unwrap();
 	let mut read = [0; PAYLOAD.len()];
 	fork.read_exact_at(ByteOffset(0), &mut read).unwrap();
 	assert_eq!(&read, PAYLOAD);
-	assert!(volume.open_embedded_fork(&resource).unwrap().is_empty());
+	assert!(volume.open_embedded_fork(resource).unwrap().is_empty());
+	file
 }
 
 #[test]
