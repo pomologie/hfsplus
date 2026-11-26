@@ -40,6 +40,23 @@
         "btree::offset_proofs::decode_leaf_offsets_match_bounded_wire_model": 4,
         "btree::offset_proofs::table_admission_matches_full_width_wire_counts": 2
       }
+    },
+    "sealed-placement-kani": {
+      "obligation": "H-V07",
+      "method": "kani",
+      "features": [],
+      "command": ["bash", "crates/filesystem/hfsplus-builder/verification/check-placement.sh"],
+      "tool_versions": {"kani": "0.68.0", "cbmc": "6.11.0"},
+      "bounds": {
+        "placement_limit": 8,
+        "image_length_bits": 64,
+        "placement_offset_bits": 64,
+        "placement_length_bits": 64,
+        "reference_endpoint_bits": 128
+      },
+      "harnesses": {
+        "placement_proof::placements_cover_exactly_the_admitted_prefix": 1
+      }
     }
   }
 }

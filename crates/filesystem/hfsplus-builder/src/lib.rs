@@ -20,3 +20,6 @@ mod bitmap_proof;
 #[cfg(kani)]
 #[path = "../verification/kani/placement.rs"]
 mod placement_proof;
+#[cfg(test)]
+#[path = "../verification/positioned_reads.rs"]
+mod positioned_reads_tests;
