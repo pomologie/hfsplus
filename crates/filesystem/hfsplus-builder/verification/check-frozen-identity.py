@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Compare the valid frozen-draft witness with independent HFS+ wire facts."""
 
+import argparse
 import hashlib
+import json
 import os
 from pathlib import Path
+import stat
 import struct
 import subprocess
 import sys
@@ -15,6 +18,8 @@ from interleaved_fork_oracle import (
 	FILE_RECORD, HEADER_OFFSET, RECORD_OFFSET, contiguous_metadata, fork, leaf_records,
 )
 
+from readonly_mount import mount_argv, mounted_read_only
+
 
 ROOT = Path(__file__).resolve().parents[4]
 IMAGE_BYTES = 8 * 1024 * 1024
@@ -22,6 +27,8 @@ IMAGE_SHA256 = "ad8f9af8d574eedf989b154ab5fca2d9a57d50c4b9fc692c90a21114f983d0bb
 EMIT_OUTPUT = "POMOLOGIE_FROZEN_DRAFT_OUTPUT"
 EMIT_REVERSE = "POMOLOGIE_RAW_HFS_WITNESS_REVERSE"
 EMIT_TIMEOUT_SECONDS = 120
+NATIVE_TIMEOUT_SECONDS = 30
+SW_VERS = "/usr/bin/sw_vers"
 FOLDER_RECORD = 1
 THREAD_KIND = {FOLDER_RECORD: 3, FILE_RECORD: 4}
 THREAD_FIELDS = struct.Struct(">HHIH")
@@ -150,7 +157,65 @@ def run(toolchain, *args, **kwargs):
 	).stdout.strip()
 
 
+def run_native(*argv):
+	return subprocess.run(argv, check=True, capture_output=True, timeout=NATIVE_TIMEOUT_SECONDS).stdout
+
+
+def object_path(root, cnid):
+	if cnid == ROOT_ID:
+		return root
+	parent, name, _ = OBJECTS[cnid]
+	return object_path(root, parent) / name
+
+
+def verify_native_mount(image_path, digest):
+	if not stat.S_ISREG(image_path.lstat().st_mode) or digest != IMAGE_SHA256:
+		raise ValueError("native identity check requires the pinned regular fixture")
+	version, build = (run_native(SW_VERS, option).decode().strip()
+		for option in ("-productVersion", "-buildVersion"))
+	print(f"macOS {version} build {build}")
+	mount = image_path.parent / "mount"
+	mount.mkdir()
+	argv = mount_argv("<fixture>", "<mount>", "off", raw_image=True)
+	print(f"Native identity attachment argv {json.dumps(argv)}")
+	with mounted_read_only(run_native, image_path, mount, owners="off", raw_image=True):
+		print("Native identity mount verified read-only")
+		root = mount.stat()
+		if not stat.S_ISDIR(root.st_mode) or root.st_ino != ROOT_ID:
+			raise ValueError("macOS did not report the root directory CNID")
+		observed_generated = []
+		for ordinal, cnid in enumerate(GENERATED, start=1):
+			path = object_path(mount, cnid)
+			entry = path.lstat()
+			expected = GENERATED_IDS.pack(cnid, SHARED_INODE) + bytes([ordinal])
+			if (not stat.S_ISREG(entry.st_mode) or entry.st_ino != cnid or path.read_bytes() != expected
+				or (path / "..namedfork" / "rsrc").read_bytes() != GENERATED_RESOURCE):
+				raise ValueError(f"macOS generated file identity or fork differs for CNID {cnid}")
+			observed_generated.append(entry.st_ino)
+		observed_inode = None
+		for cnid in ALIASES:
+			path = object_path(mount, cnid)
+			entry = path.lstat()
+			if (not stat.S_ISREG(entry.st_mode) or (entry.st_ino, entry.st_nlink) != (SHARED_INODE, len(ALIASES))
+				or path.read_bytes() != SHARED_PAYLOAD):
+				raise ValueError(f"macOS alias identity or data differs for stub CNID {cnid}")
+			observed_inode = entry
+		print(f"macOS matched root CNID {root.st_ino}, generated CNIDs {tuple(observed_generated)} and both forks, "
+			f"and shared inode {observed_inode.st_ino} with {observed_inode.st_nlink} links and exact data")
+	print("Native identity attachment detached")
+	with image_path.open("rb") as source:
+		observed_digest = hashlib.file_digest(source, "sha256").hexdigest()
+	if observed_digest != digest:
+		raise ValueError("the native identity check altered the frozen-draft image")
+	print(f"Native identity image SHA-256 {observed_digest}")
+
+
 def main():
+	parser = argparse.ArgumentParser(description=__doc__)
+	parser.add_argument("--native", action="store_true", help="check the fixture using a read-only macOS software mount")
+	options = parser.parse_args()
+	if options.native and sys.platform != "darwin":
+		parser.error("native identity verification requires macOS")
 	try:
 		with (ROOT / "rust-toolchain.toml").open("rb") as config:
 			toolchain = tomllib.load(config)["toolchain"]["channel"]
@@ -158,7 +223,7 @@ def main():
 		print(run(toolchain, "cargo", "--version"))
 		print(run(toolchain, "rustc", "--version"))
 		with TemporaryDirectory(prefix="hfsplus-frozen-identity.") as temporary:
-			path = Path(temporary) / "frozen-draft.hfs"
+			path = Path(temporary).resolve() / "frozen-draft.hfs"
 			environment = os.environ | {EMIT_OUTPUT: str(path)}
 			environment.pop(EMIT_REVERSE, None)
 			run(toolchain, "cargo", "test", "--color", "never", "--locked", "--no-default-features",
@@ -172,6 +237,8 @@ def main():
 				raise ValueError(f"unexpected frozen-draft SHA-256 {digest}")
 			print(f"Frozen draft image {len(image)} bytes SHA-256 {digest}")
 			verify_image(image)
+			if options.native:
+				verify_native_mount(path, digest)
 	except (OSError, ValueError, struct.error, subprocess.SubprocessError) as error:
 		print(error, file=sys.stderr)
 		if isinstance(error, subprocess.CalledProcessError):

@@ -2,12 +2,10 @@
 """Check the canonical, frozen-draft, or packed-catalog HFS+ witness."""
 
 import argparse
-from contextlib import contextmanager
 import hashlib
 import os
 from pathlib import Path
 import plistlib
-import re
 import stat
 import struct
 import subprocess
@@ -15,6 +13,8 @@ import sys
 from tempfile import TemporaryDirectory
 import tomllib
 import unicodedata
+
+from readonly_mount import HDIUTIL, WHOLE_DEVICE, mounted_read_only
 
 
 ROOT = Path(__file__).resolve().parents[4]
@@ -27,12 +27,9 @@ IMAGE_BYTES = 8 * 1024 * 1024
 EXPECTED_SHA256 = "63e2f4d50df05f59a1e6dbe63c77e5d75b10e1e2780bae068af3eec4faeadba6"
 CARGO_TIMEOUT = 120
 ORACLE_TIMEOUT = 30
-HDIUTIL = "/usr/bin/hdiutil"
 FSCK_HFS = "/sbin/fsck_hfs"
 XATTR = "/usr/bin/xattr"
 SW_VERS = "/usr/bin/sw_vers"
-RAW_IMAGE_ARGUMENT = ("-imagekey", "diskimage-class=CRawDiskImage")
-WHOLE_DEVICE = re.compile(r"/dev/disk[0-9]+")
 VOLUME = "Pomologie Fixture"
 MACOS_DIRECTORY = "Synthetic.app/Contents/MacOS"
 RESOURCES = "Synthetic.app/Contents/Resources"
@@ -223,34 +220,13 @@ def verify_mounted_image(image, wrapped):
 
 	mount = image.parent / "mount"
 	mount.mkdir()
-	with mounted_read_only(wrapped, mount, owners="on") as mounted:
+	with mounted_read_only(run, wrapped, mount, owners="on") as mounted:
 		verify_mounted_allocation_counts(image, mounted)
 		verify_mounted_metadata(mount)
 	# The witness includes execute-only permissions for non-owners. Ignore
 	# ownership on a second read-only attachment to examine those payloads.
-	with mounted_read_only(wrapped, mount, owners="off"):
+	with mounted_read_only(run, wrapped, mount, owners="off"):
 		verify_mounted_payloads(mount)
-
-
-@contextmanager
-def mounted_read_only(image, mount, owners, *, raw_image=False):
-	image_format = RAW_IMAGE_ARGUMENT if raw_image else ()
-	attachment = plistlib.loads(run(
-		HDIUTIL, "attach", "-readonly", "-nobrowse", "-noautoopen", "-owners", owners,
-		"-mountpoint", mount, "-plist", *image_format, image,
-	))
-	entries = attachment["system-entities"]
-	devices = [entry["dev-entry"] for entry in entries if WHOLE_DEVICE.fullmatch(entry.get("dev-entry", ""))]
-	try:
-		if len(devices) != 1 or not any(entry.get("mount-point") == str(mount) for entry in entries):
-			raise ValueError("expected the disposable partitionless image at the requested mount point")
-		mounted = os.statvfs(mount)
-		if not mounted.f_flag & os.ST_RDONLY:
-			raise ValueError("expected a read-only mounted volume")
-		yield mounted
-	finally:
-		for device in devices:
-			run(HDIUTIL, "detach", device)
 
 
 def verify_frozen_draft(root, toolchain, compiler, options):
@@ -278,7 +254,7 @@ def verify_frozen_draft(root, toolchain, compiler, options):
 		wrapped = wrap_and_check(baseline)
 		mount = root / "frozen-draft-mount"
 		mount.mkdir()
-		with mounted_read_only(wrapped, mount, owners="off"):
+		with mounted_read_only(run, wrapped, mount, owners="off"):
 			verify_frozen_draft_mount(mount, generated)
 
 
@@ -338,7 +314,7 @@ def verify_packed_catalog(root, toolchain, compiler, options):
 		wrapped = wrap_and_check(image)
 		mount = root / "mount"
 		mount.mkdir()
-		with mounted_read_only(wrapped, mount, owners="off"):
+		with mounted_read_only(run, wrapped, mount, owners="off"):
 			verify_packed_mount(mount, names)
 
 
@@ -389,7 +365,7 @@ def verify_interleaved_forks(root, toolchain, compiler, options):
 		wrapped = wrap_and_check(image)
 		mount = root / "mount"
 		mount.mkdir()
-		with mounted_read_only(wrapped, mount, owners="off"):
+		with mounted_read_only(run, wrapped, mount, owners="off"):
 			check_mounted_interleaved_forks(mount)
 
 
@@ -409,7 +385,7 @@ def verify_metadata_dates(root, toolchain, compiler):
 		"Unix-Epoch": (0,),
 		"Last": (last_unix_seconds,),
 	}
-	with mounted_read_only(wrapped, mount, owners="off"):
+	with mounted_read_only(run, wrapped, mount, owners="off"):
 		for name, allowed in expected.items():
 			entry = (mount / name).lstat()
 			times = (entry.st_birthtime, entry.st_mtime, entry.st_ctime, entry.st_atime)
@@ -431,7 +407,7 @@ def verify_native_allocation_counts(image, toolchain, compiler):
 	check_digest(image)
 	mount = image.parent / "mount"
 	mount.mkdir()
-	with mounted_read_only(image, mount, owners="on", raw_image=True) as mounted:
+	with mounted_read_only(run, image, mount, owners="on", raw_image=True) as mounted:
 		verify_mounted_allocation_counts(image, mounted)
 	print("Native read-only allocation attachment detached")
 	check_digest(image)

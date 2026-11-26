@@ -258,11 +258,29 @@ def verify_native_allocation_counts(transcript, profile):
     require(lines[3:] == expected, "incorrect native allocation counts, detach, or fixture digest")
 
 
+def verify_native_frozen_identity(transcript, profile):
+    lines = transcript.splitlines()
+    verify_frozen_identity("\n".join(lines[:DIFFERENTIAL_LINE_COUNT]), profile)
+    bounds, versions = profile["bounds"], profile["tool_versions"]
+    generated = tuple(bounds["generated_cnids"])
+    expected = [
+        f"macOS {versions['macos']} build {versions['macos_build']}",
+        f"Native identity attachment argv {json.dumps(bounds['attachment_argv'])}",
+        "Native identity mount verified read-only",
+        f"macOS matched root CNID {bounds['root_cnid']}, generated CNIDs {generated} and both forks, "
+        f"and shared inode {bounds['shared_inode']} with {len(bounds['stub_cnids'])} links and exact data",
+        "Native identity attachment detached",
+        f"Native identity image SHA-256 {bounds['image_sha256']}",
+    ]
+    require(lines[DIFFERENTIAL_LINE_COUNT:] == expected, "incorrect native frozen-draft mount, identities, or digest")
+
+
 def verify_native(transcript, profile):
     harnesses = profile["harnesses"]
     require(len(harnesses) == 1, "native transcript requires one exact oracle")
     (name, count), = harnesses.items()
     oracles = {"interleaved-forks": verify_interleaved_native,
-               "canonical-allocation-counts": verify_native_allocation_counts}
+               "canonical-allocation-counts": verify_native_allocation_counts,
+               "frozen-draft-catalog": verify_native_frozen_identity}
     require(count == 1 and name in oracles, "unknown native oracle")
     oracles[name](transcript, profile)

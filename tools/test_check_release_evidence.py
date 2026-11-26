@@ -223,7 +223,7 @@ class ReleaseEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(EvidenceError, "incorrect interleaved fixture"):
             verify_differential(transcript.rsplit("\n", 2)[0], profile)
 
-    def test_frozen_identity_differential_requires_catalog_threads_and_link_identity(self):
+    def test_frozen_identity_profiles_require_catalog_threads_and_link_identity(self):
         digest = hashlib.sha256(b"frozen-draft fixture").hexdigest()
         profile = {
             "harnesses": {"frozen-draft-catalog": 1},
@@ -246,6 +246,24 @@ Independent forks matched generated CNIDs (16, 20, 22), hard-link stubs (18, 25)
             with self.subTest(replacement=new):
                 with self.assertRaisesRegex(EvidenceError, "incorrect frozen-draft"):
                     verify_differential(transcript.replace(old, new), profile)
+
+        profile["tool_versions"].update(macos="14.7.2", macos_build="23H311")
+        argv = ["/usr/bin/hdiutil", "attach", "-readonly", "fixture.hfs"]
+        profile["bounds"]["attachment_argv"] = argv
+        transcript += f"""macOS 14.7.2 build 23H311
+Native identity attachment argv {json.dumps(argv)}
+Native identity mount verified read-only
+macOS matched root CNID 2, generated CNIDs (16, 20, 22) and both forks, and shared inode 30 with 2 links and exact data
+Native identity attachment detached
+Native identity image SHA-256 {digest}
+"""
+        verify_native(transcript, profile)
+        for old, new in (('"-readonly"', '"-readwrite"'), ("mount verified read-only", "mount verified"),
+                         ("with 2 links", "with 3 links"), ("attachment detached", "attachment failed"),
+                         (f"Native identity image SHA-256 {digest}", f"Native identity image SHA-256 {'0' * len(digest)}")):
+            with self.subTest(replacement=new):
+                with self.assertRaisesRegex(EvidenceError, "incorrect native frozen-draft"):
+                    verify_native(transcript.replace(old, new), profile)
 
     def test_allocation_differential_requires_block_ownership_and_both_headers(self):
         profile, transcript = interleaved_fixture()

@@ -272,6 +272,30 @@
         "frozen-draft-catalog": 1
       }
     },
+    "draft-identity-native": {
+      "obligation": "H-V05",
+      "method": "native",
+      "features": [],
+      "command": ["env", "-u", "TMPDIR", "python3", "-B", "crates/filesystem/hfsplus-builder/verification/check-frozen-identity.py", "--native"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1", "python": "3.14.0", "macos": "14.7.2", "macos_build": "23H311"},
+      "bounds": {
+        "image_bytes": 8388608,
+        "image_sha256": "ad8f9af8d574eedf989b154ab5fca2d9a57d50c4b9fc692c90a21114f983d0bb",
+        "catalog_objects": 16,
+        "catalog_threads": 16,
+        "catalog_depth": 2,
+        "root_cnid": 2,
+        "next_cnid": 31,
+        "generated_cnids": [16, 20, 22],
+        "stub_cnids": [18, 25],
+        "shared_inode": 30,
+        "link_reference": 100,
+        "attachment_argv": ["/usr/bin/hdiutil", "attach", "-readonly", "-nobrowse", "-noautoopen", "-owners", "off", "-mountpoint", "<mount>", "-plist", "-imagekey", "diskimage-class=CRawDiskImage", "<fixture>"]
+      },
+      "harnesses": {
+        "frozen-draft-catalog": 1
+      }
+    },
     "fresh-allocation-kani": {
       "obligation": "H-V06",
       "method": "kani",
