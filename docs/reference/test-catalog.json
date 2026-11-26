@@ -395,8 +395,8 @@
       "scenario": "Tree order permuted; generated asset size changed after identity freeze",
       "oracle": "canonical manifest model",
       "expected": "Stable IDs and valid catalog threads, no stale alias IDs",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-01-T03",
