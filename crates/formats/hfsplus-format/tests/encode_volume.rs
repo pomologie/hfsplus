@@ -1,6 +1,9 @@
 use hfsplus_format::{
 	Error,
-	volume::{AllocationBlock, CatalogId, Extent, Fork, Geometry, Header, Signature, SpecialFiles},
+	volume::{
+		AllocationBlock, CatalogId, Extent, FORK_BYTES, Fork, Geometry, HEADER_BYTES, Header,
+		Signature, SpecialFiles,
+	},
 };
 
 const NATIVE_PRIMARY: &[u8] = include_bytes!("fixtures/native-primary.bin");
@@ -75,4 +78,63 @@ fn constructs_and_rechecks_the_header_and_fork() {
 	header.journal_info = None;
 	header.forks.catalog.logical_bytes = u64::from(geometry.block_size()) + 1;
 	assert_eq!(header.encode(), Err(Error::InvalidFork));
+}
+
+#[test]
+fn embedded_fork_slots_preserve_logical_order_and_report_overflow() {
+	const PHYSICAL_STARTS: [u32; 8] = [90, 12, 75, 33, 45, 66, 20, 10];
+	const CLUMP_BLOCKS: u32 = 4;
+	let geometry =
+		Geometry::new(NATIVE_BLOCK_BYTES, NATIVE_BLOCK_COUNT, NATIVE_VOLUME_BYTES).unwrap();
+	let extents = PHYSICAL_STARTS.map(|block| Extent {
+		start: AllocationBlock(block),
+		blocks: 1,
+	});
+	for extent_count in 0..=extents.len() {
+		let entries = &extents[..extent_count];
+		let embedded = extent_count as u32;
+		let maximum_total = embedded + u32::from(extent_count == extents.len());
+		for total in embedded..=maximum_total {
+			let logical_bytes = u64::from(total) * u64::from(NATIVE_BLOCK_BYTES);
+			let clump = CLUMP_BLOCKS * NATIVE_BLOCK_BYTES;
+			let fork = Fork::new(logical_bytes, clump, total, entries, geometry).unwrap();
+			let mut expected = Vec::with_capacity(FORK_BYTES);
+			expected.extend(logical_bytes.to_be_bytes());
+			expected.extend(clump.to_be_bytes());
+			expected.extend(total.to_be_bytes());
+			for extent in entries {
+				expected.extend(extent.start.0.to_be_bytes());
+				expected.extend(extent.blocks.to_be_bytes());
+			}
+			expected.resize(FORK_BYTES, 0);
+			assert_eq!(fork.encode(geometry).unwrap().as_slice(), expected);
+			let decoded = Fork::decode(&expected, geometry).unwrap();
+			assert!(decoded.extents().eq(entries.iter().copied()));
+			assert_eq!(decoded.has_overflow(), total != embedded);
+		}
+	}
+}
+
+#[test]
+fn rejects_every_short_prefix_of_a_native_header_and_fork() {
+	let header = Header::decode(NATIVE_PRIMARY, NATIVE_VOLUME_BYTES).unwrap();
+	let catalog = header.forks.catalog.encode(header.geometry).unwrap();
+	for length in 0..HEADER_BYTES {
+		assert_eq!(
+			Header::decode(&NATIVE_PRIMARY[..length], NATIVE_VOLUME_BYTES),
+			Err(Error::Truncated),
+			"header prefix of {length} bytes",
+		);
+	}
+	for length in 0..FORK_BYTES {
+		assert_eq!(
+			Fork::decode(&catalog[..length], header.geometry),
+			Err(Error::Truncated),
+			"fork prefix of {length} bytes",
+		);
+	}
+	assert_eq!(
+		Fork::decode(&catalog, header.geometry).unwrap(),
+		header.forks.catalog,
+	);
 }
