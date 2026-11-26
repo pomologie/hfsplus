@@ -74,7 +74,7 @@ H-VER-01-T01 remains open. Five of these files fall below at least one proposed 
 **Assumptions and initial bounds:** Native source metadata known, lengths representable; small reference tree <=12 nodes, extents <=8; unsupported directory links explicitly refused until qualified.\
 **Negative witness:** resource fork confused with data fork; hardlink deref cycle.\
 **Requirement links:** H-FMT-04, H-READ-01, H-BUILD-03.\
-**Evidence:** property, fuzz, differential, native; status planned.
+**Evidence:** The differential and native profiles passed on clean revision `b82a34f`. Separate property and fuzz evidence remains open. [Fork and metadata release evidence](../../verification/README.md#fork-and-metadata-release-evidence)
 
 ### H-V05 — stable IDs
 **Target:** hfsplus-builder / draft/finalized identity registry.\

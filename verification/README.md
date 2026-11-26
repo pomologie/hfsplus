@@ -47,6 +47,8 @@ python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py 
 env -u TMPDIR python3 -B crates/filesystem/hfsplus-reader/verification/check-fork-evidence.py native
 ```
 
+Both profiles passed the release checker at clean revision `b82a34fc34b27c40792b6f1cd303434b6d889304` on arm64 macOS 14.7.2 (23H311). The Git archive SHA-256 was `995bcf1d79afff2ea6a064439e18cf77060aea4267baf8d0bc1565908680f80a`. The local evidence directory is `target/verification-evidence/v0.1.0/b82a34f-forks/`. Its `bundle.json` SHA-256 is `298cb783b80d3eed052b0abbe20e3ab5009128bc05b3572d01cf6cf808fbffd6`. Select `differential.json` or `native.json` for an individual check. H-V04 still requires separate property and fuzz evidence.
+
 ### Allocation and sealed output
 
 Use `--profile draft-identity-state-machine` with a record of `bash crates/filesystem/hfsplus-builder/verification/check-draft-identity.sh` and Rust 1.99.1 on `PATH`. The exact test compares draft and sealed identities against a 16-object reference catalog for all binding orders and payload-length rotations. The checker requires the actual counts of 54 pending and 18 sealed histories. The property, differential, and native methods are separate H-V05 release requirements.
