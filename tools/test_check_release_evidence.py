@@ -9,7 +9,9 @@ import tempfile
 import unittest
 
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
-from hfsplus_btree_evidence import verify_packed_live_native, verify_packed_wire_differential
+from hfsplus_btree_evidence import (
+    verify_packed_live_native, verify_packed_nodes_fuzz, verify_packed_wire_differential,
+)
 from hfsplus_evidence_transcript import (
     verify_differential, verify_interleaved_native, verify_native, verify_volume_wire_differential,
     verify_volume_wire_fuzz,
@@ -72,6 +74,26 @@ Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and bo
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_packed_node_fuzz_requires_typed_selector_campaign(self):
+        policy = Path(__file__).resolve().parents[1] / POLICY_PATH
+        profile = json.loads(policy.read_text())["profiles"]["btree-packed-node-fuzz"]
+        transcript = """rustc 1.101.0-nightly
+cargo-fuzz 0.13.2
+HFS+ packed node fuzz profile: address seed=7 runs=12000 max_len=4 timeout_s=5 rss_limit_mb=1024
+     Running `/scratch/packed_nodes -seed=7 -runs=12000 -max_len=4 -timeout=5 -rss_limit_mb=1024 /scratch/corpus`
+INFO: Seed: 7
+INFO: seed corpus: files: 7 min: 4b max: 4b total: 28b
+#12000 DONE   cov: 730 ft: 2600 corp: 120/433b lim: 4
+Done 12000 runs in 1 second(s)
+HFS+ packed node fuzz artifacts: 0
+"""
+        verify_packed_nodes_fuzz(transcript, profile)
+        for old, new in (("packed_nodes ", "another_target "), ("-max_len=4", "-max_len=5"),
+                         ("files: 7", "files: 6"), ("Done 12000", "Done 11999"),
+                         ("artifacts: 0", "artifacts: 1")):
+            with self.subTest(old=old), self.assertRaises(EvidenceError):
+                verify_packed_nodes_fuzz(transcript.replace(old, new), profile)
+
     def test_live_packed_nodes_require_native_readback_and_each_exact_leaf_summary(self):
         policy = Path(__file__).resolve().parents[1] / POLICY_PATH
         profile = json.loads(policy.read_text())["profiles"]["btree-packed-live-native"]

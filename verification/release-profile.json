@@ -151,6 +151,30 @@
         "packed_live::fresh_native_leaf_chains_match_packed_records": 1
       }
     },
+    "btree-packed-node-fuzz": {
+      "obligation": "H-V02",
+      "method": "fuzz",
+      "features": [],
+      "command": ["bash", "crates/formats/hfsplus-format/verification/fuzz/check-packed-nodes.sh"],
+      "tool_versions": {"rustc": "1.101.0-nightly", "cargo-fuzz": "0.13.2"},
+      "bounds": {
+        "seed": 7,
+        "inputs": 12000,
+        "max_input_bytes": 4,
+        "timeout_seconds": 5,
+        "rss_limit_mb": 1024,
+        "initial_corpus_files": 7,
+        "node_sizes_bytes": [512, 1024, 2048, 4096, 8192, 16384, 32768],
+        "min_records_per_node": 2,
+        "max_records_per_node": 8,
+        "max_catalog_name_units": 255,
+        "max_attribute_name_units": 127,
+        "max_extents_per_record": 8,
+        "max_inline_attribute_bytes": 3802,
+        "record_layouts": ["catalog index", "overflow extent leaf", "inline attribute leaf"]
+      },
+      "harnesses": {"packed_nodes": 12000}
+    },
     "names-property": {
       "obligation": "H-V03",
       "method": "property",

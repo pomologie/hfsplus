@@ -3,11 +3,15 @@
 from collections import Counter
 from hashlib import sha256
 
-from hfsplus_evidence_transcript import require, verify_tool_version
+from hfsplus_evidence_transcript import require, verify_address_sanitizer, verify_tool_version
 from hfsplus_fork_evidence import NATIVE_TEST, verify_exact_test, verify_fork_native
 
 
 PACKED_LIVE_TEST = "packed_live::fresh_native_leaf_chains_match_packed_records"
+
+
+def verify_packed_nodes_fuzz(transcript, profile):
+    verify_address_sanitizer(transcript, profile, target="packed_nodes", report="packed node")
 
 
 def verify_packed_wire_differential(transcript, profile):
