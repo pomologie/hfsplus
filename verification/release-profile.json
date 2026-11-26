@@ -90,6 +90,24 @@
         "btree::offset_proofs::table_admission_matches_full_width_wire_counts": 2
       }
     },
+    "btree-packed-native-property": {
+      "obligation": "H-V02",
+      "method": "property",
+      "features": [],
+      "command": ["python3", "-B", "crates/filesystem/hfsplus-reader/verification/check-packed-nodes.py"],
+      "tool_versions": {"cargo": "1.99.1", "rustc": "1.99.1"},
+      "bounds": {
+        "node_sizes_bytes": [4096, 8192],
+        "native_nodes": 21,
+        "catalog_records": 214,
+        "extent_records": 4,
+        "attribute_records": 10,
+        "within_node_key_pairs": 3517
+      },
+      "harnesses": {
+        "retained_packed_nodes_match_record_ranges_and_key_order": 3745
+      }
+    },
     "names-property": {
       "obligation": "H-V03",
       "method": "property",
