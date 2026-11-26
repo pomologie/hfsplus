@@ -58,7 +58,7 @@ H-VER-01-T01 remains open. Five of these files fall below at least one proposed 
 **Assumptions and initial bounds:** Kani <=8 records/128-byte synthetic packing and real nodes tested at qualified sizes; endian exact; comparator contract.\
 **Negative witness:** offset table points into itself; malformed node count reads before start.\
 **Requirement links:** H-FMT-02, H-BUILD-03.\
-**Evidence:** kani, property, fuzz, differential, native; status planned.
+**Evidence:** The offset-table Kani profile is configured. The packed-node property profile checked 228 record ranges and 3,517 within-node key pairs on clean revision `e1618cf`. Separate differential, native and fuzz evidence remains open. [Packed-node release evidence](../../verification/README.md)
 
 ### H-V03 — names
 **Target:** hfsplus-pomologie-core name keys, hfsplus-builder planner, and hfsplus-reader catalog lookup.\

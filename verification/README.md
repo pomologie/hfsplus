@@ -20,6 +20,8 @@ Use `--profile btree-offset-kani` with a record of `bash crates/formats/hfsplus-
 
 Use `--profile btree-packed-native-property` with a record of `python3 -B crates/filesystem/hfsplus-reader/verification/check-packed-nodes.py`. The test compares 228 borrowed record ranges with the on-disk offset words in 21 retained leaf and index nodes. It decodes catalog, extent and attribute keys and compares all 3,517 within-node key pairs against the stored order.
 
+The property profile passed at clean revision `e1618cfae53b0fd601cbddf7eb5bf16bab65db16` with Rust 1.99.1 on arm64 macOS. The Git archive SHA-256 was `c2eab850b9bdd478f1e039667047c35b0198e6bafef0973ad977700c338fc364`. The local evidence directory is `target/verification-evidence/v0.1.0/e1618cf-packed-property/`, with bundle SHA-256 `54b3466016a510a05260a2f29382ee950f5f68f52da8cf72622ffa7cd780f5e1`. H-V02 still requires separate differential, native and fuzz evidence.
+
 ### Historical name release evidence
 
 The H-V03 `names-property` profile binds exhaustive ordered triples under both normalization policies and both comparators, 4,096 seeded Unicode triples, planner ordering, and 16 exact index separators with 1,024 seeded lookups. The `names-differential` profile binds the live CoreServices HFS Extended oracle, the pinned Unicode tables, the optical name fixtures and the historical Georgian collision. The `names-native` profile binds the mounted 64 MiB HFS+ capture, successful detach, raw catalog key order, and the separate Rust fixture replay. Use the CoreServices pair TSV hash for the differential record's `fixture_hash` and the mounted name TSV hash for the native record's `fixture_hash`. [Name evidence and fixture provenance](../crates/foundation/hfsplus-pomologie-core/UNICODE32.md)
