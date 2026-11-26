@@ -635,8 +635,8 @@
       "scenario": "Inspect target-specific normal dependency graph; inject a test-only negative feature fixture selecting a prohibited host/std dependency.",
       "oracle": "Architecture checker and Cargo target feature graph",
       "expected": "Real profile accepted; deliberately leaking dependency rejected; host proc macros not confused with target-side dependencies.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/architecture/VERIFICATION.md"
     },
     {
       "id": "H-PORT-01-T03",

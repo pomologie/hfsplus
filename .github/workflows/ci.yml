@@ -24,6 +24,7 @@ jobs:
         run: |
           python3 -B tools/test_check_rust_roots.py
           python3 tools/check_rust_roots.py
+          python3 -B tools/test_check_kernel_graph.py
       - run: cargo install --locked cargo-nextest --version '=0.9.151'
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --all-targets --all-features -- -D warnings
@@ -53,17 +54,7 @@ jobs:
       - run: cargo check --locked -p ${{ matrix.package }} --no-default-features --target ${{ matrix.target }}
       - run: cargo build --locked -p ${{ matrix.package }} --no-default-features --target ${{ matrix.target }}
       - name: Enforce the standalone target dependency boundary
-        env:
-          FS_PACKAGE: ${{ matrix.package }}
-          FS_TARGET: ${{ matrix.target }}
-        run: |
-          tree=$(cargo tree --locked -p "$FS_PACKAGE" --no-default-features --target "$FS_TARGET" -e normal --prefix none --format '{p}')
-          actual=$(awk '{print $1}' <<< "$tree" | LC_ALL=C sort -u)
-          expected="$FS_PACKAGE"
-          if [[ "$FS_PACKAGE" == hfsplus-reader ]]; then
-            expected=$(printf '%s\n' hfsplus-format hfsplus-pomologie-core hfsplus-reader)
-          fi
-          test "$actual" = "$expected"
+        run: python3 -B tools/check_kernel_graph.py --package ${{ matrix.package }} --target ${{ matrix.target }}
 
   placement-proof:
     runs-on: ubuntu-24.04
