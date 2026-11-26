@@ -407,8 +407,8 @@
       "scenario": "Parent cycle, duplicate name after normalization, reserved private name",
       "oracle": "reference tree",
       "expected": "Reject before sealing",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-02-T02",
