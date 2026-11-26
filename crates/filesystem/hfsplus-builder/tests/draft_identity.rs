@@ -1,5 +1,7 @@
 //! Production-linked finite state coverage for H-V05 and H-BUILD-01.
 
+use std::{env, fs::File};
+
 use hfsplus_builder::{
 	SealedPlan,
 	volume::{
@@ -53,6 +55,12 @@ const ID_BYTES: usize = size_of::<u32>();
 const ALIAS_WITNESS_BYTES: usize = ID_BYTES * 2;
 const LENGTHS: [usize; UNBOUND_PATHS.len()] = [0, ALIAS_WITNESS_BYTES, BLOCK_BYTES as usize + 1];
 const CAPACITY: CapacityPolicy = CapacityPolicy::Auto {
+	free_space: ByteLen(0),
+};
+const WITNESS_OUTPUT_ENV: &str = "POMOLOGIE_FROZEN_DRAFT_OUTPUT";
+const WITNESS_REVERSE_ENV: &str = "POMOLOGIE_RAW_HFS_WITNESS_REVERSE";
+const WITNESS_CAPACITY: CapacityPolicy = CapacityPolicy::Exact {
+	bytes: ByteLen(8 * 1024 * 1024),
 	free_space: ByteLen(0),
 };
 
@@ -341,4 +349,32 @@ fn rejects_reservations_that_cannot_get_a_public_identity() {
 		plan_with_hard_links(options, inputs(), vec![link_group(false)]),
 		Err(VolumeError::Limit)
 	));
+}
+
+#[test]
+#[ignore = "writes the raw frozen-identity fixture for independent verification"]
+fn emit_frozen_draft() {
+	let reverse = env::var_os(WITNESS_REVERSE_ENV).is_some();
+	let mut draft = draft(usize::from(reverse));
+	let order = if reverse {
+		BIND_ORDERS.last().unwrap()
+	} else {
+		BIND_ORDERS.first().unwrap()
+	};
+	for &index in order {
+		let path = UNBOUND_PATHS[index];
+		let bytes = payload(
+			index,
+			ALIAS_WITNESS_BYTES + 1,
+			draft.try_catalog_id(path).unwrap().unwrap(),
+			draft.try_inode_id(ALIASES[0]).unwrap().unwrap(),
+		);
+		draft.bind_generated_data(path, source(bytes)).unwrap();
+	}
+	let image = File::create_new(env::var_os(WITNESS_OUTPUT_ENV).unwrap()).unwrap();
+	draft
+		.seal_with_capacity(WITNESS_CAPACITY)
+		.unwrap()
+		.write_to(image)
+		.unwrap();
 }

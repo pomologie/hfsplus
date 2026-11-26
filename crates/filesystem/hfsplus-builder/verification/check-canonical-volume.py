@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check the pinned raw HFS+ witness for H-BUILD-05-T01 and T02."""
+"""Check the canonical HFS+ witness and the separate frozen-draft witness."""
 
 import argparse
 from contextlib import contextmanager
@@ -66,6 +66,17 @@ REFERENCE_FILES = {
 	LINK: b"../MacOS/Witness",
 	"[HFS+ Private Data]/iNode100": EXECUTABLE_DATA,
 }
+FROZEN_DRAFT_TEST = "draft_identity"
+FROZEN_DRAFT_EMITTER = "emit_frozen_draft"
+FROZEN_DRAFT_OUTPUT_ENV = "POMOLOGIE_FROZEN_DRAFT_OUTPUT"
+FROZEN_DRAFT_VOLUME = "Stable identities"
+FROZEN_DRAFT_ROOT_ID = 2
+FROZEN_DRAFT_GENERATED_IDS = {".DS_Store": 16, "A/nested/Asset": 20, "A/nested/Sibling": 22}
+FROZEN_DRAFT_LINKS = ("A/Branch", "b/shared")
+FROZEN_DRAFT_INODE = 30
+FROZEN_DRAFT_LINK_DATA = b"shared identity"
+FROZEN_DRAFT_BACKING_FILE = "[HFS+ Private Data]/iNode100"
+GENERATED_WITNESS_IDS = struct.Struct(">II")
 
 
 def run(*args, environment=None, timeout=ORACLE_TIMEOUT):
@@ -83,30 +94,33 @@ def run(*args, environment=None, timeout=ORACLE_TIMEOUT):
 		raise ValueError(f"{args[0]} exited {error.returncode}\n{output}") from error
 
 
-def check_digest(path):
+def image_digest(path):
 	if path.stat().st_size != IMAGE_BYTES:
 		raise ValueError(f"{path.name} does not contain exactly {IMAGE_BYTES} bytes")
 	with path.open("rb") as image:
-		digest = hashlib.file_digest(image, "sha256").hexdigest()
+		return hashlib.file_digest(image, "sha256").hexdigest()
+
+
+def check_digest(path):
+	digest = image_digest(path)
 	if digest != EXPECTED_SHA256:
 		raise ValueError(f"{path.name}: SHA-256 {digest}, expected {EXPECTED_SHA256}")
 	print(f"{path.name} {digest}")
 
 
-def emit(path, toolchain, compiler, reverse):
+def emit(path, toolchain, compiler, *, reverse, test=TEST, emitter=EMITTER, output_env=OUTPUT_ENV):
 	environment = os.environ.copy()
 	environment["RUSTC"] = compiler
-	environment[OUTPUT_ENV] = str(path)
+	environment[output_env] = str(path)
 	environment.pop(REVERSE_ENV, None)
 	if reverse:
 		environment[REVERSE_ENV] = "1"
 	run(
 		"rustup", "run", toolchain, "cargo", "test", "--locked", "--no-default-features",
-		"-p", PACKAGE, "--test", TEST, "--", "--exact", "--ignored", EMITTER,
+		"-p", PACKAGE, "--test", test, "--", "--exact", "--ignored", emitter,
 		environment=environment,
 		timeout=CARGO_TIMEOUT,
 	)
-	check_digest(path)
 
 
 def verify_reference(image, seven_zip):
@@ -120,8 +134,8 @@ def verify_reference(image, seven_zip):
 	print("7-Zip matched the Unicode file, symlink bytes, and backing link inode data")
 
 
-def verify_native(image):
-	wrapped = image.parent / "witness.dmg"
+def wrap_and_check(image):
+	wrapped = image.with_suffix(".dmg")
 	run(HDIUTIL, "convert", "-quiet", image, "-srcimagekey", "diskimage-class=CRawDiskImage",
 		"-format", "UDRO", "-o", wrapped)
 	attachment = plistlib.loads(run(HDIUTIL, "attach", "-readonly", "-nomount", "-plist", wrapped))
@@ -134,7 +148,7 @@ def verify_native(image):
 	finally:
 		for device in devices:
 			run(HDIUTIL, "detach", device)
-	verify_mounted_image(image, wrapped)
+	return wrapped
 
 
 def verify_mounted_metadata(mount):
@@ -235,6 +249,53 @@ def mounted_read_only(wrapped, mount, owners):
 			run(HDIUTIL, "detach", device)
 
 
+def verify_frozen_draft(root, toolchain, compiler, options):
+	baseline = root / "frozen-draft.hfs"
+	reordered = root / "frozen-draft-reordered.hfs"
+	for path, reverse in ((baseline, False), (reordered, True)):
+		emit(path, toolchain, compiler, reverse=reverse, test=FROZEN_DRAFT_TEST,
+			emitter=FROZEN_DRAFT_EMITTER, output_env=FROZEN_DRAFT_OUTPUT_ENV)
+	digest = image_digest(baseline)
+	if image_digest(reordered) != digest:
+		raise ValueError("the frozen draft changed after permuting manifest and binding order")
+	print(f"Frozen draft and reordered image SHA-256 {digest}")
+	generated = {
+		path: GENERATED_WITNESS_IDS.pack(cnid, FROZEN_DRAFT_INODE) + bytes([ordinal])
+		for ordinal, (path, cnid) in enumerate(FROZEN_DRAFT_GENERATED_IDS.items(), start=1)
+	}
+	if options.seven_zip:
+		files = generated | {FROZEN_DRAFT_BACKING_FILE: FROZEN_DRAFT_LINK_DATA}
+		for relative, expected in files.items():
+			observed = run(options.seven_zip, "x", "-so", "-bd", baseline, f"{FROZEN_DRAFT_VOLUME}/{relative}")
+			if observed != expected:
+				raise ValueError(f"7-Zip frozen-draft readback differs at {relative!r}")
+		print("7-Zip matched all three generated ID payloads and the shared backing inode data")
+	if options.native_fsck:
+		wrapped = wrap_and_check(baseline)
+		mount = root / "frozen-draft-mount"
+		mount.mkdir()
+		with mounted_read_only(wrapped, mount, owners="off"):
+			verify_frozen_draft_mount(mount, generated)
+
+
+def verify_frozen_draft_mount(mount, generated):
+	if mount.stat().st_ino != FROZEN_DRAFT_ROOT_ID:
+		raise ValueError("native frozen-draft root ID did not match the reserved catalog ID")
+	for relative, cnid in FROZEN_DRAFT_GENERATED_IDS.items():
+		path = mount / relative
+		if path.stat().st_ino != cnid or path.read_bytes() != generated[relative]:
+			raise ValueError(f"native generated asset ID or payload differs at {relative!r}")
+	for relative in FROZEN_DRAFT_LINKS:
+		path = mount / relative
+		entry = path.stat()
+		if (entry.st_ino, entry.st_nlink) != (FROZEN_DRAFT_INODE, len(FROZEN_DRAFT_LINKS)):
+			raise ValueError(f"native hard-link identity or count differs at {relative!r}")
+		if path.read_bytes() != FROZEN_DRAFT_LINK_DATA:
+			raise ValueError(f"native hard-link data differs at {relative!r}")
+	print(f"macOS matched root CNID {FROZEN_DRAFT_ROOT_ID}, generated CNIDs "
+		f"{tuple(FROZEN_DRAFT_GENERATED_IDS.values())}, and shared inode {FROZEN_DRAFT_INODE} with two links")
+
+
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--seven-zip", metavar="COMMAND", help="independent 7-Zip CLI command or path")
@@ -249,12 +310,15 @@ def main():
 		with TemporaryDirectory(prefix="hfsplus-canonical.") as temporary:
 			root = Path(temporary).resolve()
 			baseline = root / "canonical.hfs"
-			emit(baseline, toolchain, compiler, reverse=False)
-			emit(root / "reordered.hfs", toolchain, compiler, reverse=True)
+			for path, reverse in ((baseline, False), (root / "reordered.hfs", True)):
+				emit(path, toolchain, compiler, reverse=reverse)
+				check_digest(path)
 			if options.seven_zip:
 				verify_reference(baseline, options.seven_zip)
 			if options.native_fsck:
-				verify_native(baseline)
+				verify_mounted_image(baseline, wrap_and_check(baseline))
+			if options.seven_zip or options.native_fsck:
+				verify_frozen_draft(root, toolchain, compiler, options)
 	except (OSError, KeyError, ValueError, subprocess.TimeoutExpired) as error:
 		print(error, file=sys.stderr)
 		return 1

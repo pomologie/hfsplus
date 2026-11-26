@@ -88,7 +88,7 @@
         "H-BUILD-01-T02",
         "H-BUILD-01-T03"
       ],
-      "status": "planned",
+      "status": "pass",
       "mandatory": true
     },
     {

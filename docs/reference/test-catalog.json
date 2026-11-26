@@ -59,8 +59,8 @@
       "scenario": "Create 2 identical canonical manifests with different traversal orders; reserved IDs, hardlinks and thread keys stable; bind generated payload and verify unchanged identity.",
       "oracle": "property; independent raw reader",
       "expected": "All stated checks in scenario pass; unsupported or unavailable is not a pass for an advertised capability.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "crates/filesystem/hfsplus-builder/verification/README.md"
     },
     {
       "id": "H-BUILD-02-T01",
