@@ -359,8 +359,8 @@
       "scenario": "Epoch 1904 boundary and timestamp max plus one",
       "oracle": "native stat and arithmetic model",
       "expected": "Exact representable timestamp, out-of-range error",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/features/FORMAT.md"
     },
     {
       "id": "H-FMT-04-T03",

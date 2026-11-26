@@ -45,6 +45,9 @@ jobs:
       - name: Check interleaved data and resource forks with native and independent readers
         if: runner.os == 'macOS'
         run: env -u TMPDIR python3 -B crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py --interleaved-forks --native-fsck
+      - name: Check native timestamp boundaries
+        if: runner.os == 'macOS'
+        run: env -u TMPDIR python3 -B crates/filesystem/hfsplus-builder/verification/check-canonical-volume.py --metadata-dates
 
   bare-metal:
     runs-on: ubuntu-24.04

@@ -395,6 +395,31 @@ def verify_interleaved_forks(root, toolchain, compiler, options):
 			print(f"macOS matched all {ITEM_COUNT} directory names and both complete fragmented forks")
 
 
+def verify_metadata_dates(root, toolchain, compiler):
+	image = root / "dates.hfs"
+	emit(image, toolchain, compiler, reverse=False, test="metadata_dates",
+		emitter="emit_metadata_dates", output_env="POMOLOGIE_CATALOG_DATES_OUTPUT")
+	print(f"Catalog dates image SHA-256 {image_digest(image)}")
+	wrapped = wrap_and_check(image)
+	mount = root / "mount"
+	mount.mkdir()
+	earliest_unix_seconds = -2_082_844_799
+	last_unix_seconds = 2_212_122_495
+	expected = {
+		"Missing": (0,),
+		"Earliest": (0, earliest_unix_seconds),
+		"Unix-Epoch": (0,),
+		"Last": (last_unix_seconds,),
+	}
+	with mounted_read_only(wrapped, mount, owners="off"):
+		for name, allowed in expected.items():
+			entry = (mount / name).lstat()
+			times = (entry.st_birthtime, entry.st_mtime, entry.st_ctime, entry.st_atime)
+			if not any(times == (value,) * len(times) for value in allowed):
+				raise ValueError(f"unexpected native timestamps for {name}: {times!r}")
+			print(f"macOS {name} birth, content change, attribute change, access = {times}")
+
+
 def main():
 	parser = argparse.ArgumentParser(description=__doc__)
 	parser.add_argument("--seven-zip", metavar="COMMAND", help="independent 7-Zip CLI command or path")
@@ -402,9 +427,10 @@ def main():
 	profile = parser.add_mutually_exclusive_group()
 	profile.add_argument("--packed-catalog", action="store_true", help="check the 256 MiB catalog-map witness")
 	profile.add_argument("--interleaved-forks", action="store_true", help="check the interleaved fork witness")
+	profile.add_argument("--metadata-dates", action="store_true", help="check native timestamp projection")
 	options = parser.parse_args()
-	if options.native_fsck and sys.platform != "darwin":
-		parser.error("--native-fsck requires macOS")
+	if (options.native_fsck or options.metadata_dates) and sys.platform != "darwin":
+		parser.error("native volume checks require macOS")
 	try:
 		with (ROOT / "rust-toolchain.toml").open("rb") as config:
 			toolchain = tomllib.load(config)["toolchain"]["channel"]
@@ -416,6 +442,9 @@ def main():
 				return 0
 			if options.interleaved_forks:
 				verify_interleaved_forks(root, toolchain, compiler, options)
+				return 0
+			if options.metadata_dates:
+				verify_metadata_dates(root, toolchain, compiler)
 				return 0
 			baseline = root / "canonical.hfs"
 			for path, reverse in ((baseline, False), (root / "reordered.hfs", True)):
