@@ -36,5 +36,8 @@ fn placements_cover_exactly_the_admitted_prefix() {
 		actual_end.0 == image_len,
 		reference_end == u128::from(image_len)
 	);
-	kani::cover!(actual_end.0 != 0 && actual_end.0 == image_len, "complete nonempty prefix");
+	kani::cover!(
+		actual_end.0 != 0 && actual_end.0 == image_len,
+		"complete nonempty prefix"
+	);
 }
