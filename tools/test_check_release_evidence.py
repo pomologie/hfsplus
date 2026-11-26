@@ -11,6 +11,7 @@ import unittest
 from check_release_evidence import EvidenceError, POLICY_PATH, REGISTRY_PATH, archive_hash, validate
 from hfsplus_evidence_transcript import (
     verify_differential, verify_interleaved_native, verify_native, verify_volume_wire_differential,
+    verify_volume_wire_fuzz,
 )
 
 
@@ -69,6 +70,28 @@ Independent raw reader matched all 2 continuation keys [(0, 16), (0, 32)] and bo
 
 
 class ReleaseEvidenceTests(unittest.TestCase):
+    def test_volume_wire_fuzz_requires_execution_and_an_empty_artifact_directory(self):
+        profile = {"bounds": {"seed": 7, "inputs": 20000, "max_input_bytes": 512, "timeout_seconds": 5,
+                              "rss_limit_mb": 1024, "initial_corpus_files": 4},
+                   "tool_versions": {"rustc": "1.101.0-nightly", "cargo-fuzz": "0.13.2"},
+                   "harnesses": {"volume_wire": 20000}}
+        transcript = """rustc 1.101.0-nightly
+cargo-fuzz 0.13.2
+HFS+ volume fuzz profile: address seed=7 runs=20000 max_len=512 timeout_s=5 rss_limit_mb=1024
+     Running `/scratch/volume_wire -seed=7 -runs=20000 -max_len=512 -timeout=5 -rss_limit_mb=1024 /scratch/corpus`
+INFO: Seed: 7
+INFO: seed corpus: files: 4 min: 24b max: 512b total: 1128b
+#20000 DONE   cov: 274 ft: 488 corp: 41/13177b lim: 512
+Done 20000 runs in 1 second(s)
+HFS+ volume fuzz artifacts: 0
+"""
+        verify_volume_wire_fuzz(transcript, profile)
+        for changed in (transcript.replace("cov: 274", "cov: 0"), transcript.replace("-max_len=512", "-max_len=513"),
+                        transcript.replace("INFO: Seed: 7", "INFO: Seed: 8"), transcript.replace("artifacts: 0", "artifacts: 1"),
+                        transcript.replace("Done 20000", "Done 10000")):
+            with self.assertRaises(EvidenceError):
+                verify_volume_wire_fuzz(changed, profile)
+
     def test_volume_wire_differential_requires_pinned_rows_and_ledger(self):
         rows = "HFS+ header volume HfsPlus 4096 2 0 0 8192 7168\nHFS+ fork volume catalog 4096 4096 1 1:1"
         digest = hashlib.sha256(rows.encode()).hexdigest()

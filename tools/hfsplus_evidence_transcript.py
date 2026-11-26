@@ -145,6 +145,38 @@ def verify_volume_wire_differential(transcript, profile):
             "incorrect native volume and fork comparison rows")
 
 
+def verify_volume_wire_fuzz(transcript, profile):
+    lines = transcript.splitlines()
+    bounds = profile["bounds"]
+    seed = bounds["seed"]
+    runs = bounds["inputs"]
+    max_len = bounds["max_input_bytes"]
+    timeout = bounds["timeout_seconds"]
+    memory = bounds["rss_limit_mb"]
+    versions = profile["tool_versions"]
+    verify_tool_version(lines, "rustc", versions["rustc"])
+    verify_tool_version(lines, "cargo-fuzz", versions["cargo-fuzz"])
+    expected = (f"HFS+ volume fuzz profile: address seed={seed} runs={runs} max_len={max_len} "
+                f"timeout_s={timeout} rss_limit_mb={memory}")
+    require(lines.count(expected) == 1 and profile["harnesses"] == {"volume_wire": runs},
+            "incorrect HFS+ sanitizer profile")
+    launches = [line for line in lines if re.match(r"^\s*Running `.*?/volume_wire ", line)]
+    argv = (f"-seed={seed}", f"-runs={runs}", f"-max_len={max_len}",
+            f"-timeout={timeout}", f"-rss_limit_mb={memory}")
+    require(len(launches) == 1 and all(flag in launches[0].split() for flag in argv)
+            and lines.count(f"INFO: Seed: {seed}") == 1,
+            "incorrect HFS+ fuzz invocation limits")
+    corpus = f"INFO: seed corpus: files: {bounds['initial_corpus_files']} "
+    require(sum(line.startswith(corpus) for line in lines) == 1,
+            "missing HFS+ seed corpus")
+    outcomes = [line for line in lines if re.search(r"^#\d+\s+DONE\s+", line)]
+    require(len(outcomes) == 1 and re.match(rf"^#{runs}\s+DONE\s+cov: [1-9]\d* ft: [1-9]\d* ", outcomes[0])
+            and sum(bool(re.fullmatch(rf"Done {runs} runs in \d+ second\(s\)", line)) for line in lines) == 1
+            and lines[-1] == "HFS+ volume fuzz artifacts: 0"
+            and not any(marker in transcript for marker in ("ERROR: AddressSanitizer", "ERROR: libFuzzer", "panicked at")),
+            "incomplete or unsuccessful HFS+ sanitizer run")
+
+
 def verify_interleaved_differential(transcript, profile):
     lines = transcript.splitlines()
     versions = profile["tool_versions"]

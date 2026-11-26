@@ -11,7 +11,7 @@ import sys
 
 from hfsplus_evidence_transcript import (
     EvidenceError, require, verify_differential, verify_draft_state_machine, verify_fault_tests, verify_kani,
-    verify_native, verify_property_test, verify_volume_wire_differential,
+    verify_native, verify_property_test, verify_volume_wire_differential, verify_volume_wire_fuzz,
 )
 from hfsplus_fork_evidence import FORK_VALIDATORS
 from hfsplus_name_evidence import NAME_VALIDATORS
@@ -35,13 +35,14 @@ METHOD_VALIDATORS = {
     "native": verify_native,
 }
 OBLIGATION_VALIDATORS = {
-    "H-V01": {"differential": verify_volume_wire_differential},
+    "H-V01": {"differential": verify_volume_wire_differential, "fuzz": verify_volume_wire_fuzz},
     "H-V03": NAME_VALIDATORS, "H-V04": FORK_VALIDATORS,
 }
 METHOD_TOOLS = {
     "kani": {"kani", "cbmc"}, "property": {"cargo", "rustc"}, "fault": {"cargo", "rustc"},
     "differential": {"cargo", "rustc", "python"}, "state-machine": {"cargo", "rustc"},
     "native": {"cargo", "rustc", "python"},
+    "fuzz": {"rustc", "cargo-fuzz"},
 }
 
 
@@ -216,6 +217,9 @@ def validate_record(record, name, profile, commit, digest, artifacts_root):
         require(record.get("proof") == {"theorem": name}, "Kani theorem does not match profile")
     elif record["method"] in {"property", "fault", "state-machine"}:
         require("proof" not in record, "Rust test evidence must not declare a theorem")
+    elif record["method"] == "fuzz":
+        require(record.get("seed") == profile["bounds"]["seed"] and "proof" not in record,
+                "fuzz record does not match the pinned seed")
     elif record["method"] in {"differential", "native"}:
         bounds = profile["bounds"]
         fixture_hash = bounds.get("fixture_sha256", bounds.get("image_sha256"))

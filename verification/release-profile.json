@@ -55,6 +55,22 @@
       },
       "harnesses": {"native-volume-wire": 36}
     },
+    "format-wire-fuzz": {
+      "obligation": "H-V01",
+      "method": "fuzz",
+      "features": [],
+      "command": ["bash", "crates/formats/hfsplus-format/verification/fuzz/check-volume-wire.sh"],
+      "tool_versions": {"rustc": "1.101.0-nightly", "cargo-fuzz": "0.13.2"},
+      "bounds": {
+        "seed": 7,
+        "inputs": 20000,
+        "max_input_bytes": 512,
+        "timeout_seconds": 5,
+        "rss_limit_mb": 1024,
+        "initial_corpus_files": 4
+      },
+      "harnesses": {"volume_wire": 20000}
+    },
     "btree-offset-kani": {
       "obligation": "H-V02",
       "method": "kani",
