@@ -1,6 +1,9 @@
 //! Allocation-free structural codecs for packed HFS+ B-tree nodes.
 
 mod encode;
+#[cfg(kani)]
+#[path = "../verification/kani/btree_offsets.rs"]
+mod offset_proofs;
 
 use crate::{
 	Error,

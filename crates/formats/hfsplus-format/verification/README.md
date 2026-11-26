@@ -15,3 +15,11 @@ Install Kani 0.68.0 and run `cargo kani setup`. Then run `bash crates/formats/hf
 H-FMT-02-T06 passed on arm64 macOS with Rust 1.99.1. An independent wire ledger reserves the 14-byte descriptor and two trailing 16-bit offsets. At all seven supported node sizes from 512 to 32,768 bytes, a single leaf record fills the remaining space. The test compares the descriptor, record bytes, and both offsets directly before checking the decoder's result. One byte above the limit fails the alignment check, and the first aligned size above the limit fails the capacity check. Both failures leave the destination bytes intact. [Packed-record test](../tests/encode_btree.rs) · [Apple TN1150](https://developer.apple.com/library/archive/technotes/tn/tn1150.html)
 
 All five B-tree encoder tests, strict focused Clippy, and formatting passed. This case covers physical node capacity. H-V02 separately tracks tree-specific record and traversal checks.
+
+## B-tree offset tables
+
+The `btree-offset-kani` profile exercises production `Node::decode` on 512-byte leaf nodes, the smallest admitted size. It fixes the leaf descriptor and uses one to eight records with arbitrary 16-bit wire offsets. An independent model compares acceptance, requires `InvalidNode` for rejected tables, and checks that returned records borrow exactly their declared byte ranges. Cover checks include decreasing offsets, duplicates, an endpoint inside the table, and eight valid records ending at the table boundary.
+
+The second harness compares the production table-start calculation with a widened signed model for every 16-bit descriptor count and all seven admitted node sizes. For oversized tables in the 512-byte node it also calls `Node::decode` with a valid first offset and requires `InvalidNode`. It reaches the first count beyond capacity and the maximum count.
+
+Run `bash crates/formats/hfsplus-format/verification/check-btree-offsets.sh` with Kani 0.68.0 and CBMC 6.11.0. The proof covers offset tables under these bounds. H-FMT-02-T02 still requires its fuzz evidence, and H-V02 additionally tracks the other node and record codecs and comparator behavior. [Harnesses](kani/btree_offsets.rs) · [Release policy](../../../../verification/release-profile.json)

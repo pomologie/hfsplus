@@ -21,6 +21,25 @@
         "volume_geometry_proofs::allocation_block_range_matches_widened_volume_model": 2,
         "volume_geometry_proofs::geometry_matches_widened_volume_model": 4
       }
+    },
+    "btree-offset-kani": {
+      "obligation": "H-V02",
+      "method": "kani",
+      "features": [],
+      "command": ["bash", "crates/formats/hfsplus-format/verification/check-btree-offsets.sh"],
+      "tool_versions": {"kani": "0.68.0", "cbmc": "6.11.0"},
+      "bounds": {
+        "leaf_node_bytes": 512,
+        "leaf_record_limit": 8,
+        "descriptor_record_count_bits": 16,
+        "wire_offset_bits": 16,
+        "table_admission_node_size_min_bytes": 512,
+        "table_admission_node_size_max_bytes": 32768
+      },
+      "harnesses": {
+        "btree::offset_proofs::decode_leaf_offsets_match_bounded_wire_model": 4,
+        "btree::offset_proofs::table_admission_matches_full_width_wire_counts": 2
+      }
     }
   }
 }

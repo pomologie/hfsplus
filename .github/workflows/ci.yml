@@ -77,3 +77,4 @@ jobs:
       - run: cargo kani setup
       - run: bash crates/filesystem/hfsplus-builder/verification/check.sh
       - run: bash crates/formats/hfsplus-format/verification/check.sh
+      - run: bash crates/formats/hfsplus-format/verification/check-btree-offsets.sh
