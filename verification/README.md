@@ -14,6 +14,10 @@ The release checker accepted all 29 profiles for H-V01 through H-V07 on clean re
 
 On that same revision, all 24 checker tests passed. The negative cases cover missing, stale, dirty, timed-out, unsupported, wrong-profile and vacuous evidence. The aggregate replay also ran the production Kani geometry, offset admission and placement harnesses and verified their reached covers. The `evidence-checker-tests.log` SHA-256 is `f5946d7b12a6f072131fc56922e1f4b0dee83876396da2dd107effd7b99303c7`.
 
+The checker verified all 29 profiles again at clean revision `be926d2179de325b66ebcb4f6294838aa3786995`. The source archive SHA-256 is `34ca6b92d5627a96d70309c2b2885725f89b5fe0b95e6319dcf77c07d9b77a18`. The bundle and transcripts are in `target/verification-evidence/v0.1.0/be926d2-release-complete/`. The bundle SHA-256 is `b6e7959e3065fe4c1718ed5f852c5becfdcaa9272abefeeafdd7d98c26bb7b8e`.
+
+H-FMT-02 and H-VER-01 remain open for v0.1.0. [Requirement registry](../docs/reference/requirements.json)
+
 Use `--profile format-kani` to check the geometry proofs separately. Run the policy's proof command from an isolated checkout of the candidate with Kani 0.68.0 and CBMC 6.11.0. Capture both output streams together. The [geometry verification guide](../crates/formats/hfsplus-format/verification/README.md) explains the proof scope and bounds.
 
 ```sh
@@ -109,4 +113,4 @@ Use `--profile sealed-image-native` with a record of `env -u TMPDIR python3 -B c
 
 The bundle is a JSON array of [schema v1 records](evidence.schema.json). Set `commit` to the exact Git commit and `source_hash` to the pinned archive SHA-256 above. Record the policy's feature set, command and bounds, the observed tool versions, the runner, elapsed time, and invocation exit code. For Kani records, use the profile name for `proof.theorem`. Include the invocation log as an artifact named `transcript`, with its SHA-256 and a path relative to the bundle.
 
-The checker binds the record to the committed source and policy and verifies the artifact bytes. It checks the exact output each profile requires, including Kani covers, completed Rust test cases, or the differential fixture digest and readback. The release process provides transcripts from real invocations. These profiles and the standalone checker tests provide partial H-VER-02-T01 evidence. The HFS+ checker is adapted from Pomologie APFS commit `62877b6` and runs entirely within this repository. [Checker tests](../tools/test_check_release_evidence.py)
+The checker binds the record to the committed source and policy and verifies the artifact bytes. It checks the exact output each profile requires, including Kani covers, completed Rust test cases, or the differential fixture digest and readback. The release process provides transcripts from real invocations. H-VER-02-T01 passed with the aggregate replay and the checker tests. The HFS+ checker is adapted from Pomologie APFS commit `62877b6` and runs entirely within this repository. [Aggregate replay](#v010-aggregate-replay) · [Checker tests](../tools/test_check_release_evidence.py)

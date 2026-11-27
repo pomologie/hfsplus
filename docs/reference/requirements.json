@@ -17,7 +17,7 @@
         "H-FMT-01-T03",
         "H-FMT-01-T04"
       ],
-      "status": "planned",
+      "status": "pass",
       "mandatory": true
     },
     {
@@ -301,7 +301,7 @@
       "acceptance_tests": [
         "H-VER-02-T01"
       ],
-      "status": "planned",
+      "status": "pass",
       "mandatory": true
     },
     {
