@@ -10,8 +10,8 @@ use hfsplus_format::{
 };
 
 use super::{
-	Catalog, Corruption, Entry, EntryKind, HardLinkError, ROOT_ID, copy_name, format, invalid,
-	is_private,
+	Catalog, CatalogError, Corruption, Entry, EntryKind, HardLinkError, ROOT_ID, copy_name, format,
+	invalid, is_private,
 	tree::{OwnedKey, Position, Query, node_buffer},
 };
 use crate::check::{CatalogProblem, CheckError, CheckLimit, CheckLimits, FolderCounts};
@@ -131,7 +131,8 @@ impl<S: ReadAt> Catalog<'_, S> {
 					return Err(invalid(id, Corruption::IndexRoute).into());
 				}
 				if key.name.is_empty() {
-					self.decode_thread(position, raw)?;
+					self.decode_thread(position, raw)
+						.map_err(|error| identify_thread(error, key.parent_or_thread, position))?;
 					threads += 1;
 					continue;
 				}
@@ -139,7 +140,8 @@ impl<S: ReadAt> Catalog<'_, S> {
 					return Err(CheckError::Limit(CheckLimit::CatalogEntries));
 				}
 				let entry = self.decode_entry(position, raw)?;
-				self.check_thread(&entry, query)?;
+				self.check_thread(&entry, query)
+					.map_err(|error| identify_thread(error, entry.metadata.id, position))?;
 				let record =
 					Record::decode(raw, self.geometry).map_err(|error| format(id, error))?;
 				let stub = if matches!(record.value, Value::File { .. }) {
@@ -208,6 +210,21 @@ impl<S: ReadAt> Catalog<'_, S> {
 			.into());
 		}
 		Ok((files, folders))
+	}
+}
+
+fn identify_thread<E>(error: CatalogError<E>, id: CatalogId, position: Position) -> CheckError<E> {
+	match error {
+		CatalogError::Corrupt {
+			reason: Corruption::Thread,
+			..
+		} => CatalogProblem::ThreadRecord {
+			id,
+			node: position.node,
+			ordinal: position.ordinal,
+		}
+		.into(),
+		other => other.into(),
 	}
 }
 

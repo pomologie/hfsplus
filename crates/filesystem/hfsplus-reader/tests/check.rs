@@ -1,5 +1,8 @@
 //! H-READ-04 structural evidence from Apple-generated catalog and bitmap bytes.
 
+#[path = "check/catalog_threads.rs"]
+mod catalog_threads;
+
 use hfsplus_format::{
 	btree::{Kind, Node, TreeHeader},
 	catalog::{Key, Record, Value},

@@ -2,7 +2,7 @@ use crate::alloc::collections::TryReserveError;
 use core::fmt;
 
 use hfsplus_core::{ByteLen, ByteOffset};
-use hfsplus_format::{hard_links::LinkReference, volume::CatalogId};
+use hfsplus_format::{btree::NodeId, hard_links::LinkReference, volume::CatalogId};
 
 use super::AllocationOwner;
 use crate::{
@@ -57,6 +57,13 @@ pub enum CatalogProblem {
 	ThreadCount {
 		records: u32,
 		threads: u32,
+	},
+	/// A catalog entry or thread whose matching catalog relationship is invalid.
+	ThreadRecord {
+		id: CatalogId,
+		node: NodeId,
+		/// Zero-based record slot in the named leaf node.
+		ordinal: usize,
 	},
 	FileCount {
 		declared: u32,
