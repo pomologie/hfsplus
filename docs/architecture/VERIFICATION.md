@@ -16,18 +16,20 @@ At clean revision `aed3601`, the replay passed 207 tests with 11 skipped and cov
 
 At clean revision `5e05e46`, the replay passed 214 tests with 11 skipped and covered 7,010 of 7,850 owned lines (89.30%). It used 43 test binaries and 300 raw profiles, with three build profiles excluded. The report is in `target/verification-evidence/v0.1.0/5e05e46-critical-coverage/` with SHA-256 `aa137ee11f01479820a2156d2b32b01a50173ef6b090eee64aaf4c5f28b8b4fa`.
 
+At clean revision `c6ad1ac`, the replay passed 214 tests with 11 skipped and covered 7,011 of 7,850 owned lines. It added one observed decoder outcome by passing the 34-byte prefix of a retained native header to the size-hint and complete-node APIs. The report is in `target/verification-evidence/v0.1.0/c6ad1ac-btree-prefix-coverage/` with SHA-256 `3d24eb564fa221b4e326115a00f14133a817047f908c13ef1a38e461bfb7b71d`.
+
 | Critical source | Baseline lines | Latest lines | Baseline branches | Latest branches |
 |---|---:|---:|---:|---:|
 | Builder allocation | 236 / 253 | 250 / 253 | 12 / 12 | 12 / 12 |
 | Sealed plan | 163 / 169 | 166 / 169 | 13 / 14 | 13 / 14 |
 | Sealed streaming | 42 / 42 | 42 / 42 | 6 / 6 | 6 / 6 |
 | Reader allocation | 189 / 222 | 211 / 222 | 23 / 24 | 23 / 24 |
-| B-tree format | 142 / 149 | 145 / 149 | 38 / 58 | 50 / 58 |
+| B-tree format | 142 / 149 | 146 / 149 | 38 / 58 | 51 / 58 |
 | Volume format | 184 / 190 | 188 / 190 | 25 / 32 | 32 / 32 |
 | Name admission | 100 / 111 | 109 / 111 | 18 / 18 | 18 / 18 |
 | Name collation | 27 / 27 | 27 / 27 | 2 / 2 | 2 / 2 |
 
-H-VER-01-T01 remains open. The B-tree codec reaches 50 of 58 branch outcomes (86.21%). Eight decoder rejection outcomes remain unobserved. Reader allocation reaches its numerical thresholds, and the invalid extent endpoint branch remains unobserved. The coverage counts describe the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+H-VER-01-T01 remains open. The B-tree codec reaches 51 of 58 branch outcomes (87.93%). Seven decoder rejection outcomes remain unobserved by LLVM. Kani proves rejection of first-offset mismatches, endpoints in the offset table, and unaligned endpoints within its bounded leaf model. Reader allocation reaches its numerical thresholds, and the invalid extent endpoint branch remains unobserved. The coverage counts describe the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
 
 Detailed intermediate replays are in `target/verification-evidence/v0.1.0/33db05f-name-admission-coverage/` and `target/verification-evidence/v0.1.0/543d782-builder-coverage/`.
 
