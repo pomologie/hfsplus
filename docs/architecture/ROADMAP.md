@@ -22,6 +22,8 @@ At `4e2adf5`, Cargo 1.99.1 assembled all four archives. Its built-in workspace v
 
 At `395a88a`, Cargo 1.99.1 assembled all four archives again. An offline workspace used only the extracted sibling packages and ran the locked all-features test suite with Rust and Cargo 1.98.0 on arm64 macOS. It passed 206 tests with ten opt-in tests skipped. Each archive contained its license and recorded the expected Git revision. The archives, workspace lock, transcripts, and checksums are in `target/release-candidates/v0.1.0/395a88a-cargo/`. The verification record SHA-256 is `4e82b8675c0ea0d5819698b50c525c1a81210b3ed6bef52c77914febd6c4768c`.
 
+The four archives from `3cf693d` passed the same extracted all-features check on Rust 1.98.0 with 219 tests passed and 11 ignored. The extracted workspace retained all 18 registry package pins from the source lockfile. The artifacts and transcripts are in `target/release-candidates/v0.1.0/3cf693d-cargo/`. The verification record SHA-256 is `20be6aef6bc806ff4a2f230d9c7b479d0cf211a58620cb4442e4b7ed1c289a8f`.
+
 ## Verification integration
 
 The [verification guide](VERIFICATION.md) and [obligation index](../../verification/obligations.json) define mandatory profile-specific verification gates in addition to the original acceptance tests. Apply [ecosystem standard EVS-1](ECOSYSTEM_VERIFICATION.md). No required proof, model check, native test or critical fault gate can be substituted by coverage or a self-generated round trip. `cargo-nextest`, property tests, fuzz/corpus replay, coverage and deterministic architecture checks are required; formal methods activate at the milestones in the obligation registry.
