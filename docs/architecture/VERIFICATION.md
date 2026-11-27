@@ -23,13 +23,15 @@ At clean revision `c6ad1ac`, the replay passed 214 tests with 11 skipped and cov
 | Builder allocation | 236 / 253 | 250 / 253 | 12 / 12 | 12 / 12 |
 | Sealed plan | 163 / 169 | 166 / 169 | 13 / 14 | 13 / 14 |
 | Sealed streaming | 42 / 42 | 42 / 42 | 6 / 6 | 6 / 6 |
-| Reader allocation | 189 / 222 | 211 / 222 | 23 / 24 | 23 / 24 |
+| Reader allocation | 189 / 222 | 211 / 222 | 23 / 24 | 24 / 24 |
 | B-tree format | 142 / 149 | 146 / 149 | 38 / 58 | 51 / 58 |
 | Volume format | 184 / 190 | 188 / 190 | 25 / 32 | 32 / 32 |
 | Name admission | 100 / 111 | 109 / 111 | 18 / 18 | 18 / 18 |
 | Name collation | 27 / 27 | 27 / 27 | 2 / 2 | 2 / 2 |
 
-H-VER-01-T01 remains open. The B-tree codec reaches 51 of 58 branch outcomes (87.93%). Seven decoder rejection outcomes remain unobserved by LLVM. Kani proves rejection of first-offset mismatches, endpoints in the offset table, and unaligned endpoints within its bounded leaf model. Reader allocation reaches its numerical thresholds, and the invalid extent endpoint branch remains unobserved. The coverage counts describe the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+At clean revision `8ea21f0`, the replay passed 215 tests with 11 skipped. The typed claim test reached the remaining reader allocation branch and verified that rejected ranges preserve existing claims. The report is in `target/verification-evidence/v0.1.0/8ea21f0-critical-coverage/` with SHA-256 `cfbb5048f26af5f9b15948917e5794ab68cba77aae8d67c062b09e854fba7f2f`.
+
+H-VER-01-T01 remains open. The B-tree codec reaches 51 of 58 branch outcomes (87.93%). Seven decoder rejection outcomes remain unobserved by LLVM. Kani proves rejection of first-offset mismatches, endpoints in the offset table, and unaligned endpoints within its bounded leaf model. The coverage counts describe the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
 
 Detailed intermediate replays are in `target/verification-evidence/v0.1.0/33db05f-name-admission-coverage/` and `target/verification-evidence/v0.1.0/543d782-builder-coverage/`.
 
