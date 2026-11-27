@@ -14,18 +14,20 @@ The clean `3ba750a` replay passed 202 tests with 11 skipped and reproduced the e
 
 At clean revision `aed3601`, the replay passed 207 tests with 11 skipped and covered 6,995 of 7,850 owned lines (89.11%). It used the same 43 test binaries, with 293 raw profiles and three build profiles excluded. The report is in `target/verification-evidence/v0.1.0/aed3601-critical-coverage/` with SHA-256 `902f08b96cd18080608b5d4e54939e6f13ccd2a020d5e8c8d539373f79603e52`.
 
+At clean revision `5e05e46`, the replay passed 214 tests with 11 skipped and covered 7,010 of 7,850 owned lines (89.30%). It used 43 test binaries and 300 raw profiles, with three build profiles excluded. The report is in `target/verification-evidence/v0.1.0/5e05e46-critical-coverage/` with SHA-256 `aa137ee11f01479820a2156d2b32b01a50173ef6b090eee64aaf4c5f28b8b4fa`.
+
 | Critical source | Baseline lines | Latest lines | Baseline branches | Latest branches |
 |---|---:|---:|---:|---:|
 | Builder allocation | 236 / 253 | 250 / 253 | 12 / 12 | 12 / 12 |
 | Sealed plan | 163 / 169 | 166 / 169 | 13 / 14 | 13 / 14 |
 | Sealed streaming | 42 / 42 | 42 / 42 | 6 / 6 | 6 / 6 |
-| Reader allocation | 189 / 222 | 200 / 222 | 23 / 24 | 23 / 24 |
-| B-tree format | 142 / 149 | 145 / 149 | 38 / 58 | 41 / 58 |
-| Volume format | 184 / 190 | 184 / 190 | 25 / 32 | 26 / 32 |
+| Reader allocation | 189 / 222 | 211 / 222 | 23 / 24 | 23 / 24 |
+| B-tree format | 142 / 149 | 145 / 149 | 38 / 58 | 50 / 58 |
+| Volume format | 184 / 190 | 188 / 190 | 25 / 32 | 32 / 32 |
 | Name admission | 100 / 111 | 109 / 111 | 18 / 18 | 18 / 18 |
 | Name collation | 27 / 27 | 27 / 27 | 2 / 2 | 2 / 2 |
 
-H-VER-01-T01 remains open. Reader allocation falls below the proposed line threshold. The B-tree and volume codecs fall below the branch threshold. The coverage counts describe the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+H-VER-01-T01 remains open. The B-tree codec reaches 50 of 58 branch outcomes (86.21%). Eight decoder rejection outcomes remain unobserved. Reader allocation reaches its numerical thresholds, and the invalid extent endpoint branch remains unobserved. The coverage counts describe the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
 
 Detailed intermediate replays are in `target/verification-evidence/v0.1.0/33db05f-name-admission-coverage/` and `target/verification-evidence/v0.1.0/543d782-builder-coverage/`.
 
