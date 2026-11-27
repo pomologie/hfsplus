@@ -42,6 +42,10 @@ H-FMT-02-T05 passed on macOS 14.7.2 arm64 with Rust 1.99.1. A linear walk of the
 
 The focused separator test failed in a temporary source copy when the index descent condition excluded exact equality.
 
+The HFS+ structural audit at `f874130` reports the catalog ID, leaf node, and zero-based record slot when a thread is missing or its parent association is inconsistent. The regression checks the production audit using an Apple optical fixture and two in-memory leaf projections. The unchanged fixture passes as the control. This covers the reader side of H-FMT-02-T03. The native checker comparison remains open. [Structural audit regression](../../crates/filesystem/hfsplus-reader/tests/check/catalog_threads.rs)
+
+The bounded traversal tests at `8b82a61` use the production catalog audit with typed in-memory nodes. A repeated leaf reference and a root back-edge each return an index-route error after one node read. A wrong-height child returns a node-kind error after two reads. With a one-read budget, the audit stops before reading the child. This covers the read-counter portion of H-FMT-02-T04. [Bounded traversal tests](../../crates/filesystem/hfsplus-reader/src/catalog/tree/audit/tests/typed_graph.rs)
+
 ### H-FMT-04 metadata evidence
 
 H-FMT-04-T03 passed using two native fixtures from macOS 14.7.2 arm64. The hard-link fixture matched the native inode metadata and the different nonempty data and resource fork bytes. The attribute fixture matched the lengths and every byte of the 4,097-byte contiguous value and the 118,808-byte fragmented value recorded by Darwin `getxattr`. All 18 tests passed with Rust 1.99.1 using `cargo test --locked --offline --no-default-features -p hfsplus-reader --test attribute_forks --test hard_links`. This case qualifies large attribute reads. The builder's attribute support is limited to inline values. [Hard-link provenance](../../crates/filesystem/hfsplus-reader/tests/fixtures/native-hardlink-resolution.json) · [Attribute provenance](../../crates/filesystem/hfsplus-reader/tests/fixtures/native-attribute-forks.json)
