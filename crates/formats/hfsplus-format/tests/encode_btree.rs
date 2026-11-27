@@ -131,12 +131,20 @@ fn reconstructs_native_catalog_header_and_leaf_nodes_byte_for_byte() {
 
 #[test]
 fn tree_header_requests_require_a_header_node_and_the_full_fork() {
+	const SIZE_PREFIX_BYTES: usize = 34;
+
+	let prefix = &NATIVE_CATALOG_HEADER[..SIZE_PREFIX_BYTES];
+	let hinted_size = TreeHeader::node_size_hint(prefix).unwrap();
+	assert_eq!(usize::from(hinted_size), NATIVE_CATALOG_HEADER.len());
+	assert_eq!(
+		TreeHeader::node_size_hint(&prefix[..SIZE_PREFIX_BYTES - 1]),
+		Err(Error::Truncated),
+	);
+	assert!(matches!(Node::decode(prefix), Err(Error::InvalidNode)));
+
 	let catalog_header = Node::decode(NATIVE_CATALOG_HEADER).unwrap();
 	let header = TreeHeader::decode(&catalog_header, TREE_FORK_BYTES).unwrap();
-	assert_eq!(
-		TreeHeader::node_size_hint(NATIVE_CATALOG_HEADER),
-		Ok(header.node_bytes),
-	);
+	assert_eq!(header.node_bytes, hinted_size);
 	assert_eq!(
 		TreeHeader::decode(&catalog_header, TREE_FORK_BYTES - 1),
 		Err(Error::InvalidNode),
