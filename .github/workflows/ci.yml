@@ -83,8 +83,9 @@ jobs:
       - run: bash crates/formats/hfsplus-format/verification/check.sh
       - run: bash crates/formats/hfsplus-format/verification/check-btree-offsets.sh
 
-  volume-format-sanitizer:
+  filesystem-sanitizers:
     runs-on: ubuntu-24.04
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
@@ -92,4 +93,7 @@ jobs:
       - run: rustup toolchain install nightly-2026-11-04 --profile minimal
       - run: cargo install --locked cargo-fuzz --version '=0.13.2'
       - run: cargo +nightly-2026-11-04 fetch --locked --manifest-path crates/formats/hfsplus-format/verification/fuzz/Cargo.toml
+      - run: cargo +nightly-2026-11-04 fetch --locked --manifest-path crates/filesystem/hfsplus-reader/verification/fuzz/Cargo.toml
       - run: bash crates/formats/hfsplus-format/verification/fuzz/check-volume-wire.sh
+      - run: bash crates/formats/hfsplus-format/verification/fuzz/check-packed-nodes.sh
+      - run: bash crates/filesystem/hfsplus-reader/verification/fuzz/check-fork-windows.sh
