@@ -27,6 +27,7 @@ const LAST_LEAF: NodeId = NodeId(3);
 const NODE_COUNT: u32 = LAST_LEAF.0 + 1;
 const KEY_PARENT: CatalogId = CatalogId(2);
 const KEY_NAMES: [u16; 2] = [b'a' as u16, b'b' as u16];
+const CASE_VARIANTS: [u16; 2] = [b'A' as u16, b'a' as u16];
 
 struct GraphFork {
 	nodes: Vec<(NodeId, Vec<u8>)>,
@@ -56,8 +57,8 @@ impl ReadAt for GraphFork {
 	}
 }
 
-fn typed_index(children: [NodeId; 2]) -> Vec<u8> {
-	let records = KEY_NAMES
+fn typed_index(names: [u16; 2], children: [NodeId; 2]) -> Vec<u8> {
+	let records = names
 		.into_iter()
 		.zip(children)
 		.map(|(name, child)| {
@@ -81,7 +82,11 @@ fn typed_index(children: [NodeId; 2]) -> Vec<u8> {
 	node
 }
 
-fn graph(root_children: [NodeId; 2], other_nodes: Vec<(NodeId, Vec<u8>)>) -> Tree<GraphFork> {
+fn graph(
+	root: Vec<u8>,
+	other_nodes: Vec<(NodeId, Vec<u8>)>,
+	collation: NameCollation,
+) -> Tree<GraphFork> {
 	let header = TreeHeader::new(
 		TreeLayout {
 			node_bytes: u16::try_from(NODE_BYTES).unwrap(),
@@ -99,7 +104,7 @@ fn graph(root_children: [NodeId; 2], other_nodes: Vec<(NodeId, Vec<u8>)>) -> Tre
 		TreeMetadata::default(),
 	)
 	.unwrap();
-	let mut nodes = vec![(ROOT, typed_index(root_children))];
+	let mut nodes = vec![(ROOT, root)];
 	nodes.extend(other_nodes);
 	let allocated = u8::MAX << (u8::BITS - NODE_COUNT);
 	Tree {
@@ -108,7 +113,7 @@ fn graph(root_children: [NodeId; 2], other_nodes: Vec<(NodeId, Vec<u8>)>) -> Tre
 			reads: RefCell::default(),
 		},
 		header,
-		collation: NameCollation::CaseFolded,
+		collation,
 		map: vec![allocated],
 		map_nodes: 1,
 	}
@@ -120,7 +125,11 @@ fn audit_rejects_repeated_child_and_ancestor_before_any_child_read() {
 		([FIRST_LEAF, FIRST_LEAF], FIRST_LEAF),
 		([ROOT, LAST_LEAF], ROOT),
 	] {
-		let tree = graph(children, Vec::new());
+		let tree = graph(
+			typed_index(KEY_NAMES, children),
+			Vec::new(),
+			NameCollation::CaseFolded,
+		);
 		let mut query = Query::new::<RangeError>(NODE_BYTES, NODE_COUNT).unwrap();
 		assert!(matches!(
 			tree.audit_index_graph(&mut query),
@@ -135,8 +144,9 @@ fn audit_rejects_repeated_child_and_ancestor_before_any_child_read() {
 fn audit_checks_child_height_only_after_admitting_its_read() {
 	for read_budget in [1, 2] {
 		let tree = graph(
-			[FIRST_LEAF, LAST_LEAF],
-			vec![(FIRST_LEAF, typed_index([FIRST_LEAF, LAST_LEAF]))],
+			typed_index(KEY_NAMES, [FIRST_LEAF, LAST_LEAF]),
+			vec![(FIRST_LEAF, typed_index(KEY_NAMES, [FIRST_LEAF, LAST_LEAF]))],
+			NameCollation::CaseFolded,
 		);
 		let mut query = Query::new::<RangeError>(NODE_BYTES, read_budget).unwrap();
 		let result = tree.audit_index_graph(&mut query);
@@ -156,4 +166,48 @@ fn audit_checks_child_height_only_after_admitting_its_read() {
 		assert_eq!(query.remaining, 0);
 		assert_eq!(tree.header.depth - 1, u16::from(LEAF_HEIGHT));
 	}
+}
+
+#[test]
+fn audit_rejects_equal_separators_under_the_selected_collation() {
+	let duplicate_names = [KEY_NAMES[0]; KEY_NAMES.len()];
+	for (names, collation) in [
+		(duplicate_names, NameCollation::Binary),
+		(duplicate_names, NameCollation::CaseFolded),
+		(CASE_VARIANTS, NameCollation::CaseFolded),
+	] {
+		let tree = graph(
+			typed_index(names, [FIRST_LEAF, LAST_LEAF]),
+			Vec::new(),
+			collation,
+		);
+		let mut query = Query::new::<RangeError>(NODE_BYTES, NODE_COUNT).unwrap();
+		assert!(
+			matches!(
+				tree.audit_index_graph(&mut query),
+				Err(CatalogError::Corrupt {
+					node: ROOT,
+					reason: Corruption::RecordOrder
+				}),
+			),
+			"{names:?} {collation:?}"
+		);
+		assert_eq!(*tree.fork.reads.borrow(), [ROOT]);
+		assert_eq!(query.remaining, NODE_COUNT - 1);
+	}
+
+	// Binary ordering admits the two distinct spellings. The one-read budget
+	// stops the audit at its first child instead of reading either child.
+	let tree = graph(
+		typed_index(CASE_VARIANTS, [FIRST_LEAF, LAST_LEAF]),
+		Vec::new(),
+		NameCollation::Binary,
+	);
+	let mut query = Query::new::<RangeError>(NODE_BYTES, 1).unwrap();
+	assert!(matches!(
+		tree.audit_index_graph(&mut query),
+		Err(CatalogError::Limit(Limit::Nodes))
+	));
+	assert_eq!(*tree.fork.reads.borrow(), [ROOT]);
+	assert_eq!(query.remaining, 0);
 }
