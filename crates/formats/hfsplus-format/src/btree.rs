@@ -4,6 +4,8 @@ mod encode;
 #[cfg(kani)]
 #[path = "../verification/kani/btree_offsets.rs"]
 mod offset_proofs;
+#[cfg(test)]
+mod tests;
 
 use crate::{
 	Error,
