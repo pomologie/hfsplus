@@ -104,3 +104,7 @@ fn mark<E>(id: NodeId, visited: &mut [u8]) -> Result<(), CatalogError<E>> {
 	*byte |= mask;
 	Ok(())
 }
+
+#[cfg(test)]
+#[path = "audit/tests.rs"]
+mod tests;
