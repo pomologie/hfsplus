@@ -24,14 +24,22 @@ At clean revision `c6ad1ac`, the replay passed 214 tests with 11 skipped and cov
 | Sealed plan | 163 / 169 | 166 / 169 | 13 / 14 | 13 / 14 |
 | Sealed streaming | 42 / 42 | 42 / 42 | 6 / 6 | 6 / 6 |
 | Reader allocation | 189 / 222 | 211 / 222 | 23 / 24 | 24 / 24 |
-| B-tree format | 142 / 149 | 146 / 149 | 38 / 58 | 51 / 58 |
+| B-tree format | 142 / 149 | 146 / 149 | 38 / 58 | 55 / 58 |
 | Volume format | 184 / 190 | 188 / 190 | 25 / 32 | 32 / 32 |
 | Name admission | 100 / 111 | 109 / 111 | 18 / 18 | 18 / 18 |
 | Name collation | 27 / 27 | 27 / 27 | 2 / 2 | 2 / 2 |
 
 At clean revision `8ea21f0`, the replay passed 215 tests with 11 skipped. The typed claim test reached the remaining reader allocation branch and verified that rejected ranges preserve existing claims. The report is in `target/verification-evidence/v0.1.0/8ea21f0-critical-coverage/` with SHA-256 `cfbb5048f26af5f9b15948917e5794ab68cba77aae8d67c062b09e854fba7f2f`.
 
-H-VER-01-T01 remains open. The B-tree codec reaches 51 of 58 branch outcomes (87.93%). Seven decoder rejection outcomes remain unobserved by LLVM. Kani proves rejection of first-offset mismatches, endpoints in the offset table, and unaligned endpoints within its bounded leaf model. The coverage counts describe the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+At clean revision `73f82e8`, the replay passed 221 tests with 11 skipped and covered 7,012 of 7,850 owned lines. It merged 307 profiles from 43 test binaries and excluded three build profiles. The B-tree codec reached 55 of 58 branch outcomes (94.83%), above the 90% critical-branch threshold. The report is in `target/verification-evidence/v0.1.0/73f82e8-critical-coverage/` with SHA-256 `18dc161e6515c32dd6fb7bd74bf5fde5e982c8d97b573026e4c7206c66e086f3`.
+
+The new tests check header width and forward-link bounds, leaf descriptor consistency, the first record offset, record endpoints, and supported node-size hints. Kani also proves rejection of first-offset mismatches, endpoints in the offset table, and unaligned endpoints within its bounded leaf model. This replay supplies the coverage for H-VER-01-T01 in the no-default-features profile. The native fixture, fuzz, and safety-invariant checks retain their own evidence.
+
+The detailed LLVM export shows both outcomes at all 29 B-tree source predicates when the unit-test and library copies are grouped by source location. LLVM's summary uses the highest covered count among compiled copies of each function. It reports 10 of 12 outcomes for `Node::decode` and 3 of 4 for `TreeHeader::node_size_hint`, while the combined source counts are 12 of 12 and 4 of 4. The table uses the official summary counts.
+
+The sealed plan's remaining unobserved outcome is rejection by the private source-registration limit. The only production caller registers two sources per interleaved fork pair after allocation has charged at least two runs per pair against the same global limit. The pairing test checks that the allocator rejects an over-budget layout before reaching the emitter. A separate placement test reaches the sealed plan's placement limit. The placement proof covers interval contiguity. The source-count guard follows from the shared budget and call order.
+
+H-VER-01-T01 passed at `73f82e8`. All 29 release profiles passed the checker, all 11 hosted jobs passed, and the graph checker rejected the negative control. The exact-revision audit checked 146 Rust files, with a maximum of 495 lines. The H-FMT-02 catalog acceptance cases remain open. [Release bundle](../../verification/README.md#v010-aggregate-replay) · [Hosted CI](https://github.com/pomologie/hfsplus/actions/runs/45925066989)
 
 Detailed intermediate replays are in `target/verification-evidence/v0.1.0/33db05f-name-admission-coverage/` and `target/verification-evidence/v0.1.0/543d782-builder-coverage/`.
 

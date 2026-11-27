@@ -285,7 +285,7 @@
       "acceptance_tests": [
         "H-VER-01-T01"
       ],
-      "status": "planned",
+      "status": "pass",
       "mandatory": true
     },
     {

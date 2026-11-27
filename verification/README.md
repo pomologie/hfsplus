@@ -16,7 +16,9 @@ On that same revision, all 24 checker tests passed. The negative cases cover mis
 
 The checker verified all 29 profiles again at clean revision `be926d2179de325b66ebcb4f6294838aa3786995`. The source archive SHA-256 is `34ca6b92d5627a96d70309c2b2885725f89b5fe0b95e6319dcf77c07d9b77a18`. The bundle and transcripts are in `target/verification-evidence/v0.1.0/be926d2-release-complete/`. The bundle SHA-256 is `b6e7959e3065fe4c1718ed5f852c5becfdcaa9272abefeeafdd7d98c26bb7b8e`.
 
-H-FMT-02 and H-VER-01 remain open for v0.1.0. [Requirement registry](../docs/reference/requirements.json)
+The checker verified all 29 profiles at clean revision `73f82e88bcc911b32d6335db13df9dafac1ce197`. The source archive SHA-256 is `bc4db0281e209e6a0704a5df967b5cb821b79caae08e9c5178639d4703be6413`. The bundle and transcripts are in `target/verification-evidence/v0.1.0/73f82e8-release-complete/`. The bundle SHA-256 is `ca1fdeb43b9a2492178e77eba982c145fa07b33dbbbb083f60d8aaef88453b7d`. [Coverage report summary](../docs/architecture/VERIFICATION.md#v010-coverage) · [Hosted CI](https://github.com/pomologie/hfsplus/actions/runs/45925066989)
+
+H-FMT-02 remains open for v0.1.0. [Requirement registry](../docs/reference/requirements.json)
 
 Use `--profile format-kani` to check the geometry proofs separately. Run the policy's proof command from an isolated checkout of the candidate with Kani 0.68.0 and CBMC 6.11.0. Capture both output streams together. The [geometry verification guide](../crates/formats/hfsplus-format/verification/README.md) explains the proof scope and bounds.
 

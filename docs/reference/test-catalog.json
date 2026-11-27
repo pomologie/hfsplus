@@ -203,8 +203,8 @@
       "scenario": "Run nextest, unit/property and fuzz corpus, negative graph test, 500-line policy and pinned native synthetic fixtures. Inject malformed geometry and verify no panic/escape; critical coverage and exceptions audited.",
       "oracle": "EVS-1; cargo-nextest; proptest; native checker",
       "expected": "All required gates in the active scope pass with current evidence; injected invalid evidence is rejected.",
-      "status": "planned",
-      "evidence": null
+      "status": "pass",
+      "evidence": "docs/architecture/VERIFICATION.md"
     },
     {
       "id": "H-VER-02-T01",
