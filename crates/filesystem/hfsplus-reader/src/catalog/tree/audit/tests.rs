@@ -7,6 +7,9 @@ use super::{CatalogError, Corruption, NodeId, mark};
 #[path = "tests/native_graph.rs"]
 mod native_graph;
 
+#[path = "tests/typed_graph.rs"]
+mod typed_graph;
+
 #[test]
 fn visit_map_matches_a_set_through_capacity_and_repeated_scheduling() {
 	for bytes in 0..=3u32 {
