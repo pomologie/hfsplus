@@ -17,6 +17,8 @@ use hfsplus_reader::{
 	overflow::{ForkKind, OverflowError},
 };
 
+#[path = "attribute_forks/native_layout.rs"]
+mod native_layout;
 #[path = "attribute_forks/slices.rs"]
 mod slices;
 
