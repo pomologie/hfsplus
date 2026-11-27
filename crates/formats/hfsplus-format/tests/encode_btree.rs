@@ -162,6 +162,50 @@ fn tree_header_requests_require_a_header_node_and_the_full_fork() {
 }
 
 #[test]
+fn tree_header_requires_agreement_with_node_width_and_link_bounds() {
+	const TOTAL_NODES: u32 = 1;
+	const OTHER_NODE_BYTES: usize = 2 * SMALL_NODE_BYTES;
+	let header = TreeHeader::new(
+		TreeLayout {
+			node_bytes: SMALL_NODE_BYTES as u16,
+			max_key_bytes: 10,
+			total_nodes: TOTAL_NODES,
+			free_nodes: 0,
+		},
+		TreeTopology::default(),
+		TreeMetadata::default(),
+	)
+	.unwrap();
+	let record = header.encode_record().unwrap();
+	for (width, forward, expected) in [
+		(SMALL_NODE_BYTES, None, Ok(header)),
+		(OTHER_NODE_BYTES, None, Err(Error::InvalidNode)),
+		(
+			SMALL_NODE_BYTES,
+			Some(NodeId(TOTAL_NODES)),
+			Err(Error::InvalidNode),
+		),
+	] {
+		let mut encoded = vec![0; width];
+		let mut map = vec![0; Node::header_map_bytes(width).unwrap()];
+		map[0] = HEADER_ALLOCATED_BIT;
+		Node::encode(
+			&mut encoded,
+			Kind::Header,
+			METADATA_NODE_HEIGHT,
+			NodeLinks {
+				forward,
+				backward: None,
+			},
+			&[&record, &[0; HEADER_USER_DATA_BYTES], &map],
+		)
+		.unwrap();
+		let node = Node::decode(&encoded).unwrap();
+		assert_eq!(TreeHeader::decode(&node, width as u64), expected);
+	}
+}
+
+#[test]
 fn packs_index_and_bitmap_continuation_nodes() {
 	let mut destination = [0xff; SMALL_NODE_BYTES];
 	let keyed_pointer_a = [0, 2, 0, 1, 0, 0, 0, 8];
