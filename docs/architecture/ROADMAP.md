@@ -26,6 +26,8 @@ The four archives from `3cf693d` passed the same extracted all-features check on
 
 Two locked assemblies at `4c91622` produced identical archives for all four packages. The extracted all-features run passed 220 tests with 11 ignored, using Rust, Cargo and rustdoc 1.98.0. All 18 registry pins were preserved. The archives and transcripts are in `target/release-candidates/v0.1.0/4c91622-cargo/`. The verification record SHA-256 is `cb1bcf8753da3d91b23616e033884d30d015e9b0650ba0c8e6e7aa2206323fd3`.
 
+Two locked assemblies at `be926d2` reproduced all four archives byte for byte. The warning-free offline all-features run against the extracted archives passed 222 tests with 11 ignored, using Rust, Cargo and rustdoc 1.98.0. It preserved all 18 registry dependency pins. The archives and logs are in `target/release-candidates/v0.1.0/be926d2-cargo/`. The verification record SHA-256 is `e62d901434c498767a66adcdef7420206094c0a9e18419bdbecc39a624ef577e`. The release also requires the acceptance and verification gates below.
+
 ## Verification integration
 
 The [verification guide](VERIFICATION.md) and [obligation index](../../verification/obligations.json) define mandatory profile-specific verification gates in addition to the original acceptance tests. Apply [ecosystem standard EVS-1](ECOSYSTEM_VERIFICATION.md). No required proof, model check, native test or critical fault gate can be substituted by coverage or a self-generated round trip. `cargo-nextest`, property tests, fuzz/corpus replay, coverage and deterministic architecture checks are required; formal methods activate at the milestones in the obligation registry.
