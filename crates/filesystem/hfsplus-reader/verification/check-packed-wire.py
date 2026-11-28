@@ -9,11 +9,10 @@ import struct
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
-import tomllib
 
 
-ROOT = Path(__file__).resolve().parents[4]
-FIXTURES = Path(__file__).resolve().parents[1] / "tests/fixtures"
+PACKAGE_ROOT = Path(__file__).resolve().parents[1]
+FIXTURES = PACKAGE_ROOT / "tests/fixtures"
 LEDGERS = ("native-catalog-volume.json", "native-overflow.json", "native-attribute-tree.json")
 DESCRIPTOR = struct.Struct(">IIbBHH")
 TREE_WIDTH_OFFSET = DESCRIPTOR.size + struct.calcsize(">HIIII")
@@ -169,22 +168,29 @@ def expected_rows(ledgers):
 
 
 def rust_rows():
-	with (ROOT / "rust-toolchain.toml").open("rb") as config:
-		toolchain = tomllib.load(config)["toolchain"]["channel"]
+	active = subprocess.check_output(
+		["rustup", "show", "active-toolchain"], cwd=PACKAGE_ROOT, text=True,
+	)
+	toolchain = active.split(maxsplit=1)[0]
 	cargo = ["rustup", "run", toolchain, "cargo"]
+	workspace_manifest = subprocess.check_output(
+		[*cargo, "locate-project", "--workspace", "--message-format", "plain"],
+		cwd=PACKAGE_ROOT, text=True,
+	)
+	workspace = Path(workspace_manifest.strip()).parent
 	compiler = subprocess.check_output(
-		["rustup", "which", "--toolchain", toolchain, "rustc"], cwd=ROOT, text=True,
+		["rustup", "which", "--toolchain", toolchain, "rustc"], cwd=workspace, text=True,
 	).strip()
 	print(f"Python {sys.version.split()[0]}", flush=True)
-	subprocess.run([*cargo, "--version"], cwd=ROOT, check=True)
-	subprocess.run([compiler, "--version"], cwd=ROOT, check=True)
+	subprocess.run([*cargo, "--version"], cwd=workspace, check=True)
+	subprocess.run([compiler, "--version"], cwd=workspace, check=True)
 	with TemporaryDirectory(prefix="hfsplus-packed-wire-") as target:
 		environment = os.environ | {"CARGO_TARGET_DIR": target, "RUSTC": compiler}
 		run = subprocess.run(
 			[*cargo, "test", "--color", "never", "--locked", "--no-default-features",
 			 "-p", "hfsplus-reader", "--test", "native_overflow",
 			 "--", "--exact", "--show-output", TEST],
-			env=environment, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+			env=environment, cwd=workspace, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
 			check=False,
 		)
 	if run.returncode:
